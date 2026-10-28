@@ -304,6 +304,16 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
   return s.snapshot();
 }
 
+/**
+ * The session of a chat the UI shows, reopened if it was closed here meanwhile (group switch, closed tab). A chat that
+ * never got a transcript has nothing to reopen from and stays an error.
+ */
+export async function ensureSession(sessionId: string) {
+  if (sessions.has(sessionId)) return;
+  if (!findTranscript(sessionId)) throw new Error('Чат не открыт: у него ещё нет истории на диске — создайте новый чат');
+  await openChat(sessionId);
+}
+
 export function newChat(cwd: string): ChatSnapshot {
   const s = new ChatSession(randomUUID(), cwd);
   s.model = stateFile.data.defaultModel;
@@ -1005,6 +1015,7 @@ export function closeChat(sessionId: string) {
   const s = sessions.get(sessionId);
   if (!s) return;
   if (s.status === 'running' || s.status === 'waiting') return; // keep working in the background
+  if (!s.existsOnDisk && !findTranscript(sessionId)) return; // a new chat without history: nothing to reopen it from
   s.input?.close();
   s.q = null;
   unwatchTranscript(s);

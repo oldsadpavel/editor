@@ -245,11 +245,11 @@ export async function switchGroup(id: string) {
     activeFile: g.activeFile,
     ui: { ...a.ui, treeOpen: g.treeOpen ?? [] },
   });
+  // Always reopen: chats of the group we left were closed in the main process (see above), even if the UI still
+  // has their old snapshot.
   for (const c of g.openChats) {
-    if (!state.chats[c]) {
-      const snap = await call<ChatSnapshot>('chat:open', c).catch(() => null);
-      if (snap) set((s) => ({ chats: { ...s.chats, [c]: snap } }));
-    }
+    const snap = await call<ChatSnapshot>('chat:open', c, state.chats[c]?.cwd).catch(() => null);
+    if (snap) set((s) => ({ chats: { ...s.chats, [c]: snap } }));
   }
   for (const p of g.openFiles ?? []) if (await call<boolean>('fs:exists', p).catch(() => false)) await openFile(p);
   if (g.activeFile && state.files.some((f) => f.path === g.activeFile)) set({ activeFile: g.activeFile });

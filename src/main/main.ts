@@ -165,18 +165,21 @@ handle('claude:install', () => claude.installClaude());
 handle('chat:list', (cwd: string) => claude.listProjectSessions(cwd));
 handle('chat:open', (id: string, cwd?: string) => claude.openChat(id, cwd));
 handle('chat:new', (cwd: string) => claude.newChat(cwd));
-handle('chat:send', (id: string, text: string, opts?: SendOptions) => claude.send(id, text, opts ?? {}));
-handle('chat:interrupt', (id: string) => claude.interrupt(id));
-handle('chat:autoApprove', (id: string, on: boolean) => claude.setAutoApprove(id, on));
-handle('chat:remote', (id: string, on: boolean) => claude.setRemote(id, on));
-handle('chat:diff', (id: string, turnIds: string[], file: string) => {
+// A chat the UI still shows may have been closed here (e.g. its group was switched away): reopen it on demand.
+const ensure = (id: string) => claude.ensureSession(id);
+handle('chat:send', async (id: string, text: string, opts?: SendOptions) => (await ensure(id), claude.send(id, text, opts ?? {})));
+handle('chat:interrupt', async (id: string) => (await ensure(id), claude.interrupt(id)));
+handle('chat:autoApprove', async (id: string, on: boolean) => (await ensure(id), claude.setAutoApprove(id, on)));
+handle('chat:remote', async (id: string, on: boolean) => (await ensure(id), claude.setRemote(id, on)));
+handle('chat:diff', async (id: string, turnIds: string[], file: string) => {
+  await ensure(id);
   const items = claude.fileChanges(id, turnIds, file);
   if (!items.length) throw new Error('Нет данных об изменениях этого файла (возможно, правка была в другом процессе)');
   openDiffWindow(file, items);
 });
-handle('chat:chrome', (id: string, on: boolean) => claude.setChrome(id, on));
-handle('chat:status', (id: string) => claude.chatStatus(id));
-handle('chat:commands', (id: string) => claude.chatCommands(id));
+handle('chat:chrome', async (id: string, on: boolean) => (await ensure(id), claude.setChrome(id, on)));
+handle('chat:status', async (id: string) => (await ensure(id), claude.chatStatus(id)));
+handle('chat:commands', async (id: string) => (await ensure(id), claude.chatCommands(id)));
 handle('chat:rename', (id: string, title: string) => claude.rename(id, title));
 handle('chat:close', (id: string) => claude.closeChat(id));
 handle('chat:permission', (id: string, reqId: string, a: PermissionAnswer) => claude.answerPermission(id, reqId, a));
