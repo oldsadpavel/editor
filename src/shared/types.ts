@@ -67,6 +67,8 @@ export interface Turn {
   /** Time of the last assistant output in this turn. */
   answeredAt?: number;
   items: TurnItem[];
+  /** History compactions that happened during this answer. */
+  compacts?: CompactMark[];
   edits: FileEdit[];
   /** Files the assistant only read (shown as secondary links). */
   reads: string[];
@@ -87,8 +89,30 @@ export interface TurnTokens {
   cacheWrite: number;
 }
 
+/** Claude Code is compacting (summarizing) the chat history because the context is full. */
+export interface CompactState {
+  since: number;
+  /** Context size before compaction, when known — drives the time estimate. */
+  preTokens?: number;
+  trigger?: 'auto' | 'manual';
+}
+
+/** A compaction that happened: shown as a mark in the answer where it occurred. */
+export interface CompactMark {
+  at: number;
+  trigger?: 'auto' | 'manual';
+  preTokens?: number;
+  postTokens?: number;
+  durationMs?: number;
+  failed?: string;
+}
+
 export interface ChatSnapshot {
   sessionId: string;
+  /** Compaction in progress (big progress bar in the chat). */
+  compacting?: CompactState;
+  /** Context size of the last request, to estimate how long a compaction takes. */
+  contextTokens?: number;
   cwd: string;
   title: string;
   status: ChatStatus;

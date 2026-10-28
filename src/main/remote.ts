@@ -86,7 +86,7 @@ export function ptyCommand(cmd: string, args: string[]): { file: string; args: s
   return { file: 'script', args: ['-q', '-e', '-c', `/bin/sh -c ${shQuote(inner)}`, '/dev/null'] };
 }
 
-export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; addDirs?: string[]; chrome?: boolean; transcript: string | null }): RemoteProc {
+export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; addDirs?: string[]; chrome?: boolean; transcript: string | null; onCompacting?: () => void }): RemoteProc {
   const args = ['--resume', opts.sessionId, '--remote-control', opts.name];
   if (opts.chrome) args.push('--chrome');
   for (const d of opts.addDirs ?? []) args.push('--add-dir', d);
@@ -98,7 +98,9 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
   const proc: RemoteProc = { child, startedAt: Date.now(), tail: '', connected: false };
   let bypassAnswered = false;
   const onData = (d: Buffer) => {
-    proc.tail = (proc.tail + stripAnsi(d.toString())).slice(-TAIL_MAX);
+    const chunk = stripAnsi(d.toString());
+    proc.tail = (proc.tail + chunk).slice(-TAIL_MAX);
+    if (/Compacting conversation/i.test(chunk)) opts.onCompacting?.();
     if (!proc.connected && /remote-control is active|claude\.ai\/code\/session_/.test(proc.tail)) proc.connected = true;
     // bypassPermissions asks for a one-time confirmation in the TUI ("No, exit / Yes, I accept"): choose Yes.
     if (!bypassAnswered && /Bypass Permissions mode[\s\S]*Yes, I accept/.test(proc.tail)) {

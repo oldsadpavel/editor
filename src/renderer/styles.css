@@ -684,3 +684,14 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .composer-target { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 0 2px 4px; min-width: 0; white-space: nowrap; }
 .composer-target b { color: #fff; overflow: hidden; text-overflow: ellipsis; }
 .composer-target .ct-project { flex: none; font-size: 10.5px; padding: 0 6px; border-radius: 3px; background: rgba(217, 119, 87, 0.3); color: #ffd9cc; }
+
+/* ---------- history compaction ---------- */
+.compact-bar { flex: none; margin: 6px 10px; padding: 10px 14px; border-radius: 8px; background: rgba(217, 119, 87, 0.14); border: 1px solid rgba(217, 119, 87, 0.55); }
+.compact-bar .cb-text { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13.5px; margin-bottom: 8px; }
+.compact-bar .cb-text b { font-size: 14.5px; color: #fff; }
+.compact-bar .cb-track { height: 14px; border-radius: 7px; background: var(--bg); overflow: hidden; }
+.compact-bar .cb-fill { height: 100%; border-radius: 7px; transition: width 0.5s linear;
+  background: repeating-linear-gradient(45deg, var(--claude) 0 12px, #e8906f 12px 24px); background-size: 34px 34px; animation: cb-move 1s linear infinite; }
+@keyframes cb-move { from { background-position: 0 0; } to { background-position: 34px 0; } }
+.compact-mark { margin: 8px 0; padding: 5px 10px; border-left: 3px solid var(--claude); background: rgba(217, 119, 87, 0.08); font-size: 12.5px; color: var(--fg2); border-radius: 0 4px 4px 0; }
+.compact-mark.failed { border-left-color: var(--err); color: var(--err); }

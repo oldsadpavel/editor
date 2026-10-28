@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import type { FileChange, FileEdit, Turn, TurnAttachment, TurnItemTool } from '../shared/types';
+import type { CompactMark, FileChange, FileEdit, Turn, TurnAttachment, TurnItemTool } from '../shared/types';
+
+/** compact_boundary metadata (SDK message or transcript entry) → mark fields. */
+export function compactInfo(m: any): Omit<CompactMark, 'at'> {
+  return { trigger: m?.trigger, preTokens: m?.pre_tokens ?? m?.preTokens, postTokens: m?.post_tokens ?? m?.postTokens, durationMs: m?.duration_ms ?? m?.durationMs };
+}
 
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 const READ_TOOLS = new Set(['Read']);
@@ -222,6 +227,13 @@ export class TurnBuilder {
     if (entry.type === 'user') this.ingestUser(entry, at);
     else if (entry.type === 'assistant') this.ingestAssistant(entry, at);
     else if (entry.type === 'attachment' && entry.attachment?.type === 'queued_command') this.ingestQueued(entry.attachment, at);
+    else if (entry.type === 'system' && entry.subtype === 'compact_boundary') this.addCompact({ at, ...compactInfo(entry.compactMetadata ?? entry.compact_metadata) });
+  }
+
+  /** A history compaction: marked in the answer during which it happened (or the last one). */
+  addCompact(mark: CompactMark) {
+    const turn = this.turns[this.turns.length - 1];
+    if (turn) (turn.compacts ??= []).push(mark);
   }
 
   private ingestUser(entry: any, at: number) {
@@ -376,7 +388,7 @@ export async function loadTranscript(file: string): Promise<{ builder: TurnBuild
   let cwd: string | undefined;
   const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
   for await (const line of rl) {
-    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"')) continue;
+    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"') && !line.includes('"compact_boundary"')) continue;
     let entry: any;
     try {
       entry = JSON.parse(line);

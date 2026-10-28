@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { CompactState } from '../shared/types';
 import type { ApprovalEntry, AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SendOptions, SessionInfo, TurnAttachment } from '../shared/types';
 import * as approvals from './approvals';
 import { emit } from './bus';
@@ -11,7 +12,7 @@ import { IMAGE_EXT } from './files';
 import * as problems from './problems';
 import * as remote from './remote';
 import { dataDir, stateFile } from './store';
-import { ATTACHMENTS_HEADER, TurnBuilder, findTranscript, loadTranscript } from './transcript';
+import { ATTACHMENTS_HEADER, TurnBuilder, compactInfo, findTranscript, loadTranscript } from './transcript';
 import * as usage from './usage';
 import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
 
@@ -176,6 +177,9 @@ class ChatSession {
   input: InputQueue | null = null;
   pending = new Map<string, PendingPermission>();
   existsOnDisk = false;
+  /** History compaction in progress, and the context size of the last request (for the time estimate). */
+  compacting: CompactState | undefined;
+  contextTokens: number | undefined;
   private emitTimer: NodeJS.Timeout | null = null;
 
   constructor(public id: string, public cwd: string) {}
@@ -194,6 +198,8 @@ class ChatSession {
       autoApprove: this.autoApprove,
       remote: this.remote,
       chrome: this.chrome,
+      compacting: this.compacting,
+      contextTokens: this.contextTokens,
       approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
     };
@@ -602,6 +608,8 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
         const turn = split ?? prev;
         if (turn) turn.live = true;
       }
+      const u: any = (m.message as any)?.usage;
+      if (u) s.contextTokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
       s.builder.ingest({ type: 'assistant', message: m.message, timestamp: now, uuid: m.uuid });
       if (resumed && s.status !== 'running') s.setStatus('running');
       else s.publish();
@@ -659,6 +667,24 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     case 'system': {
       const sm: any = m;
       if (sm.subtype === 'init') s.init = sm;
+      // History compaction: 'status: compacting' starts it, a compact_boundary (or the status clearing) ends it.
+      if (sm.subtype === 'status') {
+        if (sm.status === 'compacting' && !s.compacting) {
+          s.compacting = { since: Date.now(), preTokens: s.contextTokens };
+          s.publish(true);
+        } else if (sm.status !== 'compacting' && s.compacting) {
+          if (sm.compact_result === 'failed') s.builder.addCompact({ at: Date.now(), failed: sm.compact_error ?? 'не удалось' });
+          s.compacting = undefined;
+          s.publish(true);
+        }
+      }
+      if (sm.subtype === 'compact_boundary') {
+        const info = compactInfo(sm.compact_metadata);
+        s.builder.addCompact({ at: Date.now(), ...info, durationMs: info.durationMs ?? (s.compacting ? Date.now() - s.compacting.since : undefined) });
+        s.compacting = undefined;
+        if (info.postTokens) s.contextTokens = info.postTokens;
+        s.publish(true);
+      }
       if (sm.subtype === 'session_state_changed') {
         if (sm.state === 'requires_action') s.setStatus('waiting');
         // 'idle' is the SDK's authoritative "turn is over" signal.
@@ -785,6 +811,11 @@ export function setRemote(sessionId: string, on: boolean) {
       addDirs: [path.join(dataDir(), 'attachments')],
       chrome: s.chrome,
       transcript: findTranscript(s.id),
+      onCompacting: () => {
+        if (s.compacting) return;
+        s.compacting = { since: Date.now(), preTokens: s.contextTokens };
+        s.publish(true);
+      },
     });
     s.remote = true;
     s.setStatus('idle');
@@ -833,6 +864,7 @@ function watchTranscript(s: ChatSession) {
       const { builder } = await loadTranscript(file);
       const changed = shape(builder) !== shape(s.builder);
       s.builder = builder;
+      if (s.compacting && builder.turns.some((t) => t.compacts?.some((m) => m.at >= s.compacting!.since - 5000))) s.compacting = undefined;
       // Questions typed here that Claude hasn't written yet stay on screen (grey while queued behind an answer).
       const recent = builder.turns.slice(-4).flatMap((t) => [t.prompt, ...(t.more?.map((m) => m.prompt) ?? [])]).map((p) => p.trim());
       s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(q.text) && Date.now() - q.at < 5 * 60_000);

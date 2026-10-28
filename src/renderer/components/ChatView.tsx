@@ -165,6 +165,54 @@ function PromptText({ prompt, cwd }: { prompt: string; cwd: string }) {
   );
 }
 
+/** How long a compaction usually takes for this much context (rough, from observed runs). */
+const compactEstimateMs = (tokens?: number) => Math.min(240_000, Math.max(10_000, 5_000 + (tokens ?? 120_000) / 4)); // 34k ≈ 13 s (measured 7 s), 200k ≈ 55 s
+
+const kTok = (n?: number) => (n === undefined ? '?' : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
+/** Big bar while Claude Code compacts the chat history: elapsed time against a rough estimate. */
+function CompactBar({ state }: { state: NonNullable<ChatSnapshot['compacting']> }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, []);
+  const elapsed = now - state.since;
+  const expected = compactEstimateMs(state.preTokens);
+  const pct = Math.min(95, (elapsed / expected) * 100);
+  const sec = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}`;
+  return (
+    <div className="compact-bar" title="Claude Code сжимает историю чата: контекст заполнился, старые сообщения заменяются сводкой. Новые вопросы подождут в очереди.">
+      <div className="cb-text">
+        <span className="spinner" /> <b>Сжимаю историю чата</b>
+        <span>
+          {sec(elapsed)} из ~{sec(expected)}
+          {elapsed > expected ? ' — дольше обычного' : ''}
+        </span>
+        <span className="muted">контекст ~{kTok(state.preTokens)} токенов → сводка</span>
+      </div>
+      <div className="cb-track">
+        <div className="cb-fill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function CompactMarks({ marks }: { marks: NonNullable<Turn['compacts']> }) {
+  return (
+    <>
+      {marks.map((m, i) => (
+        <div key={i} className={`compact-mark ${m.failed ? 'failed' : ''}`}>
+          🗜 {m.failed ? `Сжатие истории не удалось: ${m.failed}` : `История чата сжата${m.trigger === 'manual' ? ' (/compact)' : ' автоматически'}`}
+          {!m.failed && m.preTokens ? ` · ${kTok(m.preTokens)} → ${kTok(m.postTokens)} токенов` : ''}
+          {m.durationMs ? ` · ${Math.round(m.durationMs / 1000)} с` : ''}
+          <span className="muted"> · {formatTime(m.at)}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[]; cwd: string }) {
   const [open, setOpen] = useState(false);
   const errors = tools.filter((t) => t.error).length;
@@ -271,6 +319,7 @@ function TurnBody({
       {tab === 'answer' && (
         <>
           {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
+          {turn.compacts?.length ? <CompactMarks marks={turn.compacts} /> : null}
           {partial && <Markdown text={partial} cwd={cwd} />}
           {turn.live && !partial && (
             <div className="thinking">
@@ -1063,6 +1112,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           </button>
         </div>
       )}
+      {chat.compacting && <CompactBar state={chat.compacting} />}
       <div
         className="chat-scroll"
         ref={scroller}
