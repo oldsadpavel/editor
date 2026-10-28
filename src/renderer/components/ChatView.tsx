@@ -113,6 +113,58 @@ function openDiff(sessionId: string, turnIds: string[], file: string) {
   call('chat:diff', sessionId, turnIds, file).catch((e) => toast(e.message, 'error'));
 }
 
+/** A background task finished (Bash run_in_background, subagent…): Claude Code tells the model with a <task-notification>. */
+interface TaskNote {
+  taskId?: string;
+  status?: string;
+  summary?: string;
+  outputFile?: string;
+}
+
+function taskNotes(prompt: string): TaskNote[] | null {
+  if (!prompt.trimStart().startsWith('<task-notification>')) return null;
+  const tag = (block: string, name: string) => block.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1]?.trim();
+  return [...prompt.matchAll(/<task-notification>([\s\S]*?)<\/task-notification>/g)].map((m) => ({
+    taskId: tag(m[1], 'task-id'),
+    status: tag(m[1], 'status'),
+    summary: tag(m[1], 'summary'),
+    outputFile: tag(m[1], 'output-file'),
+  }));
+}
+
+const NOTE_STATUS: Record<string, string> = { completed: '✓ завершена', failed: '✕ с ошибкой', killed: '⏹ остановлена', running: '⏳ идёт' };
+
+/** One line for the turn head: what finished, without the XML. */
+function promptHeadline(prompt: string): string {
+  const notes = taskNotes(prompt);
+  if (!notes) return firstLine(prompt);
+  return '🔔 ' + notes.map((n) => n.summary ?? `Фоновая задача ${n.taskId ?? ''}`).join(' · ');
+}
+
+/** The question part of a turn: a normal prompt, or a card for background-task notifications. */
+function PromptText({ prompt, cwd }: { prompt: string; cwd: string }) {
+  const notes = taskNotes(prompt);
+  if (!notes) return <div className="q-text">{prompt}</div>;
+  return (
+    <div className="task-notes">
+      {notes.map((n, i) => (
+        <div key={i} className={`task-note ${n.status ?? ''}`} title={`Фоновая задача ${n.taskId ?? ''} — Claude Code сообщил о ней сам, это не ваш вопрос`}>
+          <span className="tn-ico">🔔</span>
+          <span className="tn-text">
+            Фоновая задача {NOTE_STATUS[n.status ?? ''] ?? n.status ?? ''}
+            {n.summary && <b> · {n.summary}</b>}
+          </span>
+          {n.outputFile && (
+            <span className="path-link" title={n.outputFile} onClick={() => openFile(n.outputFile!)}>
+              вывод: {relPath(n.outputFile, cwd).split(/[\\/]/).pop()}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[]; cwd: string }) {
   const [open, setOpen] = useState(false);
   const errors = tools.filter((t) => t.error).length;
@@ -199,7 +251,7 @@ function TurnBody({
         <div className="q-label">
           {turn.more?.length ? `Вопрос 1 из ${turn.more.length + 1}` : 'Вопрос'} · {formatTime(turn.startedAt)}
         </div>
-        {turn.prompt && <div className="q-text">{turn.prompt}</div>}
+        {turn.prompt && <PromptText prompt={turn.prompt} cwd={cwd} />}
         {turn.attachments?.length ? (
           <TurnAttachments sessionId={sessionId} list={turn.attachments} />
         ) : (
@@ -211,7 +263,7 @@ function TurnBody({
               Вопрос {i + 2} из {turn.more!.length + 1} · {formatTime(m.at)} ·{' '}
               {m.pending ? '⏳ в очереди — Claude ещё не взял' : '✓ взят в работу — ответ общий'}
             </div>
-            {m.prompt && <div className="q-text">{m.prompt}</div>}
+            {m.prompt && <PromptText prompt={m.prompt} cwd={cwd} />}
             {m.attachments?.length ? <TurnAttachments sessionId={sessionId} list={m.attachments} /> : null}
           </div>
         ))}
@@ -389,10 +441,10 @@ function TurnRow({
               📎{turn.attachments.length}
             </span>
           ) : null}
-          {firstLine(turn.prompt) || (turn.images ? '(изображение)' : '(вложение)')}
+          {promptHeadline(turn.prompt) || (turn.images ? '(изображение)' : '(вложение)')}
         </span>
         {turn.more?.length ? (
-          <span className="more-badge" title={turn.more.map((m) => m.prompt).join('\n')}>
+          <span className="more-badge" title={turn.more.map((m) => promptHeadline(m.prompt)).join('\n')}>
             +{turn.more.length} {plural(turn.more.length, 'вопрос', 'вопроса', 'вопросов')}
           </span>
         ) : null}

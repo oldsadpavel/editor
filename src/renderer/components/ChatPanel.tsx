@@ -145,12 +145,12 @@ export function ChatPanel() {
         {app.openChats.map((id) => {
           const c = chats[id];
           if (!c) return null;
-          const mark = c.status === 'running' ? '⏳ ' : c.status === 'waiting' ? '❗ ' : c.status === 'error' ? '⚠ ' : '';
+          const mark = c.status === 'running' ? '  — работает' : c.status === 'waiting' ? '  — ждёт ответа' : c.status === 'error' ? '  — ошибка' : '';
           return (
             <div
               key={id}
               data-tab-key={id}
-              data-tab-label={`${mark}${unread.includes(id) ? '🔵 ' : ''}${c.title}`}
+              data-tab-label={`${c.title}${mark}${unread.includes(id) ? '  — новый ответ' : ''}`}
               data-tab-sort={app.chatMeta[id]?.completedAt ?? 0}
               className={`tab ${id === active ? 'on' : ''} ${unread.includes(id) ? 'unread unseen' : ''}`}
               title={`${c.title}${unread.includes(id) ? '\nЕсть новый ответ — вы ещё не смотрели' : ''}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
