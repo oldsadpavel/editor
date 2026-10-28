@@ -1,0 +1,199 @@
+import { BrowserWindow, Menu, app, dialog, ipcMain, shell } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer } from '../shared/types';
+import { setSink } from './bus';
+import * as claude from './claude';
+import * as deploy from './deploy';
+import * as keys from './keys';
+import * as problems from './problems';
+import { flushAll, stateFile } from './store';
+import { findTranscript, normalize } from './transcript';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+let win: BrowserWindow | null = null;
+
+const watchedRoots = new Set<string>();
+function watchRepoOf(p: string) {
+  const key = normalize(path.dirname(p));
+  if (watchedRoots.has(key)) return;
+  watchedRoots.add(key);
+  void deploy.watchPath(p);
+}
+
+setSink((event: MainEvent) => {
+  if (event.type === 'chat') for (const t of event.snapshot.turns) for (const e of t.edits) watchRepoOf(e.path);
+  win?.webContents.send('event', event);
+});
+
+deploy.setPushAttribution((repo, at) => {
+  // The chat that ran `git push` in the last few minutes owns the push.
+  let best: { id: string; at: number } | undefined;
+  for (const id of claude.runningSessions().concat(stateFile.data.openChats)) {
+    const b = claude.getBuilder(id);
+    for (const p of b?.pushCommands ?? []) {
+      if (at - p.at < 5 * 60_000 && (!best || p.at > best.at)) best = { id, at: p.at };
+    }
+  }
+  void repo;
+  return best?.id;
+});
+
+// --- file system ---------------------------------------------------------------------------
+
+const HIDDEN = new Set(['.git', '.DS_Store', 'Thumbs.db']);
+
+function listDir(dir: string): DirEntry[] {
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => !HIDDEN.has(e.name))
+    .map((e) => ({ name: e.name, path: path.join(dir, e.name), dir: e.isDirectory() }))
+    .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : a.dir ? -1 : 1));
+}
+
+const fileWatchers = new Map<string, fs.FSWatcher>();
+function watchFile(p: string) {
+  const key = normalize(p);
+  if (fileWatchers.has(key)) return;
+  try {
+    let t: NodeJS.Timeout | null = null;
+    const w = fs.watch(p, () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => win?.webContents.send('event', { type: 'fileChanged', path: p } satisfies MainEvent), 150);
+    });
+    w.on('error', () => fileWatchers.delete(key));
+    fileWatchers.set(key, w);
+  } catch {
+    /* file may not exist yet */
+  }
+}
+function unwatchFile(p: string) {
+  const key = normalize(p);
+  fileWatchers.get(key)?.close();
+  fileWatchers.delete(key);
+}
+
+// --- IPC ----------------------------------------------------------------------------------
+
+function handle(channel: string, fn: (...args: any[]) => any) {
+  ipcMain.handle(channel, async (_e, ...args) => {
+    try {
+      return { ok: true, value: await fn(...args) };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? String(err) };
+    }
+  });
+}
+
+handle('state:get', () => stateFile.data);
+handle('state:set', (patch: Partial<AppState>) => {
+  const before = stateFile.data.projects.map((p) => p.path);
+  Object.assign(stateFile.data, patch);
+  stateFile.save();
+  for (const p of stateFile.data.projects) if (!before.includes(p.path)) void deploy.watchPath(p.path);
+  return stateFile.data;
+});
+
+handle('fs:list', (dir: string) => listDir(dir));
+handle('fs:read', (p: string) => {
+  const st = fs.statSync(p);
+  if (st.size > 20 * 1024 * 1024) throw new Error('Файл больше 20 МБ');
+  const buf = fs.readFileSync(p);
+  const binary = buf.subarray(0, 8000).includes(0);
+  return { text: binary ? '' : buf.toString('utf8'), binary, mtime: st.mtimeMs, size: st.size };
+});
+handle('fs:write', (p: string, text: string) => {
+  fs.writeFileSync(p, text, 'utf8');
+  return fs.statSync(p).mtimeMs;
+});
+handle('fs:exists', (p: string) => fs.existsSync(p));
+handle('fs:watch', (p: string) => watchFile(p));
+handle('fs:unwatch', (p: string) => unwatchFile(p));
+handle('fs:resolve', (base: string, rel: string) => {
+  const candidates = path.isAbsolute(rel) ? [rel] : [path.join(base, rel)];
+  return candidates.find((c) => fs.existsSync(c)) ?? null;
+});
+handle('dialog:folder', async () => {
+  const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory', 'multiSelections'] });
+  return r.canceled ? [] : r.filePaths;
+});
+handle('shell:reveal', (p: string) => shell.showItemInFolder(p));
+handle('shell:open', (url: string) => shell.openExternal(url));
+
+handle('auth:status', () => claude.authStatus());
+handle('auth:login', () => claude.login());
+
+handle('chat:list', (cwd: string) => claude.listProjectSessions(cwd));
+handle('chat:open', (id: string, cwd?: string) => claude.openChat(id, cwd));
+handle('chat:new', (cwd: string) => claude.newChat(cwd));
+handle('chat:send', (id: string, text: string, mode?: string) => claude.send(id, text, mode));
+handle('chat:interrupt', (id: string) => claude.interrupt(id));
+handle('chat:rename', (id: string, title: string) => claude.rename(id, title));
+handle('chat:close', (id: string) => claude.closeChat(id));
+handle('chat:permission', (id: string, reqId: string, a: PermissionAnswer) => claude.answerPermission(id, reqId, a));
+handle('chat:seen', (id: string) => {
+  const meta = (stateFile.data.chatMeta[id] ??= {});
+  meta.seenAt = Date.now();
+  stateFile.save();
+  return meta;
+});
+handle('chat:exists', (id: string) => !!findTranscript(id));
+
+handle('problems:list', () => problems.list());
+handle('problems:ack', (id?: string) => problems.acknowledge(id));
+handle('problems:remove', (id?: string) => problems.remove(id));
+
+handle('deploys:list', () => deploy.listDeploys());
+handle('deploys:repos', () => deploy.watchedRepos());
+handle('deploys:setTarget', (repo: string, t: DeployTarget | null) => deploy.setTarget(repo, t));
+handle('tests:run', (repo: string) => deploy.runTests(repo));
+handle('tests:list', () => deploy.listTests());
+
+handle('keys:scan', () => keys.scanKeys());
+handle('keys:last', () => keys.lastScan());
+handle('keys:setPatterns', (p: string[]) => keys.setPatterns(p));
+
+// --- window -------------------------------------------------------------------------------
+
+function createWindow() {
+  win = new BrowserWindow({
+    width: 1600,
+    height: 1000,
+    minWidth: 900,
+    minHeight: 600,
+    backgroundColor: '#1e1f22',
+    title: 'Claude Editor',
+    webPreferences: {
+      preload: path.join(here, '../preload/preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  Menu.setApplicationMenu(null);
+  win.loadFile(path.join(here, '../renderer/index.html'));
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('before-input-event', (_e, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12') win?.webContents.toggleDevTools();
+  });
+  win.on('closed', () => (win = null));
+}
+
+app.whenReady().then(() => {
+  createWindow();
+  for (const p of stateFile.data.projects) void deploy.watchPath(p.path);
+  deploy.startDeployWatcher();
+  setTimeout(() => void keys.scanKeys(), 3000);
+  setInterval(() => void keys.scanKeys(), 60 * 60_000);
+});
+
+app.on('window-all-closed', () => {
+  claude.shutdown();
+  deploy.stopDeployWatcher();
+  flushAll();
+  app.quit();
+});

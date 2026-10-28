@@ -1,0 +1,156 @@
+import { randomUUID } from 'node:crypto';
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import { emit } from './bus';
+import * as deploy from './deploy';
+import * as keys from './keys';
+import * as problems from './problems';
+import { stateFile } from './store';
+
+/**
+ * Appended to every chat's system prompt so each Claude session knows the editor's panels
+ * and reports into them instead of only writing to the chat.
+ */
+export const EDITOR_INSTRUCTIONS = `
+# Редактор Claude Editor
+
+Ты работаешь внутри редактора Claude Editor. Пользователь видит не только чат, но и панели редактора.
+Панели переключаются кнопками на верхней панели; когда в панели есть проблема, её кнопка подсвечивается.
+Настраивай панели и отчитывайся в них через MCP-инструменты сервера \`editor\`:
+
+- **Ошибки** — \`mcp__editor__report_problem\`: важные проблемы, которые пользователь не должен пропустить
+  (сломанная сборка, упавший сервис, нехватка доступа, ручное действие для пользователя). Не дублируй туда мелочи.
+  Когда проблема устранена — \`mcp__editor__resolve_problem\`.
+- **Деплои** — пуши отслеживаются автоматически (по смене remote-ref после \`git push\`).
+  Если репозиторий связан с сайтом, укажи его через \`mcp__editor__set_deploy_target\` (url сайта; mode="sha",
+  если сайт отдаёт хэш коммита, иначе "change"). После пуша можешь проверить статус через \`mcp__editor__get_editor_state\`.
+- **Тесты** — smoke-тесты после деплоя: \`mcp__editor__add_smoke_test\` (url, ожидаемый статус, текст в ответе, лимит времени).
+  Запуск вручную — \`mcp__editor__run_tests\`. Падение теста попадает в «Ошибки».
+- **Ключи** — редактор ищет ключи по шаблонам путей. Если хранишь ключ в новом месте, добавь шаблон
+  \`mcp__editor__add_key_pattern\`. Записывая ключ с ограниченным сроком, ставь рядом строку «expires YYYY-MM-DD».
+- **Открыть файл** у пользователя в редакторе — \`mcp__editor__open_file\`.
+
+Каждый чат в этом проекте ведёт свою историю, но память (memory, CLAUDE.md) общая для всех чатов проекта —
+записывай туда факты, полезные другим чатам.
+`;
+
+const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
+
+export function editorMcp(sessionId: string, cwd: string) {
+  return createSdkMcpServer({
+    name: 'editor',
+    version: '1.0.0',
+    tools: [
+      tool(
+        'report_problem',
+        'Показать важную проблему в панели «Ошибки» редактора (кнопка панели подсветится).',
+        {
+          title: z.string().describe('Коротко, что сломалось'),
+          detail: z.string().optional().describe('Подробности и что делать'),
+          severity: z.enum(['error', 'warning']).default('error'),
+          path: z.string().optional().describe('Файл, к которому относится проблема'),
+        },
+        async (a) => {
+          const key = `chat|ai|${randomUUID()}`;
+          problems.report({ source: 'chat', severity: a.severity, title: a.title, detail: a.detail, path: a.path, sessionId, key });
+          return ok(`Проблема добавлена, id=${key}`);
+        },
+      ),
+      tool(
+        'resolve_problem',
+        'Убрать проблему из панели «Ошибки», когда она устранена. Без id — убирает все проблемы этого чата.',
+        { id: z.string().optional() },
+        async (a) => {
+          if (a.id) problems.remove(a.id);
+          else for (const p of problems.list().filter((x) => x.sessionId === sessionId)) problems.remove(p.id);
+          return ok('Готово');
+        },
+      ),
+      tool(
+        'set_deploy_target',
+        'Связать git-репозиторий с сайтом, чтобы после push следить, что новая версия реально выкатилась.',
+        {
+          repo: z.string().optional().describe('Путь к репозиторию; по умолчанию текущий проект'),
+          url: z.string().url(),
+          mode: z.enum(['sha', 'change']).default('change'),
+        },
+        async (a) => {
+          const root = (await deploy.gitRoot(a.repo ?? cwd)) ?? a.repo ?? cwd;
+          const prev = stateFile.data.deployTargets[root.toLowerCase()];
+          deploy.setTarget(root, { url: a.url, mode: a.mode, tests: prev?.tests ?? [] });
+          await deploy.watchPath(root);
+          return ok(`Сайт ${a.url} привязан к ${root}`);
+        },
+      ),
+      tool(
+        'add_smoke_test',
+        'Добавить smoke-тест, который запускается после каждого успешного деплоя репозитория.',
+        {
+          repo: z.string().optional(),
+          name: z.string(),
+          url: z.string().url(),
+          expectStatus: z.number().int().default(200),
+          contains: z.string().optional(),
+          maxMs: z.number().int().optional(),
+        },
+        async (a) => {
+          const root = (await deploy.gitRoot(a.repo ?? cwd)) ?? a.repo ?? cwd;
+          const key = root.toLowerCase();
+          const t = stateFile.data.deployTargets[key] ?? { url: '', mode: 'change' as const, tests: [] };
+          t.tests = [...t.tests.filter((x) => x.name !== a.name), { id: randomUUID(), name: a.name, url: a.url, expectStatus: a.expectStatus, contains: a.contains, maxMs: a.maxMs }];
+          deploy.setTarget(root, t);
+          return ok(`Тест «${a.name}» добавлен (${t.tests.length} всего)`);
+        },
+      ),
+      tool(
+        'run_tests',
+        'Запустить smoke-тесты репозитория сейчас и вернуть результат.',
+        { repo: z.string().optional() },
+        async (a) => {
+          const root = (await deploy.gitRoot(a.repo ?? cwd)) ?? a.repo ?? cwd;
+          const res = await deploy.runTests(root);
+          if (!res.length) return ok('Тестов нет. Добавьте через add_smoke_test.');
+          return ok(res.map((r) => `${r.ok ? 'OK ' : 'FAIL'} ${r.name} ${r.status ?? ''} ${r.ms ?? ''}ms ${r.detail ?? ''}`).join('\n'));
+        },
+      ),
+      tool(
+        'add_key_pattern',
+        'Добавить шаблон пути (glob относительно корня проекта), где лежат ключи, чтобы панель «Ключи» следила за их сроком.',
+        { pattern: z.string() },
+        async (a) => {
+          if (!stateFile.data.keyPatterns.includes(a.pattern)) keys.setPatterns([...stateFile.data.keyPatterns, a.pattern]);
+          const r = await keys.scanKeys();
+          return ok(`Шаблон добавлен. Найдено ключей: ${r.keys.length}, проблемных: ${r.keys.filter((k) => k.status !== 'valid' && k.status !== 'unknown').length}`);
+        },
+      ),
+      tool(
+        'open_file',
+        'Открыть файл у пользователя в редакторе (опционально на строке).',
+        { path: z.string(), line: z.number().int().optional() },
+        async (a) => {
+          emit({ type: 'openFile', path: a.path, line: a.line });
+          return ok('Открыто');
+        },
+      ),
+      tool(
+        'get_editor_state',
+        'Текущее состояние панелей: проблемы, последние деплои, результаты тестов, привязки сайтов.',
+        {},
+        async () =>
+          ok(
+            JSON.stringify(
+              {
+                problems: problems.list().slice(0, 20),
+                deploys: deploy.listDeploys().slice(0, 10),
+                tests: deploy.listTests().slice(0, 20),
+                deployTargets: stateFile.data.deployTargets,
+                keyPatterns: stateFile.data.keyPatterns,
+              },
+              null,
+              1,
+            ),
+          ),
+      ),
+    ],
+  });
+}
