@@ -81,6 +81,8 @@ export interface Store {
   /** Cloud settings storage status; showCloud opens its window. */
   cloud?: CloudStatus;
   showCloud?: boolean;
+  /** Chat whose MCP servers are shown (/mcp). */
+  mcpFor?: string;
   /** Selected tree node (target folder for Ctrl+V). */
   treeSelected?: string;
   /** Unsent text and attachments per chat. */

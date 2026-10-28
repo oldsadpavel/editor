@@ -86,6 +86,33 @@ function splitAttachments(text: string, refs: TurnAttachment[]): { prompt: strin
   return { prompt: only ? '' : text.slice(0, at).trim(), attachments };
 }
 
+const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n) + `\n… (ещё ${s.length - n} символов)` : s);
+
+/** Everything about a call worth showing when it's expanded. Edits have the diff window instead. */
+function toolDetail(name: string, input: any): string | undefined {
+  if (!input || ['Edit', 'MultiEdit', 'Write', 'NotebookEdit', 'Read', 'TodoWrite'].includes(name)) return undefined;
+  if (name === 'Bash' || name === 'PowerShell') return String(input.command ?? '');
+  if (name === 'Agent' || name === 'Task') return String(input.prompt ?? input.description ?? '');
+  return cut(JSON.stringify(input, null, 2), 4000);
+}
+
+/** Tool result content → text (images become a marker). */
+function resultText(c: any): string {
+  if (typeof c === 'string') return c;
+  if (!Array.isArray(c)) return '';
+  return c.map((b: any) => (b.type === 'text' ? b.text : b.type === 'image' ? '[изображение]' : '')).join('\n');
+}
+
+/** Bash mode in an interactive Claude: `<bash-input>cmd</bash-input>` and `<bash-stdout>…</bash-stdout>` entries. */
+function bashBlocks(text: string): { input?: string; stdout?: string; stderr?: string; rest: string } {
+  const pick = (tag: string) => text.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`))?.[1];
+  const input = pick('bash-input');
+  const stdout = pick('bash-stdout');
+  const stderr = pick('bash-stderr');
+  const rest = text.replace(/<bash-(input|stdout|stderr)>[\s\S]*?<\/bash-\1>/g, '').trim();
+  return { input, stdout, stderr, rest };
+}
+
 function toolSummary(name: string, input: any): { summary: string; path?: string } {
   const p = input?.file_path ?? input?.notebook_path ?? input?.path;
   switch (name) {
@@ -118,6 +145,8 @@ function toolSummary(name: string, input: any): { summary: string; path?: string
 export class TurnBuilder {
   turns: Turn[] = [];
   private pendingTools = new Map<string, { turn: Turn; tool: TurnItemTool; input: any; at: number }>();
+  /** Every tool call by id (subagent activity can arrive after the call returned). */
+  private toolsById = new Map<string, TurnItemTool>();
   /** What each answer changed in each file (for the diff window); kept here, not sent with every snapshot. */
   private changes = new Map<Turn, { path: string; change: FileChange }[]>();
 
@@ -239,6 +268,7 @@ export class TurnBuilder {
   private ingestUser(entry: any, at: number) {
     const content = entry.message?.content;
     if (entry.isMeta || entry.isCompactSummary) return;
+    if (typeof content === 'string' && this.ingestBash(content, at, entry.uuid)) return;
     if (typeof content === 'string') {
       // A plain string too can carry the attachment list (prompts typed into an interactive Claude, e.g. /RC).
       const { prompt: text, attachments } = splitAttachments(cleanPrompt(content), []);
@@ -257,6 +287,47 @@ export class TurnBuilder {
     const { prompt, attachments } = splitAttachments(cleanPrompt(text), refs);
     if (prompt.startsWith('[Request interrupted')) this.closeTurn();
     if ((prompt && !isNoisePrompt(prompt)) || attachments.length) this.startTurn(prompt, at, entry.uuid ?? String(at), attachments);
+  }
+
+  /**
+   * Bash mode: a command typed with `!` (its own turn, output attached), or the editor's way — commands run here and
+   * passed to Claude in front of the next question (listed on that question). Returns true when the entry was bash-only.
+   */
+  private ingestBash(raw: string, at: number, uuid?: string): boolean {
+    if (!raw.includes('<bash-')) return false;
+    const b = bashBlocks(raw);
+    if (b.input !== undefined && !b.rest) {
+      const turn = this.startTurn(`!${b.input}`, at, uuid ?? String(at));
+      turn.shell = { command: b.input, output: '' };
+      return true;
+    }
+    if (b.input === undefined && (b.stdout !== undefined || b.stderr !== undefined) && !b.rest) {
+      const last = this.turns[this.turns.length - 1];
+      if (last?.shell) {
+        last.shell.output = [b.stdout, b.stderr].filter(Boolean).join('\n');
+        this.closeTurn();
+      }
+      return true;
+    }
+    if (b.input !== undefined && b.rest) {
+      // the editor's context block in front of a question
+      const commands = [...raw.matchAll(/<bash-input>([\s\S]*?)<\/bash-input>/g)].map((m) => m[1]);
+      const { prompt, attachments } = splitAttachments(cleanPrompt(b.rest), []);
+      const turn = this.startTurn(prompt, at, uuid ?? String(at), attachments);
+      turn.shellContext = commands;
+      return true;
+    }
+    return false;
+  }
+
+  /** Activity of a subagent, shown under its Agent/Task call while it runs. */
+  addSub(toolUseId: string, lines: string[]) {
+    // a background agent returns at once ("launched"), so look among finished calls too
+    const tool = this.pendingTools.get(toolUseId)?.tool ?? this.toolsById.get(toolUseId);
+    if (!tool || !lines.length) return;
+    const sub = (tool.sub ??= []);
+    sub.push(...lines);
+    if (sub.length > 60) sub.splice(0, sub.length - 60);
   }
 
   /** A question sent while Claude was working and taken into the running answer (not a separate user entry). */
@@ -279,17 +350,23 @@ export class TurnBuilder {
     const stop = entry.message?.stop_reason;
     if (stop && stop !== 'tool_use' && stop !== 'pause_turn') this.closeTurn();
     for (const block of content) {
-      if (block.type === 'text' && block.text?.trim()) {
+      if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+        const last = turn.items[turn.items.length - 1];
+        if (last?.kind === 'thinking') last.text += '\n\n' + block.thinking;
+        else turn.items.push({ kind: 'thinking', text: block.thinking });
+      } else if (block.type === 'text' && block.text?.trim()) {
         const last = turn.items[turn.items.length - 1];
         if (last?.kind === 'text') last.text += '\n\n' + block.text;
         else turn.items.push({ kind: 'text', text: block.text });
         turn.answeredAt = at;
       } else if (block.type === 'tool_use') {
         const { summary, path: p } = toolSummary(block.name, block.input);
-        const tool: TurnItemTool = { kind: 'tool', id: block.id, name: block.name, summary, path: p };
+        const tool: TurnItemTool = { kind: 'tool', id: block.id, name: block.name, summary, path: p, detail: toolDetail(block.name, block.input) };
+        if (block.name === 'TodoWrite' && Array.isArray(block.input?.todos)) turn.todos = block.input.todos;
         turn.items.push(tool);
         turn.answeredAt = at;
         this.pendingTools.set(block.id, { turn, tool, input: block.input, at });
+        this.toolsById.set(block.id, tool);
         const cmd = String(block.input?.command ?? '');
         if (/\bgit\b[^\n]*\bpush\b/.test(cmd)) this.pushCommands.push({ at, command: cmd });
       }
@@ -304,6 +381,10 @@ export class TurnBuilder {
     tool.done = true;
     tool.error = !!block.is_error;
     turn.answeredAt = Math.max(turn.answeredAt ?? 0, at);
+    if (!['Read', 'TodoWrite'].includes(tool.name)) {
+      const out = resultText(block.content).trim();
+      if (out) tool.output = cut(out, 12000);
+    }
     if (tool.error) {
       const c = block.content;
       const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((b: any) => b.text ?? '').join('\n') : '';

@@ -3,35 +3,36 @@ import type { ApprovalEntry, ChatSnapshot, FavoriteAnswer, FileEdit, PermissionR
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
 import { isFavorite, openFavorite, removeFavorite, toggleFavorite } from '../favorites';
-import { loadDraft, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
+import { PlanCard, ShellCard, TasksBar, ThinkingBlock, TodoCard, ToolDetails, openClaudeConfig, rewindTo } from './ChatExtras';
+import { get, openChat, closeChat, newChat, loadDraft, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { fileIcon } from './icons';
 
 const MODES = [
-  { id: '', label: 'Как в настройках Claude' },
-  { id: 'default', label: 'Спрашивать' },
-  { id: 'acceptEdits', label: 'Правки без вопросов' },
-  { id: 'auto', label: 'Авто' },
-  { id: 'plan', label: 'План' },
-  { id: 'bypassPermissions', label: 'Без ограничений' },
+  { id: '', label: 'Как в настройках Claude', short: 'Режим' },
+  { id: 'default', label: 'Спрашивать', short: 'Спрашивать' },
+  { id: 'acceptEdits', label: 'Правки без вопросов', short: 'Правки' },
+  { id: 'auto', label: 'Авто', short: 'Авто' },
+  { id: 'plan', label: 'План', short: 'План' },
+  { id: 'bypassPermissions', label: 'Без ограничений', short: 'Без огранич.' },
 ];
 
 export const MODELS = [
-  { id: '', label: 'Модель: по умолчанию' },
-  { id: 'fable', label: 'Fable — самая сильная' },
-  { id: 'opus', label: 'Opus — сложные задачи' },
-  { id: 'sonnet', label: 'Sonnet — быстро и умно' },
-  { id: 'haiku', label: 'Haiku — быстрее всех' },
+  { id: '', label: 'Модель: по умолчанию', short: 'Модель' },
+  { id: 'fable', label: 'Fable — самая сильная', short: 'Fable' },
+  { id: 'opus', label: 'Opus — сложные задачи', short: 'Opus' },
+  { id: 'sonnet', label: 'Sonnet — быстро и умно', short: 'Sonnet' },
+  { id: 'haiku', label: 'Haiku — быстрее всех', short: 'Haiku' },
 ];
 
 export const EFFORTS = [
-  { id: '', label: 'Качество: по умолчанию' },
-  { id: 'low', label: 'Быстро (low)' },
-  { id: 'medium', label: 'Средне (medium)' },
-  { id: 'high', label: 'Тщательно (high)' },
-  { id: 'xhigh', label: 'Очень тщательно (xhigh)' },
-  { id: 'max', label: 'Максимум (max)' },
+  { id: '', label: 'Качество: по умолчанию', short: 'Качество' },
+  { id: 'low', label: 'Быстро (low)', short: 'low' },
+  { id: 'medium', label: 'Средне (medium)', short: 'medium' },
+  { id: 'high', label: 'Тщательно (high)', short: 'high' },
+  { id: 'xhigh', label: 'Очень тщательно (xhigh)', short: 'xhigh' },
+  { id: 'max', label: 'Максимум (max)', short: 'max' },
 ];
 
 /** Thumbnail/chip of an attachment; images from a transcript are fetched only when shown. */
@@ -215,6 +216,8 @@ function CompactMarks({ marks }: { marks: NonNullable<Turn['compacts']> }) {
 
 function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[]; cwd: string }) {
   const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState<Set<string>>(new Set());
+  const toggleRow = (id: string) => setShown((s) => (s.has(id) ? (s.delete(id), new Set(s)) : new Set(s).add(id)));
   const errors = tools.filter((t) => t.error).length;
   const running = tools.some((t) => !t.done);
   const names = [...new Set(tools.map((t) => t.name))].slice(0, 4).join(', ');
@@ -239,7 +242,9 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
       {open && (
         <div className="tool-list">
           {tools.map((t) => (
-            <div key={t.id} className={`tool-row ${t.error ? 'err' : ''}`} title={t.error ? t.errorText : undefined}>
+            <div key={t.id} className="tool-item">
+            <div className={`tool-row ${t.error ? 'err' : ''} ${shown.has(t.id) ? 'open' : ''}`} title={t.error ? t.errorText : 'Нажмите — команда целиком и что она вернула'} onClick={() => toggleRow(t.id)}>
+              <span className="twisty">{shown.has(t.id) ? '▾' : '▸'}</span>
               {t.error && (
                 <span className="err-mark" title={t.errorText ?? 'Ошибка'}>
                   !
@@ -247,13 +252,16 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
               )}
               <span className="tname">{t.name.replace(/^mcp__/, '')}</span>
               {t.path ? (
-                <span className="path-link" onClick={() => openFile(t.path!)}>
+                <span className="path-link" onClick={(e) => (e.stopPropagation(), openFile(t.path!))}>
                   {relPath(t.path, cwd)}
                 </span>
               ) : (
                 <span className="tsum">{t.summary}</span>
               )}
               {!t.done && <span className="spinner" />}
+              {t.sub?.length ? <span className="muted small">· {t.sub.length} шагов</span> : null}
+            </div>
+            {shown.has(t.id) && <ToolDetails t={t} />}
             </div>
           ))}
         </div>
@@ -282,10 +290,11 @@ function TurnBody({
   setTab: (t: BodyTab) => void;
 }) {
   // Consecutive tool calls are folded into one group so the text answer stays readable.
-  const blocks: ({ kind: 'text'; text: string } | { kind: 'tools'; tools: Extract<TurnItem, { kind: 'tool' }>[] })[] = [];
+  const blocks: ({ kind: 'text'; text: string } | { kind: 'thinking'; text: string } | { kind: 'tools'; tools: Extract<TurnItem, { kind: 'tool' }>[] })[] = [];
   for (const it of turn.items) {
     const last = blocks[blocks.length - 1];
     if (it.kind === 'text') blocks.push({ kind: 'text', text: it.text });
+    else if (it.kind === 'thinking') blocks.push({ kind: 'thinking', text: it.text });
     else if (last?.kind === 'tools') last.tools.push(it);
     else blocks.push({ kind: 'tools', tools: [it] });
   }
@@ -299,7 +308,12 @@ function TurnBody({
         <div className="q-label">
           {turn.more?.length ? `Вопрос 1 из ${turn.more.length + 1}` : 'Вопрос'} · {formatTime(turn.startedAt)}
         </div>
-        {turn.prompt && <PromptText prompt={turn.prompt} cwd={cwd} />}
+        {turn.prompt && !turn.shell && <PromptText prompt={turn.prompt} cwd={cwd} />}
+        {turn.shellContext?.length ? (
+          <div className="shell-ctx" title="Вывод этих команд (!…) передан Claude вместе с вопросом">
+            📟 с выводом: {turn.shellContext.map((c, i) => <code key={i}>!{c}</code>)}
+          </div>
+        ) : null}
         {turn.attachments?.length ? (
           <TurnAttachments sessionId={sessionId} list={turn.attachments} />
         ) : (
@@ -318,7 +332,11 @@ function TurnBody({
       </div>
       {tab === 'answer' && (
         <>
-          {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
+          {turn.shell && <ShellCard run={turn.shell} />}
+          {turn.todos?.length ? <TodoCard todos={turn.todos} /> : null}
+          {blocks.map((b, i) =>
+            b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : b.kind === 'thinking' ? <ThinkingBlock key={i} text={b.text} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />,
+          )}
           {turn.compacts?.length ? <CompactMarks marks={turn.compacts} /> : null}
           {partial && <Markdown text={partial} cwd={cwd} />}
           {turn.live && !partial && (
@@ -530,6 +548,19 @@ function TurnRow({
         )}
         <TokensBadge turn={turn} />
         {!turn.live && <FavStar sessionId={sessionId} turn={turn} />}
+        {!turn.live && !turn.shell && (
+          <span
+            className="rewind-btn"
+            title="Откатить сюда: вернуть разговор (и файлы) к моменту перед этим вопросом — как Esc Esc в Claude Code"
+            onClick={(e) => {
+              e.stopPropagation();
+              const chat = get().chats[sessionId];
+              if (chat) void rewindTo(chat, turn);
+            }}
+          >
+            ↶
+          </span>
+        )}
         <span className="turn-date" title={`Вопрос: ${new Date(turn.startedAt).toLocaleString('ru-RU')}${turn.answeredAt ? `\nОтвет: ${new Date(turn.answeredAt).toLocaleString('ru-RU')}` : ''}`}>
           {turn.live ? <span className="spinner" /> : turn.error ? '⚠' : '✓'} {formatTime(turn.answeredAt ?? turn.startedAt)}
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
@@ -545,6 +576,7 @@ function PermissionCard({ req }: { req: PermissionRequest }) {
   const answer = (behavior: 'allow' | 'deny', extra: object = {}) => call('chat:permission', req.sessionId, req.id, { behavior, ...extra });
   const input: any = req.input;
 
+  if (req.toolName === 'ExitPlanMode') return <PlanCard req={req} answer={answer} />;
   if (req.toolName === 'AskUserQuestion') {
     const qs: any[] = input.questions ?? [];
     return (
@@ -742,9 +774,58 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
     ref.current?.focus();
   };
 
+  // @-mentions: project files matching what follows the @ before the cursor
+  const [mention, setMention] = useState<{ q: string; start: number; items: string[]; index: number } | null>(null);
+  const updateMention = (value: string, caret: number) => {
+    const m = value.slice(0, caret).match(/(^|\s)@([^\s@]*)$/);
+    if (!m) return setMention(null);
+    const q = m[2];
+    const start = caret - q.length - 1;
+    void call<string[]>('files:search', chat.cwd, q).then((items) => setMention(items.length ? { q, start, items, index: 0 } : null), () => setMention(null));
+  };
+  const pickMention = (rel: string) => {
+    if (!mention) return;
+    const caret = mention.start + 1 + mention.q.length;
+    setText((v) => v.slice(0, mention.start) + '@' + rel + ' ' + v.slice(caret));
+    setMention(null);
+    ref.current?.focus();
+  };
+  // ↑ / ↓ in an empty field: my earlier questions of this chat (to fix and resend)
+  const history = useMemo(() => chat.turns.map((t) => t.prompt).filter((p) => p && !p.startsWith('<')).reverse(), [chat.turns]);
+  const histPos = useRef(-1);
+
   const submit = async () => {
     const t = text.trim();
     if (!t && !attachments.length) return;
+    histPos.current = -1;
+    if (t.startsWith('!') && t.length > 1 && !attachments.length) {
+      setText('');
+      onSent();
+      await call('chat:shell', chat.sessionId, t.slice(1).trim()).catch((e) => toast(e.message, 'error'));
+      return;
+    }
+    const local: Record<string, () => void> = {
+      '/clear': () => {
+        void newChat(chat.cwd).then((id) => {
+          if (id) void closeChat(chat.sessionId);
+        });
+        toast('Новый чат с чистым контекстом; прежний — в «Истории»');
+      },
+      '/fork': () => void call<ChatSnapshot>('chat:fork', chat.sessionId).then((snap) => (set((s) => ({ chats: { ...s.chats, [snap.sessionId]: snap } })), openChat(snap.sessionId, chat.cwd)), (e) => toast(e.message, 'error')),
+      '/export': () => void call<string | null>('chat:export', chat.sessionId).then((f) => f && toast(`Чат сохранён: ${f}`), (e) => toast(e.message, 'error')),
+      '/mcp': () => set({ mcpFor: chat.sessionId }),
+      '/memory': () => void openClaudeConfig(chat.cwd, 'memory'),
+      '/permissions': () => void openClaudeConfig(chat.cwd, 'settings'),
+      '/hooks': () => void openClaudeConfig(chat.cwd, 'settings'),
+      '/agents': () => void openClaudeConfig(chat.cwd, 'agents'),
+      '/plugin': () => void call<string>('claude:plugins').then((out) => alert(`Плагины Claude Code\n\n${out || '(нет)'}\n\nУстановить: в терминале  claude plugin install <имя>@<маркетплейс>`)),
+      '/ide': () => toast('Claude видит открытый у вас файл, строку курсора и выделение (инструмент get_editor_context) — просто пишите «этот файл», «выделенное»'),
+    };
+    if (local[t]) {
+      setText('');
+      local[t]();
+      return;
+    }
     // Editor-side commands are answered here, not sent to Claude.
     const rename = t.match(/^\/rename\s+(.+)$/s);
     if (rename) {
@@ -817,6 +898,21 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         <span className="muted">Пишете в:</span> <b>{chat.title}</b>
         <span className="ct-project">{basename(chat.cwd)}</span>
       </div>
+      {mention && (
+        <div className="slash-menu mention-menu">
+          {mention.items.map((f, i) => (
+            <div
+              key={f}
+              className={`slash-item ${i === mention.index ? 'on' : ''}`}
+              onMouseEnter={() => setMention((m) => m && { ...m, index: i })}
+              onMouseDown={(e) => (e.preventDefault(), pickMention(f))}
+            >
+              <span className="slash-name">{f.slice(f.lastIndexOf('/') + 1)}</span>
+              <span className="slash-desc">{f}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         value={text}
@@ -828,8 +924,36 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
             : `Вопрос в «${chat.title}» (${basename(chat.cwd)})… Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы`
         }
         onPaste={onPaste}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          updateMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
+        }}
         onKeyDown={(e) => {
+          if (mention) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setMention((m) => m && { ...m, index: (m.index + (e.key === 'ArrowDown' ? 1 : m.items.length - 1)) % m.items.length });
+              return;
+            }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+              e.preventDefault();
+              pickMention(mention.items[mention.index]);
+              return;
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setMention(null);
+              return;
+            }
+          }
+          if (!menu.length && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && history.length && (!text || histPos.current >= 0) && !e.shiftKey) {
+            const next = histPos.current + (e.key === 'ArrowUp' ? 1 : -1);
+            if (next < -1 || next >= history.length) return;
+            e.preventDefault();
+            histPos.current = next;
+            setText(next === -1 ? '' : history[next]);
+            return;
+          }
           if (menu.length) {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
               e.preventDefault();
@@ -853,22 +977,22 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
       <div className="composer-bar">
         <select value={model} onChange={(e) => setModel(e.target.value)} title="Какая модель отвечает (меняется на лету, история чата сохраняется)">
           {MODELS.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
+            <option key={m.id} value={m.id} title={m.label}>
+              {m.short}
             </option>
           ))}
         </select>
         <select value={effort} onChange={(e) => setEffort(e.target.value)} title="Качество ответа: сколько модель думает перед ответом">
           {EFFORTS.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
+            <option key={m.id} value={m.id} title={m.label}>
+              {m.short}
             </option>
           ))}
         </select>
         <select value={mode} onChange={(e) => setMode(e.target.value)} title="Режим разрешений">
           {MODES.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
+            <option key={m.id} value={m.id} title={m.label}>
+              {m.short}
             </option>
           ))}
         </select>
@@ -948,6 +1072,16 @@ interface SlashItem {
 
 const LOCAL_COMMANDS: SlashItem[] = [
   { name: 'status', description: 'Состояние чата: модель, режим, MCP-серверы, контекст, лимиты', local: true },
+  { name: 'clear', description: 'Новый чат с чистым контекстом (этот останется в истории)', local: true },
+  { name: 'fork', description: 'Ответвить чат: копия, чтобы попробовать другой путь', local: true },
+  { name: 'export', description: 'Сохранить чат в Markdown', local: true },
+  { name: 'mcp', description: 'MCP-серверы: статус, вход, переподключение, вкл/выкл', local: true },
+  { name: 'memory', description: 'Память Claude: открыть CLAUDE.md проекта и общую', local: true },
+  { name: 'permissions', description: 'Правила разрешений (allow/deny): открыть settings Claude Code', local: true },
+  { name: 'hooks', description: 'Хуки Claude Code: открыть settings', local: true },
+  { name: 'agents', description: 'Свои агенты (.claude/agents)', local: true },
+  { name: 'plugin', description: 'Плагины Claude Code', local: true },
+  { name: 'ide', description: 'Что Claude видит из редактора (открытый файл, выделение)', local: true },
   { name: 'context', description: 'Сколько занято окно контекста и чем', local: true },
   { name: 'rename', description: 'Переименовать этот чат: /rename новое имя', argumentHint: '<имя>', local: true },
   { name: 'chrome', description: 'Claude in Chrome: включить/выключить управление браузером через расширение', local: true },
@@ -1191,6 +1325,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         {tab === 'approvals' && <ApprovalsTab chat={chat} />}
         {tab === 'favorites' && <FavoritesTab chat={chat} onOpen={() => setTab('chat')} />}
       </div>
+      <TasksBar chat={chat} />
       {chat.pending.map((p) => (
         <PermissionCard key={p.id} req={p} />
       ))}

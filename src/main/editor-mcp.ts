@@ -8,6 +8,9 @@ import * as ping from './ping';
 import * as problems from './problems';
 import { stateFile } from './store';
 
+/** What the user has in front of them in the editor; the renderer reports it (cursor/selection debounced). */
+export const editorContext: { activeFile?: string; line?: number; column?: number; selection?: string; openFiles?: string[] } = {};
+
 /**
  * Appended to every chat's system prompt so each Claude session knows the editor's panels
  * and reports into them instead of only writing to the chat.
@@ -36,6 +39,8 @@ export const EDITOR_INSTRUCTIONS = `
 - **Пинг** — продакшен-домены и серверы проекта проверяются по расписанию. Узнал новый прод-адрес — добавь
   \`mcp__editor__add_prod_domain\`.
 - **Открыть файл** у пользователя в редакторе — \`mcp__editor__open_file\`.
+- **Что у пользователя в редакторе** (открытый файл, строка курсора, выделенный текст, открытые вкладки) — \`mcp__editor__get_editor_context\`.
+  Когда пользователь пишет «этот файл», «здесь», «выделенное», «эта функция» — сначала посмотри туда.
 
 Каждый чат в этом проекте ведёт свою историю, но память (memory, CLAUDE.md) общая для всех чатов проекта —
 записывай туда факты, полезные другим чатам.
@@ -160,6 +165,12 @@ export function editorMcp(sessionId: string, cwd: string) {
           const r = res.find((x) => x.target === a.target);
           return ok(`Добавлено в «Пинг» проекта ${p.name}. Сейчас: ${r?.ok ? 'OK' : 'НЕ ОТВЕЧАЕТ'} ${r?.ms ?? ''} мс ${r?.detail ?? ''}`);
         },
+      ),
+      tool(
+        'get_editor_context',
+        'Что сейчас открыто у пользователя в редакторе: активный файл, строка и колонка курсора, выделенный текст, открытые вкладки.',
+        {},
+        async () => ok(JSON.stringify(editorContext, null, 2)),
       ),
       tool(
         'open_file',

@@ -26,7 +26,8 @@ import {
   rectangularSelection,
 } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
-import { closeFile, editFile, reloadFile, saveFile, set, useStore, type OpenFile } from '../store';
+import { call } from '../api';
+import { closeFile, editFile, get, reloadFile, saveFile, set, useStore, type OpenFile } from '../store';
 import { basename, dirname } from '../util';
 import { fileIcon } from './icons';
 import { ImageTab } from './ImageViewer';
@@ -85,6 +86,23 @@ const theme = EditorView.theme({
   '&.cm-editor': { background: '#1e1f22' },
 });
 
+/** Cursor and selection go to the main process (debounced), so Claude can ask what the user is looking at. */
+let contextTimer: ReturnType<typeof setTimeout> | null = null;
+function reportContext(path: string, st: EditorState) {
+  if (contextTimer) clearTimeout(contextTimer);
+  contextTimer = setTimeout(() => {
+    const sel = st.selection.main;
+    const line = st.doc.lineAt(sel.head);
+    void call('editor:context', {
+      activeFile: path,
+      line: line.number,
+      column: sel.head - line.from + 1,
+      selection: sel.empty ? undefined : st.sliceDoc(sel.from, sel.to).slice(0, 20000),
+      openFiles: get().files.map((f) => f.path),
+    }).catch(() => {});
+  }, 400);
+}
+
 function CodeView({ file }: { file: OpenFile }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -119,6 +137,7 @@ function CodeView({ file }: { file: OpenFile }) {
           theme,
           language(file.path),
           EditorView.updateListener.of((u) => {
+            if (u.selectionSet || u.focusChanged) reportContext(file.path, u.state);
             if (u.docChanged) editFile(file.path, u.state.doc.toString());
           }),
         ],

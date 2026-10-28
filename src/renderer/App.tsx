@@ -12,6 +12,7 @@ import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { StatusModal } from './components/StatusModal';
 import { CloudModal } from './components/CloudModal';
+import { McpModal } from './components/ChatExtras';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
 import { init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
@@ -262,6 +263,7 @@ export function App() {
       <ImageLightbox />
       <StatusModal />
       <CloudModal />
+      <McpModal />
       <Toast />
     </div>
   );

@@ -3,8 +3,8 @@ import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { CompactState } from '../shared/types';
+import { forkSession, query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { BgTask, CompactState, ShellRun } from '../shared/types';
 import type { ApprovalEntry, AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SendOptions, SessionInfo, TurnAttachment } from '../shared/types';
 import * as approvals from './approvals';
 import { emit } from './bus';
@@ -177,6 +177,10 @@ class ChatSession {
   input: InputQueue | null = null;
   pending = new Map<string, PendingPermission>();
   existsOnDisk = false;
+  /** Background tasks of the Claude process (task_started / task_progress / task_notification). */
+  tasks: BgTask[] = [];
+  /** Bash-mode runs (`!cmd`) waiting to be passed to Claude with the next question. */
+  shellContext: string[] = [];
   /** History compaction in progress, and the context size of the last request (for the time estimate). */
   compacting: CompactState | undefined;
   contextTokens: number | undefined;
@@ -199,6 +203,7 @@ class ChatSession {
       remote: this.remote,
       chrome: this.chrome,
       compacting: this.compacting,
+      tasks: this.tasks.length ? this.tasks : undefined,
       contextTokens: this.contextTokens,
       approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
@@ -385,7 +390,9 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   if (s.remote) {
     if (!s.remoteProc || s.remoteProc.exited !== undefined) throw new Error('Удалённый процесс Claude не запущен — выключите и снова включите /RC');
     // Interactive Claude has no image blocks over stdin: it gets the paths and opens them with Read (images too).
-    const body = attachments.length ? [text, '', ATTACHMENTS_HEADER, ...attachments.map((p) => `- ${p}`)].join('\n') : text;
+    const ctx = s.shellContext.splice(0);
+    const plain = attachments.length ? [text, '', ATTACHMENTS_HEADER, ...attachments.map((p) => `- ${p}`)].join('\n') : text;
+    const body = ctx.length ? `${ctx.join('\n')}\n\n${plain}` : plain;
     remote.send(s.remoteProc, body);
     const q = { text: text.trim(), at: Date.now(), id: randomUUID(), attachments: attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? ('image' as const) : ('file' as const), path: p })) };
     s.remoteQueue.push(q);
@@ -401,13 +408,17 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   if (modelChanged || effortChanged) rememberChatModel(s);
 
   // A question sent while Claude is still answering joins the current turn (Claude Code answers them together).
+  // The message carries this uuid into the transcript, so the turn keeps its id after a reload (rewind, fork).
+  const uid = randomUUID();
+  const context = s.shellContext.splice(0);
   const turn = s.builder.startTurn(
     text,
     Date.now(),
-    randomUUID(),
+    uid,
     attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? 'image' : 'file', path: p })),
   );
   turn.live = true;
+  if (context.length && turn.id === uid) turn.shellContext = context.map((x) => x.match(/<bash-input>([\s\S]*?)<\/bash-input>/)?.[1] ?? '');
   const queued = turn.more?.[turn.more.length - 1];
   if (queued && queued.at >= Date.now() - 1000 && queued.prompt === text) {
     // Queued behind the running answer: grey until Claude actually takes it (see watchQueue).
@@ -424,12 +435,21 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     if (modelChanged) await s.q.setModel(modelArg(s.model)).catch(() => {});
     if (effortChanged) await s.q.applyFlagSettings({ effortLevel: (s.effort as any) ?? null }).catch(() => {});
   }
+  const content = buildContent(text, attachments);
   s.input!.push({
     type: 'user',
-    message: { role: 'user', content: buildContent(text, attachments) },
+    uuid: uid,
+    message: { role: 'user', content: context.length ? withContext(context, content) : content },
     parent_tool_use_id: null,
     session_id: s.id,
   } as SDKUserMessage);
+}
+
+/** Bash-mode output goes in front of the question, the way Claude Code itself records it. */
+function withContext(context: string[], content: string | any[]) {
+  const head = context.join('\n');
+  if (typeof content === 'string') return `${head}\n\n${content}`;
+  return [{ type: 'text', text: head }, ...content];
 }
 
 function start(s: ChatSession) {
@@ -443,6 +463,13 @@ function start(s: ChatSession) {
       ...(resume ? { resume: s.id } : { sessionId: s.id }),
       pathToClaudeCodeExecutable: claudeExecutable(),
       includePartialMessages: true,
+      // backups of edited files, so a turn can be rewound (rewindFiles)
+      enableFileCheckpointing: true,
+      // summaries of the model's reasoning, shown folded under "💭 Размышления" (Claude Code hides them by default)
+      thinking: { type: 'adaptive', display: 'summarized' },
+      // subagents: their texts and calls come through (shown under the Agent call), plus a one-line progress summary
+      forwardSubagentText: true,
+      agentProgressSummaries: true,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: EDITOR_INSTRUCTIONS },
       mcpServers: { editor: editorMcp(s.id, s.cwd) },
       allowedTools: ['mcp__editor'],
@@ -594,7 +621,17 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       return;
     }
     case 'assistant': {
-      if ((m as any).parent_tool_use_id) return; // subagent internals stay out of the main view
+      // Subagent messages: shown as activity lines under the Agent/Task call, not as the main answer.
+      if ((m as any).parent_tool_use_id) {
+        const lines: string[] = [];
+        for (const b of (m.message as any)?.content ?? []) {
+          if (b.type === 'text' && b.text?.trim()) lines.push('💬 ' + b.text.trim().split('\n')[0].slice(0, 200));
+          if (b.type === 'tool_use') lines.push(`⚙ ${b.name} ${String(b.input?.description ?? b.input?.command ?? b.input?.file_path ?? b.input?.pattern ?? b.input?.url ?? '').slice(0, 160)}`);
+        }
+        s.builder.addSub((m as any).parent_tool_use_id, lines);
+        s.publish();
+        return;
+      }
       s.partial = '';
       // Output after a result means Claude picked up a queued prompt on its own: that prompt gets its own turn,
       // and the chat is working again.
@@ -667,6 +704,23 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     case 'system': {
       const sm: any = m;
       if (sm.subtype === 'init') s.init = sm;
+      if (sm.subtype === 'task_started') {
+        s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type }];
+        s.publish(true);
+      }
+      if (sm.subtype === 'task_progress') {
+        const t = s.tasks.find((x) => x.id === sm.task_id);
+        if (t) {
+          t.progress = `${sm.summary ? sm.summary + ' · ' : ''}${sm.usage?.tool_uses ?? 0} действий · ${Math.round((sm.usage?.total_tokens ?? 0) / 1000)}k токенов`;
+          s.publish();
+        }
+      }
+      if (sm.subtype === 'task_notification') {
+        const t = s.tasks.find((x) => x.id === sm.task_id) ?? { id: sm.task_id, description: sm.summary ?? '', startedAt: Date.now(), status: 'running' as const };
+        Object.assign(t, { status: sm.status, summary: sm.summary, outputFile: sm.output_file });
+        s.tasks = [...s.tasks.filter((x) => x.id !== t.id), t].filter((x) => x.status === 'running' || Date.now() - x.startedAt < 30 * 60_000).slice(-20);
+        s.publish(true);
+      }
       // History compaction: 'status: compacting' starts it, a compact_boundary (or the status clearing) ends it.
       if (sm.subtype === 'status') {
         if (sm.status === 'compacting' && !s.compacting) {
@@ -1066,4 +1120,172 @@ export function fileChanges(sessionId: string, turnIds: string[], file: string) 
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Чат не открыт');
   return s.builder.changesFor(turnIds, file);
+}
+
+/** A Claude process for control requests (rewind, MCP) even when no question is running. */
+function ensureProcess(s: ChatSession) {
+  if (s.remote) throw new Error('В режиме /RC это недоступно — выключите /RC');
+  if (!s.q) start(s);
+  return s.q!;
+}
+
+/** The transcript entry right before a turn's question: where a rewound chat continues from. */
+function entryBefore(sessionId: string, turnId: string): string | null {
+  const file = findTranscript(sessionId);
+  if (!file) return null;
+  for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+    if (!line.includes(turnId)) continue;
+    try {
+      const e = JSON.parse(line);
+      if (e.uuid === turnId) return e.parentUuid ?? null;
+    } catch {
+      /* partial line */
+    }
+  }
+  return null;
+}
+
+/** What rewinding to before this question would do to files (dry run). */
+export async function rewindPreview(sessionId: string, turnId: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  const files = await ensureProcess(s)
+    .rewindFiles(turnId, { dryRun: true })
+    .catch((e: Error) => ({ canRewind: false, error: e.message }) as any);
+  return { files, conversation: entryBefore(sessionId, turnId) !== null || s.builder.turns[0]?.id === turnId };
+}
+
+/**
+ * Rewind to before a question: optionally restores files (checkpoints), and continues the conversation in a new
+ * chat forked right before that question (the original chat stays in history). Returns the new chat's id.
+ */
+export async function rewind(sessionId: string, turnId: string, opts: { files: boolean }) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  if (s.status === 'running' || s.status === 'waiting') throw new Error('Дождитесь конца ответа или нажмите «Стоп»');
+  let files: any = null;
+  if (opts.files) {
+    files = await ensureProcess(s).rewindFiles(turnId);
+    if (!files?.canRewind) throw new Error(`Файлы не откатить: ${files?.error ?? 'нет контрольной точки (правка была до включения откатов?)'}`);
+  }
+  const before = entryBefore(sessionId, turnId);
+  const turn = s.builder.turns.find((t) => t.id === turnId);
+  const title = `${s.title} (откат)`;
+  let id: string;
+  if (before) id = (await forkSession(sessionId, { dir: s.cwd, upToMessageId: before, title })).sessionId;
+  else {
+    // the very first question: an empty new chat
+    id = newChat(s.cwd).sessionId;
+    sessions.get(id)!.title = title;
+  }
+  const snap = await openChat(id, s.cwd);
+  return { sessionId: id, prompt: turn?.prompt ?? '', files, snapshot: snap };
+}
+
+/** A copy of the chat to try another direction; the original stays as it is. */
+export async function fork(sessionId: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  if (!findTranscript(sessionId)) throw new Error('В чате ещё нет истории');
+  const { sessionId: id } = await forkSession(sessionId, { dir: s.cwd, title: `${s.title} (ветка)` });
+  return openChat(id, s.cwd);
+}
+
+/** The chat as Markdown: questions, answers, tool calls in short. */
+export function exportMarkdown(sessionId: string): string {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  const out = [`# ${s.title}`, '', `Проект: ${s.cwd}  `, `Сессия: ${s.id}`, ''];
+  for (const t of s.builder.turns) {
+    out.push(`## ${new Date(t.startedAt).toLocaleString('ru-RU')}`, '', ...t.prompt.split('\n').map((l) => '> ' + l), '');
+    for (const m of t.more ?? []) out.push(...m.prompt.split('\n').map((l) => '> ' + l), '');
+    if (t.shell) out.push('```', `$ ${t.shell.command}`, t.shell.output, '```', '');
+    for (const it of t.items) {
+      if (it.kind === 'text') out.push(it.text, '');
+      else if (it.kind === 'tool') out.push(`- ⚙ **${it.name}** ${it.path ?? it.summary}${it.error ? ' — ошибка' : ''}`);
+    }
+    out.push('');
+  }
+  return out.join('\n');
+}
+
+/** Bash mode: runs `!command` in the chat's folder; the output is shown and goes to Claude with the next question. */
+export function runShell(sessionId: string, command: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  const bash =
+    process.platform === 'win32'
+      ? [process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'Git', 'bin', 'bash.exe'), process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Programs', 'Git', 'bin', 'bash.exe')].find(
+          (p): p is string => !!p && fs.existsSync(p),
+        )
+      : '/bin/bash';
+  const [file, args] = bash ? [bash, ['-lc', command]] : ['powershell.exe', ['-NoProfile', '-Command', command]];
+  const turn = s.builder.startTurn(`!${command}`, Date.now(), randomUUID());
+  s.builder.closeTurn();
+  const run: ShellRun = { command, output: '', running: true };
+  turn.shell = run;
+  s.publish(true);
+  const child = spawn(file, args as string[], { cwd: s.cwd, windowsHide: true, env: process.env });
+  const add = (d: Buffer) => {
+    run.output = (run.output + d.toString()).slice(-100_000);
+    s.publish();
+  };
+  child.stdout.on('data', add);
+  child.stderr.on('data', add);
+  const timer = setTimeout(() => child.kill(), 10 * 60_000);
+  child.on('close', (code) => {
+    clearTimeout(timer);
+    run.running = false;
+    run.code = code;
+    turn.answeredAt = Date.now();
+    const out = run.output.length > 30_000 ? run.output.slice(-30_000) : run.output;
+    s.shellContext.push(`<bash-input>${command}</bash-input>\n<bash-stdout>${out}</bash-stdout>`);
+    s.publish(true);
+  });
+  child.on('error', (e) => {
+    run.output += `\n${e.message}`;
+    run.running = false;
+    run.code = -1;
+    s.publish(true);
+  });
+}
+
+export async function stopTask(sessionId: string, taskId: string) {
+  const s = sessions.get(sessionId);
+  if (!s?.q) throw new Error('Процесс Claude не запущен');
+  await s.q.stopTask(taskId);
+}
+
+/** MCP servers of the chat's Claude process, with actions. */
+export async function mcpAction(sessionId: string, name: string, action: 'reconnect' | 'enable' | 'disable') {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  const q = ensureProcess(s);
+  if (action === 'reconnect') await q.reconnectMcpServer(name);
+  else await q.toggleMcpServer(name, action === 'enable');
+  return q.mcpServerStatus();
+}
+
+export async function mcpList(sessionId: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  return ensureProcess(s).mcpServerStatus();
+}
+
+/** `claude plugin list` output for /plugin (installing goes through the same CLI). */
+export function pluginList(): Promise<string> {
+  const cli = claudeExecutable();
+  if (!cli) return Promise.resolve('Claude Code не найден');
+  return new Promise((resolve) => {
+    execFile(cli, ['plugin', 'list'], { timeout: 30_000, windowsHide: true }, (err, stdout, stderr) => resolve((stdout || stderr || err?.message || '').trim()));
+  });
+}
+
+/** Permission mode of a chat, switched in place (e.g. after accepting a plan: accept edits). */
+export async function setMode(sessionId: string, mode: string) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  s.permissionMode = mode;
+  await s.q?.setPermissionMode(mode as any).catch(() => {});
+  s.publish(true);
 }

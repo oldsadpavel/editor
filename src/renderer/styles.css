@@ -288,7 +288,7 @@ code.path-link { background: rgba(84, 138, 247, 0.12); }
 .composer { border-top: 1px solid var(--line); padding: 8px; flex: none; background: var(--bg2); }
 .composer textarea { width: 100%; resize: none; min-height: 52px; background: var(--bg); line-height: 1.45; }
 .composer-bar { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
-.composer-bar select { max-width: 190px; font-size: 12px; height: 24px; }
+.composer-bar select { width: auto; max-width: 96px; font-size: 12px; height: 24px; }
 .bottom-tabs { border-top: 1px solid var(--line); border-bottom: 0; }
 .bottom-tabs .tab.on { box-shadow: inset 0 2px 0 var(--accent); }
 .chat-cwd { font-size: 11px; padding: 0 8px; align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
@@ -457,7 +457,7 @@ tr.caution .cat-title { color: #ffd98a; }
 .att-badge { font-size: 11px; color: var(--fg2); margin-right: 6px; }
 .composer.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; background: var(--accent-soft); }
 .composer-bar { flex-wrap: wrap; row-gap: 6px; }
-.composer-bar select { max-width: 170px; }
+
 
 /* ---------- auto-approve & approvals log ---------- */
 .auto-approve { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--fg2); padding: 0 6px; height: 24px; border-radius: var(--radius); border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
@@ -695,3 +695,43 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 @keyframes cb-move { from { background-position: 0 0; } to { background-position: 34px 0; } }
 .compact-mark { margin: 8px 0; padding: 5px 10px; border-left: 3px solid var(--claude); background: rgba(217, 119, 87, 0.08); font-size: 12.5px; color: var(--fg2); border-radius: 0 4px 4px 0; }
 .compact-mark.failed { border-left-color: var(--err); color: var(--err); }
+
+/* ---------- Claude Code features: thinking, tool details, todos, shell, tasks, rewind, plan, mcp ---------- */
+.thinking-block { margin: 6px 0; border-left: 2px solid #6b5fa8; padding-left: 8px; }
+.thinking-block .tb-head { cursor: pointer; font-size: 12.5px; color: #b6a8f0; }
+.thinking-block .tb-body { white-space: pre-wrap; font-size: 12.5px; color: var(--fg2); margin-top: 4px; max-height: 420px; overflow: auto; font-style: italic; }
+.tool-row { cursor: pointer; }
+.tool-row .twisty { color: var(--muted); width: 10px; }
+.tool-details { margin: 2px 0 8px 22px; padding: 6px 8px; background: var(--bg); border: 1px solid var(--line-soft); border-radius: 6px; }
+.tool-details .td-label { font-size: 11px; color: var(--muted); margin: 4px 0 2px; text-transform: uppercase; letter-spacing: 0.4px; }
+.tool-details .td-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px var(--mono); max-height: 360px; overflow: auto; color: var(--fg); }
+.tool-details .td-pre.err { color: var(--err); }
+.tool-details .td-sub { font-size: 12px; color: var(--fg2); max-height: 240px; overflow: auto; }
+.todo-card { margin: 6px 0 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.todo-head { font-size: 12.5px; font-weight: 600; margin-bottom: 4px; }
+.todo-item { font-size: 13px; padding: 1px 0; display: flex; gap: 8px; }
+.todo-item.completed { color: var(--muted); text-decoration: line-through; }
+.todo-item.in_progress { color: #ffd9cc; font-weight: 600; }
+.todo-box { width: 14px; flex: none; }
+.shell-card { margin: 4px 0 8px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.shell-card .sh-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 6px 10px; background: var(--bg3); }
+.shell-card .sh-head code { color: #b8f0bd; }
+.shell-card.failed .sh-head code { color: var(--err); }
+.shell-card .sh-out { margin: 0; padding: 8px 10px; max-height: 420px; overflow: auto; white-space: pre-wrap; font: 12px var(--mono); background: var(--bg); }
+.shell-ctx { font-size: 12px; color: var(--fg2); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.shell-ctx code { background: var(--bg3); padding: 0 5px; border-radius: 3px; }
+.tasks-bar { flex: none; margin: 0 10px 4px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg2); font-size: 12.5px; }
+.tasks-bar .tk-head { cursor: pointer; }
+.tasks-bar .tk-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; border-top: 1px solid var(--line-soft); }
+.tasks-bar .tk-desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tasks-bar .tk-row.failed { color: var(--err); }
+.rewind-btn { cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 3px; }
+.rewind-btn:hover { color: var(--claude); }
+.plan-card .plan-body { max-height: 380px; overflow: auto; padding: 6px 10px; background: var(--bg); border-radius: 6px; margin: 6px 0; }
+.plan-card .plan-feedback { width: 100%; min-height: 38px; margin-bottom: 6px; }
+.mcp-modal { width: min(720px, 94vw); }
+.mcp-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.mcp-row .mcp-name { font-weight: 600; }
+.mcp-row.failed .mcp-status { color: var(--err); }
+.mcp-row.needs-auth .mcp-status { color: var(--warn); }
+.mcp-row.connected .mcp-status { color: var(--ok); }

@@ -13,6 +13,8 @@ export interface FileEdit {
 }
 
 export interface TurnItemText { kind: 'text'; text: string }
+/** The model's visible reasoning (extended thinking). */
+export interface TurnItemThinking { kind: 'thinking'; text: string }
 export interface TurnItemTool {
   kind: 'tool';
   id: string;
@@ -23,6 +25,12 @@ export interface TurnItemTool {
   /** What the tool answered when it failed (e.g. why a file couldn't be written). */
   errorText?: string;
   done?: boolean;
+  /** Full call details (command, pattern, url, prompt…) for the expanded view. */
+  detail?: string;
+  /** What the tool returned (trimmed). */
+  output?: string;
+  /** Live activity of a subagent (Agent/Task): its texts and tool calls. */
+  sub?: string[];
 }
 
 /** One change Claude made to a file: replacements (Edit/MultiEdit) or the whole new content (Write). */
@@ -45,7 +53,34 @@ export interface FavoriteAnswer {
   answer: string;
   savedAt: number;
 }
-export type TurnItem = TurnItemText | TurnItemTool;
+export type TurnItem = TurnItemText | TurnItemThinking | TurnItemTool;
+
+/** Claude's own task checklist (TodoWrite). */
+export interface TodoItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm?: string;
+}
+
+/** A command run in bash mode (`!command`): run here, its output goes to Claude with the next question. */
+export interface ShellRun {
+  command: string;
+  output: string;
+  code?: number | null;
+  running?: boolean;
+}
+
+/** A background task of the Claude process (Bash run_in_background, subagent…). */
+export interface BgTask {
+  id: string;
+  description: string;
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  startedAt: number;
+  kind?: string;
+  summary?: string;
+  outputFile?: string;
+  progress?: string;
+}
 
 export interface TurnAttachment {
   kind: 'image' | 'file';
@@ -69,6 +104,12 @@ export interface Turn {
   items: TurnItem[];
   /** History compactions that happened during this answer. */
   compacts?: CompactMark[];
+  /** Claude's latest task checklist in this answer. */
+  todos?: TodoItem[];
+  /** Bash-mode command (`!…`) — this turn is a local command, not a question. */
+  shell?: ShellRun;
+  /** Bash-mode commands whose output was passed to Claude together with this question. */
+  shellContext?: string[];
   edits: FileEdit[];
   /** Files the assistant only read (shown as secondary links). */
   reads: string[];
@@ -111,6 +152,8 @@ export interface ChatSnapshot {
   sessionId: string;
   /** Compaction in progress (big progress bar in the chat). */
   compacting?: CompactState;
+  /** Background tasks of the Claude process. */
+  tasks?: BgTask[];
   /** Context size of the last request, to estimate how long a compaction takes. */
   contextTokens?: number;
   cwd: string;

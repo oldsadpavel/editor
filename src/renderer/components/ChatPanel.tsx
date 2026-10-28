@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatSnapshot, SessionInfo } from '../../shared/types';
-import { closeChat, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
+import { call } from '../api';
+import { closeChat, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { ChatView } from './ChatView';
 import { BlockHandle } from './Layout';
@@ -164,6 +165,11 @@ export function ChatPanel() {
                   y: e.clientY,
                   items: [
                     { label: 'Переименовать', action: () => setEditing(id) },
+                    {
+                      label: 'Ответвить чат (копия)',
+                      action: () => void call<ChatSnapshot>('chat:fork', id).then((snap) => openChat(snap.sessionId, snap.cwd), (e) => toast(e.message, 'error')),
+                    },
+                    { label: 'Экспорт в Markdown…', action: () => void call<string | null>('chat:export', id).then((f) => f && toast(`Чат сохранён: ${f}`), (e) => toast(e.message, 'error')) },
                     { label: 'Закрыть', action: () => closeChat(id) },
                     { label: 'Закрыть остальные', action: () => app.openChats.filter((x) => x !== id).forEach((x) => closeChat(x)) },
                   ],

@@ -157,3 +157,40 @@ export function saveDataUrl(url: string): string {
   if (!m) throw new Error('Не картинка');
   return saveBlob(Buffer.from(m[2], 'base64'), m[1]);
 }
+
+const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', 'dist', 'build', 'release', '.next', '.nuxt', '.cache', 'coverage', '.idea', '.vscode', '__pycache__', 'storage']);
+const fileLists = new Map<string, { at: number; files: string[] }>();
+
+/** Project files (relative paths), cached for a minute; big trees are capped. */
+function projectFiles(cwd: string): string[] {
+  const hit = fileLists.get(cwd);
+  if (hit && Date.now() - hit.at < 60_000) return hit.files;
+  const out: string[] = [];
+  const walk = (dir: string, rel: string) => {
+    if (out.length > 30_000) return;
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (!SKIP_DIRS.has(e.name) && !e.name.startsWith('.')) walk(path.join(dir, e.name), rel ? `${rel}/${e.name}` : e.name);
+      } else out.push(rel ? `${rel}/${e.name}` : e.name);
+    }
+  };
+  walk(cwd, '');
+  fileLists.set(cwd, { at: Date.now(), files: out });
+  return out;
+}
+
+/** @-mention search: file name matches first, then path matches; up to 30. */
+export function searchFiles(cwd: string, q: string): string[] {
+  const needle = q.toLowerCase().replace(/\\/g, '/');
+  const all = projectFiles(cwd);
+  if (!needle) return all.slice(0, 30);
+  const byName = all.filter((f) => f.slice(f.lastIndexOf('/') + 1).toLowerCase().includes(needle));
+  const byPath = all.filter((f) => !byName.includes(f) && f.toLowerCase().includes(needle));
+  return [...byName.sort((a, b) => a.length - b.length), ...byPath].slice(0, 30);
+}
