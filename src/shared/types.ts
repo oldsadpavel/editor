@@ -38,6 +38,8 @@ export interface Turn {
   prompt: string;
   images: number;
   attachments?: TurnAttachment[];
+  /** Further questions sent before Claude answered: Claude Code answers them together, so they share this turn. */
+  more?: { prompt: string; at: number; attachments?: TurnAttachment[] }[];
   startedAt: number;
   /** Time of the last assistant output in this turn. */
   answeredAt?: number;
@@ -291,6 +293,8 @@ export interface AppState {
   repairs?: string[];
   /** Per-chat model/effort chosen in the composer (remembered across restarts). */
   chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean }>;
+  /** Unsent text and attachments per chat. */
+  drafts?: Record<string, { text: string; attachments: string[] }>;
   /** Files open in the editor and the active one, restored on start. */
   openFiles?: string[];
   activeFile?: string;

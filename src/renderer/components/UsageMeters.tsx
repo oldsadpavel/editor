@@ -22,14 +22,14 @@ function Meter({ label, w, tip }: { label: string; w: UsageWindow; tip: string }
       <span className="meter-bar">
         <span className="meter-fill" style={{ width: `${used}%` }} />
       </span>
-      <span className="meter-val">{Math.round(100 - used)}%</span>
+      <span className="meter-val">{Math.round(used)}%</span>
     </div>
   );
 }
 
 /**
- * Remaining claude.ai plan limits in the top bar: the current 5-hour session window and the week.
- * The bar fills with what is used; the number shows what is left. Hover for exact values and reset times.
+ * claude.ai plan limits in the top bar: the current 5-hour session window and the week.
+ * The bar and the number show how much is used. Hover for exact values, what is left and reset times.
  */
 export function UsageMeters() {
   const u = useStore((s) => s.usage);

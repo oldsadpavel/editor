@@ -114,10 +114,47 @@ export class TurnBuilder {
   /** Every `git push` command seen, so deploy tracking can attribute pushes to this chat. */
   pushCommands: { at: number; command: string }[] = [];
 
-  startTurn(prompt: string, at: number, id: string, images = 0): Turn {
-    const t: Turn = { id, prompt, images, startedAt: at, items: [], edits: [], reads: [] };
+  /**
+   * True from a question until Claude finishes its answer (an assistant message with a final stop_reason).
+   * A question that arrives while a turn is open is answered by Claude Code together with it, so it joins that turn.
+   */
+  private turnOpen = false;
+
+  startTurn(prompt: string, at: number, id: string, attachments?: TurnAttachment[]): Turn {
+    const last = this.turns[this.turns.length - 1];
+    if (last && this.turnOpen && !last.error) {
+      (last.more ??= []).push({ prompt, at, ...(attachments?.length ? { attachments } : {}) });
+      last.images += attachments?.filter((a) => a.kind === 'image').length ?? 0;
+      return last;
+    }
+    const images = attachments?.filter((a) => a.kind === 'image').length ?? 0;
+    const t: Turn = { id, prompt, images, startedAt: at, items: [], edits: [], reads: [], ...(attachments?.length ? { attachments } : {}) };
     this.turns.push(t);
+    this.turnOpen = true;
     return t;
+  }
+
+  /** The current answer is over (result, interruption, error): the next question starts a new turn. */
+  closeTurn() {
+    this.turnOpen = false;
+  }
+
+  /**
+   * Questions queued into a turn that Claude finished without them: Claude now answers them on their own,
+   * so they move out into a new turn (the transcript records them that way too).
+   */
+  splitQueued(): Turn | null {
+    const last = this.turns[this.turns.length - 1];
+    if (!last?.more?.length || this.turnOpen) return null;
+    const [first, ...rest] = last.more;
+    delete last.more;
+    last.images -= [first, ...rest].reduce((n, m) => n + (m.attachments?.filter((a) => a.kind === 'image').length ?? 0), 0);
+    const turn = this.startTurn(first.prompt, first.at, `${last.id}-q`, first.attachments);
+    if (rest.length) {
+      turn.more = rest;
+      turn.images += rest.reduce((n, m) => n + (m.attachments?.filter((a) => a.kind === 'image').length ?? 0), 0);
+    }
+    return turn;
   }
 
   /** API message ids already counted: one API response is written as several entries sharing its usage. */
@@ -150,6 +187,7 @@ export class TurnBuilder {
     if (entry.isMeta || entry.isCompactSummary) return;
     if (typeof content === 'string') {
       const text = cleanPrompt(content);
+      if (text.startsWith('[Request interrupted')) this.closeTurn();
       if (!isNoisePrompt(text)) this.startTurn(text, at, entry.uuid ?? String(at));
       return;
     }
@@ -162,10 +200,8 @@ export class TurnBuilder {
       else if (block.type === 'image' && entry.uuid) refs.push({ kind: 'image', ref: { uuid: entry.uuid, index }, mediaType: block.source?.media_type });
     });
     const { prompt, attachments } = splitAttachments(cleanPrompt(text), refs);
-    if ((prompt && !isNoisePrompt(prompt)) || attachments.length) {
-      const t = this.startTurn(prompt, at, entry.uuid ?? String(at), attachments.filter((a) => a.kind === 'image').length);
-      if (attachments.length) t.attachments = attachments;
-    }
+    if (prompt.startsWith('[Request interrupted')) this.closeTurn();
+    if ((prompt && !isNoisePrompt(prompt)) || attachments.length) this.startTurn(prompt, at, entry.uuid ?? String(at), attachments);
   }
 
   private ingestAssistant(entry: any, at: number) {
@@ -173,6 +209,9 @@ export class TurnBuilder {
     if (!Array.isArray(content)) return;
     const turn = this.current(at);
     this.countTokens(turn, entry.message);
+    // tool_use means Claude keeps working; any other stop reason ends its answer.
+    const stop = entry.message?.stop_reason;
+    if (stop && stop !== 'tool_use' && stop !== 'pause_turn') this.closeTurn();
     for (const block of content) {
       if (block.type === 'text' && block.text?.trim()) {
         const last = turn.items[turn.items.length - 1];
@@ -212,6 +251,7 @@ export class TurnBuilder {
   }
 
   markInterrupted() {
+    this.closeTurn();
     for (const { tool } of this.pendingTools.values()) {
       tool.done = true;
       tool.error = true;

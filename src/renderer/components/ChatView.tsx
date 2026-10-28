@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
-import { markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, setRemote, toast, useStore, type LightboxItem } from '../store';
+import { loadDraft, markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { fileIcon } from './icons';
@@ -204,13 +204,24 @@ function TurnBody({ turn, cwd, partial, sessionId }: { turn: Turn; cwd: string; 
   return (
     <div className="turn-body">
       <div className="question">
-        <div className="q-label">Вопрос · {formatTime(turn.startedAt)}</div>
+        <div className="q-label">
+          {turn.more?.length ? `Вопрос 1 из ${turn.more.length + 1}` : 'Вопрос'} · {formatTime(turn.startedAt)}
+        </div>
         {turn.prompt && <div className="q-text">{turn.prompt}</div>}
         {turn.attachments?.length ? (
           <TurnAttachments sessionId={sessionId} list={turn.attachments} />
         ) : (
-          !turn.prompt && turn.images > 0 && <div className="q-text">[{turn.images} изображение]</div>
+          !turn.prompt && turn.images > 0 && !turn.more?.length && <div className="q-text">[{turn.images} изображение]</div>
         )}
+        {turn.more?.map((m, i) => (
+          <div key={i} className="q-more">
+            <div className="q-label">
+              Вопрос {i + 2} из {turn.more!.length + 1} · {formatTime(m.at)} · отправлен, пока Claude отвечал — ответ общий
+            </div>
+            {m.prompt && <div className="q-text">{m.prompt}</div>}
+            {m.attachments?.length ? <TurnAttachments sessionId={sessionId} list={m.attachments} /> : null}
+          </div>
+        ))}
       </div>
       {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
       {partial && <Markdown text={partial} cwd={cwd} />}
@@ -300,6 +311,11 @@ function TurnRow({
           ) : null}
           {firstLine(turn.prompt) || (turn.images ? '(изображение)' : '(вложение)')}
         </span>
+        {turn.more?.length ? (
+          <span className="more-badge" title={turn.more.map((m) => m.prompt).join('\n')}>
+            +{turn.more.length} {plural(turn.more.length, 'вопрос', 'вопроса', 'вопросов')}
+          </span>
+        ) : null}
         <EditsButton edits={turn.edits} cwd={cwd} />
         <TokensBadge turn={turn} />
         <span className="turn-date" title={`Вопрос: ${new Date(turn.startedAt).toLocaleString('ru-RU')}${turn.answeredAt ? `\nОтвет: ${new Date(turn.answeredAt).toLocaleString('ru-RU')}` : ''}`}>
@@ -434,8 +450,13 @@ function AttachmentChips({ paths, onRemove }: { paths: string[]; onRemove: (p: s
 }
 
 function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) {
-  const [text, setText] = useState('');
-  const [attachments, setAttachments] = useState<string[]>([]);
+  // The draft (text + attachments) lives in the store per chat, so switching chats or restarting keeps it.
+  const draft = useStore((s) => s.drafts[chat.sessionId]) ?? loadDraft(chat.sessionId);
+  const text = draft.text;
+  const attachments = draft.attachments;
+  const setText = (v: string | ((prev: string) => string)) => updateDraft(chat.sessionId, (d) => ({ ...d, text: typeof v === 'function' ? v(d.text) : v }));
+  const setAttachments = (v: string[] | ((prev: string[]) => string[])) =>
+    updateDraft(chat.sessionId, (d) => ({ ...d, attachments: typeof v === 'function' ? v(d.attachments) : v }));
   const [dragOver, setDragOver] = useState(false);
   const defaultMode = useStore((s) => s.app!.defaultPermissionMode ?? '');
   const [mode, setMode] = useState(chat.permissionMode ?? defaultMode);
@@ -607,9 +628,15 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
             </option>
           ))}
         </select>
-        <label className={`auto-approve ${chat.autoApprove ? 'on' : ''}`} title="Одобрять все запросы разрешений автоматически. Каждое решение записывается во вкладку «Разрешения».">
-          <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
-          ⚡ Автоодобрение
+        <label
+          className={`auto-approve compact ${chat.autoApprove ? 'on' : ''}`}
+          title={
+            chat.autoApprove
+              ? 'Автоодобрение включено: всё, что Claude просит подтвердить (команды, правки, выполнение плана), одобряется само. Журнал — вкладка «Разрешения». Нажмите, чтобы выключить.'
+              : 'Автоодобрение: одобрять всё, что Claude просит подтвердить. Каждое решение пишется во вкладку «Разрешения».'
+          }
+        >
+          <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />⚡
         </label>
         <label
           className={`auto-approve remote ${chat.remote ? 'on' : ''}`}
@@ -684,6 +711,10 @@ function ApprovalsTab({ chat }: { chat: ChatSnapshot }) {
   const list = [...chat.approvals].reverse();
   return (
     <div className="approvals-tab">
+      <label className={`auto-approve big ${chat.autoApprove ? 'on' : ''}`}>
+        <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
+        ⚡ Одобрять все запросы разрешений автоматически в этом чате
+      </label>
       <div className="muted small approvals-note">
         Журнал всех решений по разрешениям в этом чате — и ваших кликов, и автоодобрения. Хранится в approvals.jsonl в папке данных редактора.
       </div>
@@ -735,9 +766,30 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
     if (el && stick.current && tab === 'chat' && !focus) el.scrollTop = el.scrollHeight;
   }, [chat, tab]);
 
+  // Content keeps growing after a render (a turn expands, thumbnails load, the answer streams): while the view is
+  // pinned to the bottom, every size change scrolls to the end again.
+  const content = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = content.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const sc = scroller.current;
+      if (sc && stick.current && !focusRef.current) sc.scrollTop = sc.scrollHeight;
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tab]);
+  const focusRef = useRef(focus);
+  focusRef.current = focus;
+
   const needle = q.toLowerCase();
   const turns = needle
-    ? chat.turns.filter((t) => t.prompt.toLowerCase().includes(needle) || t.items.some((i) => i.kind === 'text' && i.text.toLowerCase().includes(needle)))
+    ? chat.turns.filter(
+        (t) =>
+          t.prompt.toLowerCase().includes(needle) ||
+          t.more?.some((m) => m.prompt.toLowerCase().includes(needle)) ||
+          t.items.some((i) => i.kind === 'text' && i.text.toLowerCase().includes(needle)),
+      )
     : chat.turns;
 
   const toggle = (id: string) =>
@@ -773,7 +825,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         }}
       >
         {tab === 'chat' && (
-          <>
+          <div ref={content}>
             {turns.map((t) => (
               <TurnRow
                 key={t.id}
@@ -788,7 +840,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
               />
             ))}
             {!chat.turns.length && <div className="empty">Новый чат в {chat.cwd}. Задайте вопрос ниже.</div>}
-          </>
+          </div>
         )}
         {tab === 'files' && (
           <div className="files-tab">
@@ -831,6 +883,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           onSent={() => {
             // A new question always brings the view to the end of the chat, even if it was scrolled up.
             stick.current = true;
+            set({ focusTurn: undefined });
             setQ('');
             requestAnimationFrame(() => scroller.current && (scroller.current.scrollTop = scroller.current.scrollHeight));
           }}

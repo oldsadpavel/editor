@@ -1,8 +1,9 @@
 name: build
 
+# Builds run locally (npm run dist / install-local). CI build only on demand: Actions → build → Run workflow,
+# or when a v* tag is pushed (to attach installers to a GitHub release).
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 

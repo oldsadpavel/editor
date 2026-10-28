@@ -37,6 +37,11 @@ export interface OpenFile {
   version: number;
 }
 
+export interface Draft {
+  text: string;
+  attachments: string[];
+}
+
 export interface LightboxItem {
   /** URL to show (efile:// or data:). */
   src: string;
@@ -69,6 +74,8 @@ export interface Store {
   usage: UsageInfo | null;
   /** Selected tree node (target folder for Ctrl+V). */
   treeSelected?: string;
+  /** Unsent text and attachments per chat. */
+  drafts: Record<string, Draft>;
   /** A newer build is installed (path of its exe): offer a restart. */
   update?: string;
   /** Chat whose /status (or /context) card is shown. */
@@ -89,6 +96,7 @@ let state: Store = {
   setup: [],
   ping: [],
   usage: null,
+  drafts: {},
 };
 
 const listeners = new Set<() => void>();
@@ -334,6 +342,28 @@ export function setRemote(id: string, on: boolean) {
   set((s) => (s.chats[id] ? { chats: { ...s.chats, [id]: { ...s.chats[id], remote: on } } } : {}));
   void guard(call('chat:remote', id, on));
   if (on) toast('Удалённое управление включено: чат появится на claude.ai/code и в приложении Claude');
+}
+
+// --- drafts -------------------------------------------------------------------------------
+
+const EMPTY_DRAFT: Draft = { text: '', attachments: [] };
+
+/** Draft saved by a previous run (kept in the editor's state file, so it survives restarts). */
+export function loadDraft(id: string): Draft {
+  return state.app?.drafts?.[id] ?? EMPTY_DRAFT;
+}
+
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
+export function updateDraft(id: string, fn: (d: Draft) => Draft) {
+  const next = fn(state.drafts[id] ?? loadDraft(id));
+  set((s) => ({ drafts: { ...s.drafts, [id]: next } }));
+  if (draftTimer) clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    const drafts = { ...state.app?.drafts, ...state.drafts };
+    for (const [k, d] of Object.entries(drafts)) if (!d.text && !d.attachments.length) delete drafts[k];
+    set((s) => ({ app: s.app && { ...s.app, drafts } }));
+    void call('state:set', { drafts }).catch(() => {});
+  }, 400);
 }
 
 // --- session restore ----------------------------------------------------------------------

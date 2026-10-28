@@ -544,3 +544,13 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(95, 184, 101, 0.5); }
   50% { box-shadow: 0 0 0 5px rgba(95, 184, 101, 0); }
 }
+
+/* ---------- merged questions ---------- */
+.q-more { border-top: 1px dashed var(--line); margin-top: 6px; padding-top: 6px; }
+.more-badge { font-size: 11px; color: #b8d3ff; background: var(--accent-soft); border-radius: 10px; padding: 1px 7px; white-space: nowrap; }
+.auto-approve.big { display: flex; height: auto; padding: 6px 8px; margin-bottom: 6px; font-size: 13px; border-color: var(--line); }
+
+.auto-approve.compact { padding: 0 6px; font-size: 14px; }
+.auto-approve.compact input { display: none; }
+.auto-approve.compact:not(.on) { opacity: 0.55; border-color: var(--line); }
+.auto-approve.compact.on { box-shadow: 0 0 0 1px #6b5320; }

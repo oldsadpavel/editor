@@ -107,6 +107,8 @@ class ChatSession {
   remote = false;
   /** Restart the Claude process after the current turn (a startup-only option changed while busy). */
   restartPending = false;
+  /** After a result, waiting to see whether Claude answers queued questions separately (see settleTurn). */
+  awaitingQueued: NodeJS.Timeout | null = null;
   /** The `system/init` message of the running process: model, version, MCP servers, commands. */
   init: any = null;
   approvals: ApprovalEntry[] = [];
@@ -284,9 +286,13 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   s.effort = opts.effort || undefined;
   if (modelChanged || effortChanged) rememberChatModel(s);
 
-  const turn = s.builder.startTurn(text, Date.now(), randomUUID());
-  turn.attachments = attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? 'image' : 'file', path: p }));
-  turn.images = turn.attachments.filter((a) => a.kind === 'image').length;
+  // A question sent while Claude is still answering joins the current turn (Claude Code answers them together).
+  const turn = s.builder.startTurn(
+    text,
+    Date.now(),
+    randomUUID(),
+    attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? 'image' : 'file', path: p })),
+  );
   turn.live = true;
   if (s.title === 'Новый чат') s.title = (text || path.basename(attachments[0] ?? '')).slice(0, 60);
   s.partial = '';
@@ -354,7 +360,24 @@ async function pump(s: ChatSession) {
   }
 }
 
+/** The answer is complete: stop spinners, mark the chat done (unread), apply a pending restart. */
+function settleTurn(s: ChatSession) {
+  if (s.awaitingQueued) clearTimeout(s.awaitingQueued);
+  s.awaitingQueued = null;
+  finishLiveTurns(s);
+  s.partial = '';
+  if (s.status !== 'running' && s.status !== 'waiting') return;
+  s.setStatus('idle');
+  markCompleted(s);
+  if (s.restartPending) {
+    s.restartPending = false;
+    stopProcess(s);
+    if (s.remote) start(s);
+  }
+}
+
 function finishLiveTurns(s: ChatSession) {
+  s.builder.closeTurn();
   for (const t of s.builder.turns) {
     if (!t.live) continue;
     t.live = false;
@@ -386,13 +409,21 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     case 'assistant': {
       if ((m as any).parent_tool_use_id) return; // subagent internals stay out of the main view
       s.partial = '';
+      // Output after a result means Claude picked up a queued prompt on its own: that prompt gets its own turn,
+      // and the chat is working again.
+      const resumed = s.status === 'idle' || !!s.awaitingQueued;
+      if (resumed) {
+        if (s.awaitingQueued) clearTimeout(s.awaitingQueued);
+        s.awaitingQueued = null;
+        const prev = s.builder.turns[s.builder.turns.length - 1];
+        const split = s.builder.splitQueued();
+        if (split && prev) prev.live = false;
+        const turn = split ?? prev;
+        if (turn) turn.live = true;
+      }
       s.builder.ingest({ type: 'assistant', message: m.message, timestamp: now, uuid: m.uuid });
-      // Output after a result means Claude picked up a queued prompt: the chat is working again.
-      if (s.status === 'idle') {
-        const last = s.builder.turns[s.builder.turns.length - 1];
-        if (last) last.live = true;
-        s.setStatus('running');
-      } else s.publish();
+      if (resumed && s.status !== 'running') s.setStatus('running');
+      else s.publish();
       return;
     }
     case 'user': {
@@ -415,22 +446,22 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
         }
         turn.answeredAt ??= Date.now();
       }
-      // Prompts sent while Claude was busy are merged into one turn and get a single result, so every
-      // question still marked live is answered now.
-      finishLiveTurns(s);
       s.partial = '';
       if (r.subtype !== 'success' || r.is_error) {
+        finishLiveTurns(s);
         const detail = r.errors?.join('\n') || r.result || r.subtype;
         failTurn(s, String(detail));
         return;
       }
-      s.setStatus('idle');
-      markCompleted(s);
-      if (s.restartPending) {
-        s.restartPending = false;
-        stopProcess(s);
-        if (s.remote) start(s);
+      // A question queued into this turn may still get its own answer (Claude Code runs it next) or may already be
+      // answered together with this one. Decide on the next assistant output or the SDK's 'idle'; a short timer
+      // covers the case when neither arrives.
+      if (turn?.more?.length) {
+        s.builder.closeTurn();
+        s.awaitingQueued = setTimeout(() => settleTurn(s), 3000);
+        return;
       }
+      settleTurn(s);
       return;
     }
     case 'system': {
@@ -439,11 +470,7 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       if (sm.subtype === 'session_state_changed') {
         if (sm.state === 'requires_action') s.setStatus('waiting');
         // 'idle' is the SDK's authoritative "turn is over" signal.
-        if (sm.state === 'idle' && (s.status === 'running' || s.status === 'waiting') && !s.pending.size) {
-          finishLiveTurns(s);
-          s.partial = '';
-          s.setStatus('idle');
-        }
+        if (sm.state === 'idle' && (s.status === 'running' || s.status === 'waiting') && !s.pending.size) settleTurn(s);
       }
       if (sm.subtype === 'api_retry' && sm.attempt >= 3) {
         problems.report({
