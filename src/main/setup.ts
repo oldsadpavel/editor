@@ -7,6 +7,7 @@ import { lastCache } from './cache';
 import * as deploy from './deploy';
 import { lastScan } from './keys';
 import { stateFile } from './store';
+import { missingProjects } from './git-info';
 
 const MODE_LABEL: Record<string, string> = {
   default: 'Спрашивать',
@@ -69,6 +70,16 @@ export async function setupStatus(): Promise<SetupItem[]> {
     dismissable: true,
   });
 
+  for (const p of missingProjects(st)) {
+    items.push({
+      id: `clone:${p.path}`,
+      level: 'todo',
+      group: 'Проекты',
+      title: `Проекта «${p.name}» нет на этом компьютере`,
+      detail: `${p.path} · из сохранённых настроек: ${p.git!.remote}${p.git!.branch ? ` (${p.git!.branch})` : ''}`,
+      action: { kind: 'cloneProject', name: p.name, remote: p.git!.remote, root: p.git!.root, branch: p.git!.branch },
+    });
+  }
   if (!st.projects.length) {
     items.push({ id: 'projects', level: 'todo', group: 'Проекты', title: 'Добавьте папку проекта', action: { kind: 'addProject' } });
   } else {

@@ -25,6 +25,33 @@ export async function installClaude() {
   else toast('Claude Code установлен — теперь войдите в аккаунт');
 }
 
+/** Clones a project that the restored settings know but this machine doesn't have. */
+function CloneButton({ a }: { a: Extract<SetupAction, { kind: 'cloneProject' }> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className="btn primary small"
+      disabled={busy}
+      title={`git clone ${a.branch ? `--branch ${a.branch} ` : ''}${a.remote} ${a.root}`}
+      onClick={async () => {
+        if (!confirm(`Клонировать «${a.name}»?\n\n${a.remote}${a.branch ? ` (ветка ${a.branch})` : ''}\n→ ${a.root}`)) return;
+        setBusy(true);
+        try {
+          await call('git:clone', a.remote, a.root, a.branch);
+          toast(`«${a.name}» склонирован в ${a.root}`);
+          void refreshSetup();
+        } catch (e: any) {
+          toast(e.message, 'error');
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? 'Клонирую…' : '⇩ Клонировать'}
+    </button>
+  );
+}
+
 export function InstallClaudeButton() {
   const [busy, setBusy] = useState(false);
   return (
@@ -40,6 +67,8 @@ function ActionControl({ a }: { a: SetupAction }) {
   switch (a.kind) {
     case 'installClaude':
       return <InstallClaudeButton />;
+    case 'cloneProject':
+      return <CloneButton a={a} />;
     case 'login':
       return (
         <button className="btn primary small" onClick={async () => set({ auth: await call('auth:login') })}>

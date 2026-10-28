@@ -2,6 +2,7 @@ import { BrowserWindow, dialog } from 'electron';
 import fs from 'node:fs';
 import type { AppState } from '../shared/types';
 import { emit } from './bus';
+import { withGitOrigins } from './git-info';
 import { stateFile } from './store';
 
 /** Format marker of an exported settings file. */
@@ -23,7 +24,7 @@ export async function exportSettings(win: BrowserWindow | null): Promise<string 
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
   if (r.canceled || !r.filePath) return null;
-  fs.writeFileSync(r.filePath, JSON.stringify({ kind: KIND, version: 1, exportedAt: new Date().toISOString(), settings: exportable() }, null, 2));
+  fs.writeFileSync(r.filePath, JSON.stringify({ kind: KIND, version: 1, exportedAt: new Date().toISOString(), settings: withGitOrigins(exportable()) }, null, 2));
   return r.filePath;
 }
 

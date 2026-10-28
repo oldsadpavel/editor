@@ -7,6 +7,7 @@ import path from 'node:path';
 import type { AppState, CloudStatus, CloudVersion } from '../shared/types';
 import { emit } from './bus';
 import { applySettings, exportable } from './settings-io';
+import { withGitOrigins } from './git-info';
 import { dataDir, stateFile } from './store';
 
 /**
@@ -274,7 +275,8 @@ export function payload(): Partial<AppState> {
   const { openChats: _a, activeChat: _b, chatProject: _c, openFiles: _d, activeFile: _e, chatModels: _f, cloud: _g, ...rest } = exportable();
   const ui = rest.ui ? { ...rest.ui, treeOpen: undefined } : undefined;
   const groups = rest.groups?.map(({ openChats: _1, activeChat: _2, chatProject: _3, openFiles: _4, activeFile: _5, treeOpen: _6, ...g }) => g);
-  return { ...rest, ui, groups } as Partial<AppState>;
+  // git origins go along, so a new machine can clone projects it doesn't have
+  return withGitOrigins({ ...rest, ui, groups } as Partial<AppState>);
 }
 
 const hashOf = (p: unknown) => createHash('md5').update(JSON.stringify(p)).digest('hex');

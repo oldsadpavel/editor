@@ -245,6 +245,8 @@ export interface ProjectRef {
   domains?: ProdTarget[];
   /** Ping interval in minutes (default 5). */
   pingMinutes?: number;
+  /** Git origin recorded with saved settings: lets a restored setup clone a project that isn't on this machine. */
+  git?: { remote: string; branch?: string; root: string };
 }
 
 export interface ProdTarget {
@@ -540,6 +542,7 @@ export interface CacheReport {
 export type SetupAction =
   | { kind: 'login' }
   | { kind: 'installClaude' }
+  | { kind: 'cloneProject'; name: string; remote: string; root: string; branch?: string }
   | { kind: 'addProject' }
   | { kind: 'githubAccess'; repo: string; github: string }
   | { kind: 'deployTarget'; repo: string }
