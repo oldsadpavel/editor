@@ -313,6 +313,8 @@ export interface AppState {
   /** One-time data repairs already applied. */
   repairs?: string[];
   /** Per-chat model/effort chosen in the composer (remembered across restarts). */
+  /** Cloud settings storage; the tokens themselves live encrypted in cloud-auth.bin, not here. */
+  cloud?: { server: string; auto: boolean; email?: string; name?: string; lastSyncAt?: number; hash?: string; choiceMade?: boolean };
   chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean }>;
   /** Unsent text and attachments per chat. */
   drafts?: Record<string, { text: string; attachments: string[] }>;
@@ -373,7 +375,34 @@ export type MainEvent =
   | { type: 'update'; exe: string }
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
-  | { type: 'sessionsChanged'; cwd: string };
+  | { type: 'sessionsChanged'; cwd: string }
+  | { type: 'cloud'; status: CloudStatus };
+
+/** One saved copy of the settings in the cloud. */
+export interface CloudVersion {
+  id: number | string;
+  created_at: string | null;
+  size: number;
+  device?: string | null;
+  app_version?: string | null;
+}
+
+/** Cloud settings storage (Insider or a self-hosted server/): who is signed in and how syncing goes. */
+export interface CloudStatus {
+  /** Base URL of the storage, e.g. https://parts.mrkt.ru (Insider) or your own server. */
+  server: string;
+  signedIn: boolean;
+  email?: string;
+  name?: string;
+  /** Upload automatically after every settings change. */
+  auto: boolean;
+  lastSyncAt?: number;
+  lastError?: string;
+  /** Signed in on a machine that never synced while the cloud already has settings: the user picks a direction. */
+  needsChoice?: boolean;
+  remote?: CloudVersion | null;
+  busy?: string;
+}
 
 export interface CacheCategory {
   id: string;

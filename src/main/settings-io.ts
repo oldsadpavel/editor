@@ -12,7 +12,7 @@ const KIND = 'claude-editor-settings';
  * unread marks, one-time repairs) stay local.
  */
 export function exportable(): Partial<AppState> {
-  const { githubToken: _t, window: _w, drafts: _d, chatMeta: _m, repairs: _r, ...rest } = stateFile.data;
+  const { githubToken: _t, window: _w, drafts: _d, chatMeta: _m, repairs: _r, cloud: _c, ...rest } = stateFile.data;
   return rest;
 }
 
@@ -29,7 +29,7 @@ export async function exportSettings(win: BrowserWindow | null): Promise<string 
 
 /** Applies exported settings (replacing the exportable part); local-only data is kept. */
 export function applySettings(settings: Partial<AppState>) {
-  const keep = { githubToken: stateFile.data.githubToken, window: stateFile.data.window, drafts: stateFile.data.drafts, chatMeta: stateFile.data.chatMeta, repairs: stateFile.data.repairs };
+  const keep = { cloud: stateFile.data.cloud, githubToken: stateFile.data.githubToken, window: stateFile.data.window, drafts: stateFile.data.drafts, chatMeta: stateFile.data.chatMeta, repairs: stateFile.data.repairs };
   stateFile.data = { ...stateFile.data, ...settings, ...keep, ui: { ...stateFile.data.ui, ...(settings.ui ?? {}) } } as AppState;
   stateFile.save();
   emit({ type: 'appState', state: stateFile.data });

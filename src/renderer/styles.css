@@ -629,3 +629,14 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .tab.unread { color: #a9c6ff; font-weight: 600; background: rgba(84, 138, 247, 0.18); box-shadow: inset 0 2px 0 var(--blue); }
 .tab.unread:hover { background: rgba(84, 138, 247, 0.28); }
 .tab-more.unseen { color: #ffcf8a; box-shadow: inset 0 -2px 0 var(--warn); }
+
+/* ---------- cloud settings ---------- */
+.cloud-modal { width: min(640px, 94vw); display: flex; flex-direction: column; gap: 10px; }
+.cloud-modal p { margin: 0; font-size: 12.5px; line-height: 1.5; }
+.cloud-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.cloud-row label, .cloud-actions label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.cloud-url { flex: 1; min-width: 220px; }
+.cloud-account { display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--bg); border-radius: var(--radius); }
+.cloud-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cloud-choice { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--warn); border-radius: var(--radius); background: rgba(224, 168, 74, 0.08); }
+.cloud-version { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line-soft); }

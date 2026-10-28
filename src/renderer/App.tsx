@@ -11,6 +11,7 @@ import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { StatusModal } from './components/StatusModal';
+import { CloudModal } from './components/CloudModal';
 import { HELP } from './help';
 import { init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
 import { Markdown } from './util';
@@ -96,6 +97,7 @@ function AuthButton() {
     { label: 'Войти через Anthropic Console (оплата по API)', action: () => run('Ждём вход в браузере…', 'auth:login', 'console') },
     { label: 'Войти через SSO (корпоративный вход)', action: () => run('Ждём вход в браузере…', 'auth:login', 'sso') },
     { label: 'Обновить статус входа', action: () => run('Проверяю…', 'auth:status') },
+    { label: '☁ Облако настроек (Insider или свой сервер)…', action: () => set({ showCloud: true }) },
     ...(auth?.loggedIn
       ? [
           {
@@ -252,6 +254,7 @@ export function App() {
       <ProjectSettings />
       <ImageLightbox />
       <StatusModal />
+      <CloudModal />
       <Toast />
     </div>
   );

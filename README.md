@@ -11,3 +11,8 @@ npm run dist       # portable Windows .exe in release/
 Requires Claude Code (`claude`) installed and logged in; the app can start `claude auth login` for you.
 
 Full guide in Russian: [docs/ИНСТРУКЦИЯ.md](docs/ИНСТРУКЦИЯ.md).
+
+## Облако настроек
+
+Настройки можно хранить онлайн: в Insider (вход Microsoft 365) или на своём сервере — `server/` (Node без зависимостей,
+вход через любой OIDC, последние 10 версий; см. [server/README.md](server/README.md)). В редакторе: меню аккаунта → «☁ Облако настроек».

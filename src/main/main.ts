@@ -6,6 +6,7 @@ import type { AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer, Sen
 import { setSink } from './bus';
 import * as cache from './cache';
 import * as claude from './claude';
+import * as cloud from './cloud';
 import * as deploy from './deploy';
 import * as files from './files';
 import * as keys from './keys';
@@ -192,6 +193,19 @@ handle('deploys:setTarget', async (repo: string, t: DeployTarget | null) => {
   return root;
 });
 handle('settings:export', () => settingsIo.exportSettings(win));
+handle('cloud:status', () => cloud.status());
+handle('cloud:login', (server: string) => cloud.login(server));
+handle('cloud:logout', () => cloud.logout());
+handle('cloud:options', (o: { server?: string; auto?: boolean }) => cloud.setOptions(o));
+handle('cloud:upload', () => cloud.upload());
+handle('cloud:versions', () => cloud.versions());
+handle('cloud:delete', (id: number | string) => cloud.deleteVersion(id));
+handle('cloud:download', async (id?: number | string) => {
+  const r = await cloud.download(id);
+  // Projects, groups and layout change at once: simplest is a fresh UI on the new state.
+  setTimeout(() => win?.webContents.reload(), 300);
+  return r;
+});
 handle('settings:import', async () => {
   const file = await settingsIo.importSettings(win);
   // Projects, groups and layout change at once: simplest is a fresh UI on the new state.
@@ -268,6 +282,7 @@ app.whenReady().then(() => {
   deploy.startDeployWatcher();
   ping.startPing();
   usage.startUsage();
+  cloud.startAutoSync();
   updates.startUpdateWatch();
   setTimeout(() => void keys.scanKeys(), 3000);
   setInterval(() => void keys.scanKeys(), 60 * 60_000);

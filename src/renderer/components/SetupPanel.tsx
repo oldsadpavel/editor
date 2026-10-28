@@ -199,6 +199,9 @@ export function SetupPanel() {
           >
             ⇪ Экспорт
           </button>
+          <button className="btn small" title="Хранить настройки онлайн (Insider или свой сервер), последние 10 версий" onClick={() => set({ showCloud: true })}>
+            ☁ Облако
+          </button>
           <button
             className="btn small"
             title="Загрузить настройки из файла экспорта (заменит проекты, группы, домены, раскладку)"

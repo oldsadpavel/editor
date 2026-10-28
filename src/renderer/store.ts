@@ -1,5 +1,6 @@
 import { useRef, useSyncExternalStore } from 'react';
 import type {
+  CloudStatus,
   AppState,
   AuthStatus,
   CacheReport,
@@ -77,6 +78,9 @@ export interface Store {
   toast?: { text: string; kind: 'info' | 'error'; nonce: number };
   lightbox?: { items: LightboxItem[]; index: number };
   usage: UsageInfo | null;
+  /** Cloud settings storage status; showCloud opens its window. */
+  cloud?: CloudStatus;
+  showCloud?: boolean;
   /** Selected tree node (target folder for Ctrl+V). */
   treeSelected?: string;
   /** Unsent text and attachments per chat. */
@@ -608,6 +612,9 @@ function onEvent(e: MainEvent) {
     case 'usage':
       set({ usage: e.usage });
       return;
+    case 'cloud':
+      set({ cloud: e.status, ...(e.status.needsChoice ? { showCloud: true } : {}) });
+      return;
     case 'update':
       set({ update: e.exe });
       return;
@@ -646,7 +653,8 @@ export async function init() {
     call<KeyScanResult | null>('keys:last'),
     call<CacheReport | null>('cache:last'),
   ]);
-  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list'), usage: await call<UsageInfo | null>('usage:get') });
+  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list'), usage: await call<UsageInfo | null>('usage:get'), cloud: await call<CloudStatus>('cloud:status') });
+  if (state.cloud?.needsChoice) set({ showCloud: true });
   for (const id of app.openChats) {
     const snap = await call<ChatSnapshot>('chat:open', id).catch(() => null);
     if (snap) set((s) => ({ chats: { ...s.chats, [id]: snap } }));
