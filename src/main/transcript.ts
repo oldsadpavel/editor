@@ -309,13 +309,18 @@ export function aggregateEdits(turns: Turn[]): FileEdit[] {
   return all.sort((a, b) => b.lastAt - a.lastAt);
 }
 
-const cache = new Map<string, { mtime: number; size: number; builder: TurnBuilder; cwd?: string }>();
 
 /** Parses a transcript file line by line (some transcripts are hundreds of MB). */
+/** A transcript untouched this long with an unfinished answer at the end: nobody is working on it any more. */
+const STALE_MS = 3 * 60_000;
+
+/**
+ * Reads a transcript into turns. An unfinished answer at the end stays open (`builder.isTurnOpen()`) while the file
+ * is fresh — a terminal, the phone (/RC) or an IDE plugin is still working on it; an old one counts as interrupted.
+ * Always a fresh builder: callers keep and mutate it.
+ */
 export async function loadTranscript(file: string): Promise<{ builder: TurnBuilder; cwd?: string }> {
   const st = fs.statSync(file);
-  const hit = cache.get(file);
-  if (hit && hit.mtime === st.mtimeMs && hit.size === st.size) return hit;
   const builder = new TurnBuilder();
   let cwd: string | undefined;
   const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
@@ -330,8 +335,6 @@ export async function loadTranscript(file: string): Promise<{ builder: TurnBuild
     if (!cwd && entry.cwd) cwd = entry.cwd;
     builder.ingest(entry);
   }
-  builder.markInterrupted();
-  const value = { mtime: st.mtimeMs, size: st.size, builder, cwd };
-  cache.set(file, value);
-  return value;
+  if (Date.now() - st.mtimeMs > STALE_MS) builder.markInterrupted();
+  return { builder, cwd };
 }

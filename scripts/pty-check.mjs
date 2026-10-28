@@ -18,7 +18,7 @@ const childScript = [
   "process.stdin.on('data', (d) => { buf += d; if (buf.includes('\\r')) { process.stdout.write('GOT ' + buf.trim() + '\\n'); process.exit(0); } });",
 ].join('\n');
 const pty = ptyCommand(process.execPath, ['-e', childScript, "it's a test"]);
-const child = spawn(pty.file, pty.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+const child = spawn(pty.file, pty.args, { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...process.env, ...pty.env } });
 let text = '';
 const collect = (d) => (text += d.toString().replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ''));
 child.stdout.on('data', collect);
@@ -35,5 +35,5 @@ const cols = process.platform === 'win32' ? '[0-9]+' : '120'; // winpty keeps it
 const ok = new RegExp(`TTY true ${cols} ARG it's a test`).test(text) && /GOT hello/.test(text);
 console.log(ok ? 'PTY OK' : `PTY FAILED (exit ${code})`);
 // Visible in the run's public annotations (logs need a token).
-if (process.env.GITHUB_ACTIONS) console.log(`::${ok ? 'notice' : 'error'}::pty ${process.platform} exit=${code} ${pty.file} :: ${JSON.stringify(text.slice(-700)).replace(/%/g, '%25')}`);
+if (process.env.GITHUB_ACTIONS) console.log(`::${ok ? 'notice' : 'error'}::pty ${process.platform} ${process.env.CLAUDE_EDITOR_PTY ?? "auto"} exit=${code} ${pty.file} :: ${JSON.stringify(text.slice(-700)).replace(/%/g, '%25')}`);
 process.exit(ok ? 0 : 1);

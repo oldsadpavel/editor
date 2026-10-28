@@ -9,6 +9,10 @@ on:
 jobs:
   pty:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [auto, python, expect]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,3 +20,5 @@ jobs:
           node-version: 22
       - run: npm install --no-save esbuild@0.28.2
       - run: node scripts/pty-check.mjs
+        env:
+          CLAUDE_EDITOR_PTY: ${{ matrix.method != 'auto' && matrix.method || '' }}

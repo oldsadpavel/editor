@@ -150,6 +150,9 @@ class ChatSession {
   /** Transcript watcher while the hidden Remote Control process owns the session. */
   transcriptWatch: fs.FSWatcher | null = null;
   remoteProc: remote.RemoteProc | null = null;
+  /** Last question typed into the /RC process, until the transcript shows it. */
+  remoteSent: { text: string; at: number } | null = null;
+  transcriptTick: NodeJS.Timeout | null = null;
   /** Transcript watcher while queued questions wait to be taken by Claude. */
   queueWatch: fs.FSWatcher | null = null;
   /** The `system/init` message of the running process: model, version, MCP servers, commands. */
@@ -252,6 +255,13 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
     s.builder = builder;
     if (cwd) s.cwd = cwd;
     s.existsOnDisk = true;
+    // An answer still being written elsewhere (terminal, phone, IDE plugin): show it as working; the transcript
+    // watcher ends it when that answer is done.
+    if (builder.isTurnOpen()) {
+      const last = builder.turns[builder.turns.length - 1];
+      if (last) last.live = true;
+      s.status = 'running';
+    }
     try {
       const info = (await listSessions({ dir: s.cwd, includeWorktrees: false })).find((x) => x.sessionId === sessionId);
       if (info) s.title = info.customTitle || info.summary || info.firstPrompt || s.title;
@@ -346,6 +356,7 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     if (attachments.some((p) => IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()))) throw new Error('В удалённом режиме картинки не прикрепить (только пути к файлам)');
     const body = attachments.length ? [text, '', ATTACHMENTS_HEADER, ...attachments.map((p) => `- ${p}`)].join('\n') : text;
     remote.send(s.remoteProc, body);
+    s.remoteSent = { text: text.trim(), at: Date.now() };
     const turn = s.builder.startTurn(text, Date.now(), randomUUID(), attachments.map((p) => ({ kind: 'file' as const, path: p })));
     turn.live = true;
     s.setStatus('running');
@@ -745,7 +756,7 @@ export function setRemote(sessionId: string, on: boolean) {
     if (file)
       void loadTranscript(file).then(({ builder }) => {
         // Whatever was pending remotely is over: the next question starts its own turn in the SDK process.
-        builder.closeTurn();
+        builder.markInterrupted();
         s.builder = builder;
         finishLiveTurns(s);
         if (s.status === 'running') s.setStatus('idle');
@@ -779,6 +790,13 @@ function watchTranscript(s: ChatSession) {
     if (!s.remote && s.q) return;
     try {
       const { builder } = await loadTranscript(file);
+      const last0 = builder.turns[builder.turns.length - 1];
+      // Typed here a moment ago but Claude hasn't written it yet: keep showing our question as running.
+      if (s.remoteSent) {
+        const seen = !!last0 && (last0.prompt.trim() === s.remoteSent.text || !!last0.more?.some((m) => m.prompt.trim() === s.remoteSent!.text));
+        if (!seen && Date.now() - s.remoteSent.at < 60_000) return;
+        s.remoteSent = null;
+      }
       const changed = shape(builder) !== shape(s.builder);
       s.builder = builder;
       const last = builder.turns[builder.turns.length - 1];
@@ -806,9 +824,25 @@ function watchTranscript(s: ChatSession) {
   } catch {
     /* transcript vanished */
   }
+  // An answer someone else was writing (terminal, IDE) that went silent for long: that process is gone. Not for /RC,
+  // whose process we see, nor for our own SDK process (a long command can run without writing anything).
+  s.transcriptTick = setInterval(() => {
+    if (s.status !== 'running' || s.remote || s.q) return;
+    try {
+      if (Date.now() - fs.statSync(file).mtimeMs < 10 * 60_000) return;
+    } catch {
+      return;
+    }
+    s.builder.markInterrupted();
+    finishLiveTurns(s);
+    s.setStatus('idle');
+    s.publish(true);
+  }, 60_000);
 }
 
 function unwatchTranscript(s: ChatSession) {
+  if (s.transcriptTick) clearInterval(s.transcriptTick);
+  s.transcriptTick = null;
   s.transcriptWatch?.close();
   s.transcriptWatch = null;
 }

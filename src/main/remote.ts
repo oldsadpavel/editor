@@ -41,18 +41,48 @@ function childEnv() {
 
 const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
 
+/** Python's pty module: on macOS `script` refuses a pipe as its input, Python doesn't. Not the /usr/bin stub
+ * (without Command Line Tools it pops an install dialog) — only real installs. */
+const PY_PTY = [
+  'import os,pty,sys',
+  's=pty.spawn(sys.argv[1:])',
+  'sys.exit(os.waitstatus_to_exitcode(s) if hasattr(os,"waitstatus_to_exitcode") else s>>8)',
+].join('\n');
+function findPython(): string | null {
+  const candidates = [
+    '/opt/homebrew/bin/python3',
+    '/usr/local/bin/python3',
+    '/Library/Developer/CommandLineTools/usr/bin/python3',
+    '/Applications/Xcode.app/Contents/Developer/usr/bin/python3',
+    ...(process.platform === 'darwin' ? [] : ['/usr/bin/python3']),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) ?? null;
+}
+
 /**
- * How to run a command inside a hidden pseudo-terminal whose input is our pipe: winpty on Windows, `script` on
- * macOS (BSD syntax) and Linux (util-linux syntax). The terminal gets a fixed 120×40 size, since a pipe has none.
+ * How to run a command inside a hidden pseudo-terminal whose input is our pipe: winpty on Windows; on macOS Python's
+ * pty module, else `expect` (ships with macOS); on Linux util-linux `script`. The terminal gets a fixed 120×40 size,
+ * since a pipe has none. CLAUDE_EDITOR_PTY=python|expect|script forces a method (for checks).
  */
-export function ptyCommand(cmd: string, args: string[]): { file: string; args: string[] } {
+export function ptyCommand(cmd: string, args: string[]): { file: string; args: string[]; env?: Record<string, string> } {
   if (process.platform === 'win32') {
     const winpty = findWinpty();
     if (!winpty) throw new Error('Нужен Git for Windows (winpty.exe из его состава): установите Git с https://git-scm.com');
     return { file: winpty, args: ['-Xallow-non-tty', '-Xplain', '--', cmd, ...args] };
   }
   const inner = `stty cols 120 rows 40 2>/dev/null; exec ${[cmd, ...args].map(shQuote).join(' ')}`;
-  if (process.platform === 'darwin') return { file: '/usr/bin/script', args: ['-q', '/dev/null', '/bin/sh', '-c', inner] };
+  const forced = process.env.CLAUDE_EDITOR_PTY;
+  const python = forced && forced !== 'python' ? null : findPython();
+  if (python) return { file: python, args: ['-c', PY_PTY, '/bin/sh', '-c', inner] };
+  if (forced === 'expect' || (!forced && process.platform === 'darwin' && fs.existsSync('/usr/bin/expect'))) {
+    // The command goes through the environment, so Tcl quoting never sees it.
+    return {
+      file: '/usr/bin/expect',
+      args: ['-c', 'log_user 1; set timeout -1; spawn -noecho /bin/sh -c $env(CLAUDE_EDITOR_PTY_CMD); interact; catch wait r; exit [lindex $r 3]'],
+      env: { CLAUDE_EDITOR_PTY_CMD: inner },
+    };
+  }
+  if (process.platform === 'darwin') throw new Error('Для /RC на macOS нужен Python 3 (xcode-select --install или brew install python) или /usr/bin/expect');
   return { file: 'script', args: ['-q', '-e', '-c', `/bin/sh -c ${shQuote(inner)}`, '/dev/null'] };
 }
 
@@ -62,7 +92,7 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
   if (opts.model) args.push('--model', opts.model);
   const pty = ptyCommand(opts.cli, args);
   // detached on macOS/Linux: own process group, so stop() can end claude together with `script`.
-  const child = spawn(pty.file, pty.args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32', env: childEnv() });
+  const child = spawn(pty.file, pty.args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32', env: { ...childEnv(), ...pty.env } });
   const proc: RemoteProc = { child, startedAt: Date.now(), tail: '', connected: false };
   let bypassAnswered = false;
   const onData = (d: Buffer) => {

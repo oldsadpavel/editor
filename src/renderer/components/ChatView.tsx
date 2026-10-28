@@ -832,6 +832,8 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const [q, setQ] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  /** When the user last scrolled by hand (wheel, touch, keys, scrollbar). Only that can unpin the view. */
+  const userScrollAt = useRef(0);
   const focus = useStore((s) => (s.focusTurn?.sessionId === chat.sessionId ? s.focusTurn : undefined));
   const deploys = useStore((s) => s.deploys.filter((d) => d.sessionId === chat.sessionId));
   const files = useMemo(() => aggregate(chat.turns), [chat.turns]);
@@ -863,10 +865,13 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   }, [last?.id, last?.live]);
 
   useEffect(() => {
-    if (focus) {
-      setTab('chat');
-      setExpanded((s) => new Set(s).add(focus.turnId));
-    }
+    if (!focus) return;
+    setTab('chat');
+    setExpanded((s) => new Set(s).add(focus.turnId));
+    stick.current = false;
+    // The jump is done once the turn is on screen; after that the chat follows new output again (if at the bottom).
+    const t = setTimeout(() => set({ focusTurn: undefined }), 1500);
+    return () => clearTimeout(t);
   }, [focus?.nonce]);
 
   useLayoutEffect(() => {
@@ -876,15 +881,18 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
 
   // Content keeps growing after a render (a turn expands, thumbnails load, the answer streams): while the view is
   // pinned to the bottom, every size change scrolls to the end again.
+  // The scroll area itself also shrinks and grows (permission cards, composer height, window size).
   const content = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = content.current;
-    if (!el) return;
+    const sc0 = scroller.current;
+    if (!el || !sc0) return;
     const ro = new ResizeObserver(() => {
       const sc = scroller.current;
       if (sc && stick.current && !focusRef.current) sc.scrollTop = sc.scrollHeight;
     });
     ro.observe(el);
+    ro.observe(sc0);
     return () => ro.disconnect();
   }, [tab]);
   const focusRef = useRef(focus);
@@ -927,9 +935,24 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
       <div
         className="chat-scroll"
         ref={scroller}
+        onWheel={() => (userScrollAt.current = Date.now())}
+        onTouchMove={() => (userScrollAt.current = Date.now())}
+        onKeyDown={() => (userScrollAt.current = Date.now())}
+        onPointerDown={(e) => {
+          // a press on the scrollbar (right of the content box)
+          const el = e.currentTarget;
+          if (e.clientX <= el.getBoundingClientRect().left + el.clientWidth) return;
+          // dragging the thumb: counts as scrolling by hand until the button is released
+          userScrollAt.current = Number.MAX_SAFE_INTEGER;
+          window.addEventListener('pointerup', () => (userScrollAt.current = Date.now()), { once: true });
+        }}
         onScroll={(e) => {
           const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+          const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+          // Back at the bottom always re-pins. Leaving it only counts when the user scrolled: while an answer streams,
+          // content grows between our scroll and this event, which must not unpin the view.
+          if (atBottom) stick.current = true;
+          else if (Date.now() - userScrollAt.current < 800 || userScrollAt.current === Number.MAX_SAFE_INTEGER) stick.current = false;
         }}
       >
         {tab === 'chat' && (
