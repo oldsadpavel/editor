@@ -554,3 +554,16 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .auto-approve.compact input { display: none; }
 .auto-approve.compact:not(.on) { opacity: 0.55; border-color: var(--line); }
 .auto-approve.compact.on { box-shadow: 0 0 0 1px #6b5320; }
+
+.turn-approvals { margin: 6px 0; font-size: 12px; }
+.approval-row.inline { grid-template-columns: 140px 100px 1fr auto; padding: 2px 0; border-bottom: 0; }
+.btn.danger.small { font-weight: 600; }
+
+/* ---------- project groups ---------- */
+.group-bar { display: flex; flex-wrap: wrap; gap: 3px; padding: 4px 6px; background: #232427; border-bottom: 1px solid var(--line-soft); align-items: center; }
+.group-tab { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--fg2); cursor: pointer; font-size: 12px; user-select: none; }
+.group-tab:hover { background: var(--bg3); color: var(--fg); }
+.group-tab.on { background: var(--accent-soft); border-color: #3d5a94; color: var(--fg); font-weight: 600; }
+.group-tab.add { padding: 2px 6px; }
+.group-tab .count { margin-left: 0; }
+.group-input { height: 22px; width: 140px; font-size: 12px; }

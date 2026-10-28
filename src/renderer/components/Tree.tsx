@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DirEntry, TreeSort, TreeSortBy } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, get, openFile, saveApp, set, setTreeOpen, setUi, toggleFavorite, toast, useStore } from '../store';
+import { addProjects, createGroup, deleteGroup, get, openFile, renameGroup, saveApp, set, setTreeOpen, setUi, switchGroup, toggleFavorite, toast, useStore } from '../store';
 import { Help, basename, dirname } from '../util';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { BlockHandle } from './Layout';
@@ -182,6 +182,75 @@ function sortMenu(dir: string): MenuItem[] {
   ];
 }
 
+/**
+ * Project groups as side tabs on top of the tree. A group is a saved workspace (projects, favorites, open chats
+ * and files); activating one swaps the whole set in.
+ */
+function GroupTabs() {
+  const groups = useStore((s) => s.app!.groups ?? []);
+  const active = useStore((s) => s.app!.activeGroup);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  const commit = (id: string | null, value: string) => {
+    setEditing(null);
+    setAdding(false);
+    if (!value.trim()) return;
+    void (id ? renameGroup(id, value) : createGroup(value));
+  };
+  const input = (id: string | null, initial: string) => (
+    <input
+      className="group-input"
+      autoFocus
+      defaultValue={initial}
+      placeholder="Название группы"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit(id, e.currentTarget.value);
+        if (e.key === 'Escape') (setEditing(null), setAdding(false));
+      }}
+      onBlur={(e) => commit(id, e.currentTarget.value)}
+    />
+  );
+  return (
+    <div className="group-bar" title="Группы проектов: наборы проектов с их чатами и файлами. Клик — переключить, двойной клик — переименовать, ПКМ — меню.">
+      {groups.map((g) =>
+        editing === g.id ? (
+          <span key={g.id}>{input(g.id, g.name)}</span>
+        ) : (
+          <span
+            key={g.id}
+            className={`group-tab ${g.id === active ? 'on' : ''}`}
+            onClick={() => switchGroup(g.id)}
+            onDoubleClick={() => setEditing(g.id)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  { label: 'Переименовать', action: () => setEditing(g.id) },
+                  { label: `Удалить группу «${g.name}»`, danger: true, action: () => confirm(`Удалить группу «${g.name}»? Проекты и чаты на диске останутся.`) && deleteGroup(g.id) },
+                ],
+              });
+            }}
+          >
+            {g.name}
+            <span className="count">{g.id === active ? get().app!.projects.length : g.projects.length}</span>
+          </span>
+        ),
+      )}
+      {adding ? (
+        input(null, '')
+      ) : (
+        <span className="group-tab add" title="Новая группа проектов" onClick={() => setAdding(true)}>
+          ＋
+        </span>
+      )}
+      {menu && <ContextMenu {...menu} onClose={() => setMenu(null)} />}
+    </div>
+  );
+}
+
 export function TreePanel() {
   const app = useStore((s) => s.app!);
   const tab = app.ui.leftTab === 'favorites' ? 'favorites' : 'projects';
@@ -225,6 +294,7 @@ export function TreePanel() {
 
   return (
     <div className="panel tree-panel">
+      <GroupTabs />
       <div className="panel-head">
         <BlockHandle block="tree" />
         <div className="seg">

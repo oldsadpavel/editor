@@ -192,7 +192,42 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
   );
 }
 
-function TurnBody({ turn, cwd, partial, sessionId }: { turn: Turn; cwd: string; partial?: string; sessionId: string }) {
+function TurnApprovals({ list }: { list: ApprovalEntry[] }) {
+  const [open, setOpen] = useState(false);
+  if (!list.length) return null;
+  const auto = list.filter((a) => a.decision === 'auto').length;
+  const denied = list.filter((a) => a.decision === 'deny').length;
+  return (
+    <div className="turn-approvals">
+      <div className="tool-head" onClick={() => setOpen(!open)}>
+        <span className="twisty">{open ? '▾' : '▸'}</span>🛡 {list.length} {plural(list.length, 'разрешение', 'разрешения', 'разрешений')}
+        <span className="muted">
+          {' '}
+          · {auto ? `⚡ авто ${auto}` : ''}
+          {auto && list.length - auto - denied ? ' · ' : ''}
+          {list.length - auto - denied ? `✓ вы ${list.length - auto - denied}` : ''}
+          {denied ? ` · ✕ отклонено ${denied}` : ''}
+        </span>
+      </div>
+      {open && (
+        <div className="tool-list">
+          {list.map((a, i) => (
+            <div key={i} className={`approval-row inline ${a.decision}`}>
+              <span className="adecision">{DECISION_LABEL[a.decision]}</span>
+              <span className="atool">{a.tool.replace(/^mcp__/, '')}</span>
+              <span className="asum" title={a.summary}>
+                {a.summary}
+              </span>
+              <span className="muted small">{formatTime(a.at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TurnBody({ turn, cwd, partial, sessionId, approvals }: { turn: Turn; cwd: string; partial?: string; sessionId: string; approvals: ApprovalEntry[] }) {
   // Consecutive tool calls are folded into one group so the text answer stays readable.
   const blocks: ({ kind: 'text'; text: string } | { kind: 'tools'; tools: Extract<TurnItem, { kind: 'tool' }>[] })[] = [];
   for (const it of turn.items) {
@@ -231,6 +266,7 @@ function TurnBody({ turn, cwd, partial, sessionId }: { turn: Turn; cwd: string; 
         </div>
       )}
       {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
+      <TurnApprovals list={approvals} />
       {turn.reads.length > 0 && (
         <div className="reads">
           Прочитаны:{' '}
@@ -285,6 +321,7 @@ function TurnRow({
   partial,
   highlight,
   sessionId,
+  approvals,
 }: {
   turn: Turn;
   cwd: string;
@@ -293,6 +330,7 @@ function TurnRow({
   partial?: string;
   highlight?: boolean;
   sessionId: string;
+  approvals: ApprovalEntry[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -323,7 +361,7 @@ function TurnRow({
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
         </span>
       </div>
-      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} sessionId={sessionId} />}
+      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} sessionId={sessionId} approvals={approvals} />}
     </div>
   );
 }
@@ -579,11 +617,14 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         ref={ref}
         value={text}
         placeholder={
-          busy
+          chat.remote
+            ? 'Чат в удалённом режиме — пишите в терминале или с телефона; здесь видна история'
+            : busy
             ? 'Claude работает… можно дописать — сообщение уйдёт в очередь'
             : 'Спросите Claude… Enter — отправить, Shift+Enter — перенос, Ctrl+V — вставить скриншот или файлы'
         }
         onPaste={onPaste}
+        disabled={!!chat.remote}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (menu.length) {
@@ -640,10 +681,14 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         </label>
         <label
           className={`auto-approve remote ${chat.remote ? 'on' : ''}`}
-          title="Удалённое управление (Remote Control): этот чат можно продолжать с claude.ai/code и из приложения Claude на телефоне"
+          title={
+            chat.remote
+              ? 'Чат отдан терминалу Remote Control: он виден на claude.ai/code и в приложении Claude. Редактор показывает историю, писать — в терминале или с телефона. Снимите галочку, чтобы вернуть чат в редактор (терминал можно закрыть).'
+              : 'Открыть этот чат в терминале с Remote Control, чтобы продолжать его с claude.ai/code и из приложения Claude на телефоне. Пока терминал открыт, редактор только показывает историю.'
+          }
         >
           <input type="checkbox" checked={!!chat.remote} onChange={(e) => setRemote(chat.sessionId, e.target.checked)} />
-          📱 Удалённо
+          📱 На телефон
         </label>
         {chat.remote && (
           <a className="small" href="https://claude.ai/code" target="_blank" title="Открыть список сессий на claude.ai/code">
@@ -661,7 +706,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         <div className="grow" />
         {busy && (
           <button className="btn danger small" onClick={() => call('chat:interrupt', chat.sessionId)} title="Esc">
-            ■ Стоп
+            ⛔ Стоп
           </button>
         )}
         <button className="btn primary small" disabled={!text.trim() && !attachments.length} onClick={() => void submit()}>
@@ -700,6 +745,7 @@ function pickFiles(onPick: (paths: string[]) => void) {
   input.click();
 }
 
+const NO_APPROVALS: ApprovalEntry[] = [];
 const DECISION_LABEL: Record<ApprovalEntry['decision'], string> = {
   auto: '⚡ автоодобрено',
   allow: '✓ разрешено вами',
@@ -746,6 +792,11 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const files = useMemo(() => aggregate(chat.turns), [chat.turns]);
   const last = chat.turns[chat.turns.length - 1];
   const chatBusy = chat.status === 'running' || chat.status === 'waiting';
+  const approvalsByTurn = useMemo(() => {
+    const m = new Map<string, ApprovalEntry[]>();
+    for (const a of chat.approvals) if (a.turnId) (m.get(a.turnId) ?? m.set(a.turnId, []).get(a.turnId)!).push(a);
+    return m;
+  }, [chat.approvals]);
 
   useEffect(() => markSeen(chat.sessionId), [chat.sessionId, chat.status]);
 
@@ -837,6 +888,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
                 onToggle={() => toggle(t.id)}
                 partial={t === last ? chat.partial : undefined}
                 highlight={focus?.turnId === t.id}
+                approvals={approvalsByTurn.get(t.id) ?? NO_APPROVALS}
               />
             ))}
             {!chat.turns.length && <div className="empty">Новый чат в {chat.cwd}. Задайте вопрос ниже.</div>}

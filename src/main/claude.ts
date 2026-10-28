@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -109,6 +109,8 @@ class ChatSession {
   restartPending = false;
   /** After a result, waiting to see whether Claude answers queued questions separately (see settleTurn). */
   awaitingQueued: NodeJS.Timeout | null = null;
+  /** Transcript watcher while a Remote Control terminal owns the session. */
+  transcriptWatch: fs.FSWatcher | null = null;
   /** The `system/init` message of the running process: model, version, MCP servers, commands. */
   init: any = null;
   approvals: ApprovalEntry[] = [];
@@ -215,6 +217,7 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
   s.remote = !!saved?.remote;
   s.approvals = approvals.forChat(sessionId);
   sessions.set(sessionId, s);
+  if (s.remote) watchTranscript(s);
   return s.snapshot();
 }
 
@@ -278,6 +281,7 @@ function rememberChatModel(s: ChatSession) {
 export async function send(sessionId: string, text: string, opts: SendOptions) {
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Чат не открыт');
+  if (s.remote) throw new Error('Чат сейчас в удалённом режиме: пишите в окне терминала или с телефона, либо выключите «📱 На телефон»');
   const attachments = opts.attachments ?? [];
   if (opts.permissionMode) s.permissionMode = opts.permissionMode;
   const modelChanged = (opts.model || undefined) !== s.model;
@@ -329,7 +333,6 @@ function start(s: ChatSession) {
       ...(s.permissionMode ? { permissionMode: s.permissionMode as any } : {}),
       ...(s.model ? { model: s.model } : {}),
       ...(s.effort ? { effort: s.effort } : {}),
-      ...(s.remote ? { settings: { remoteControlAtStartup: true } } : {}),
       ...(s.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       canUseTool: (toolName: string, input: Record<string, unknown>, opts: any) => askPermission(s, toolName, input, opts),
       stderr: (data: string) => {
@@ -510,7 +513,8 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
 const NEEDS_USER = new Set(['AskUserQuestion']);
 
 function logDecision(s: ChatSession, toolName: string, input: Record<string, unknown>, decision: ApprovalEntry['decision']) {
-  const e: ApprovalEntry = { at: Date.now(), sessionId: s.id, tool: toolName, summary: approvals.summarize(toolName, input), decision };
+  const turnId = s.builder.turns[s.builder.turns.length - 1]?.id;
+  const e: ApprovalEntry = { at: Date.now(), sessionId: s.id, turnId, tool: toolName, summary: approvals.summarize(toolName, input), decision };
   approvals.record(e);
   s.approvals.push(e);
 }
@@ -568,20 +572,67 @@ function stopProcess(s: ChatSession) {
 }
 
 /**
- * Remote Control is a startup option of the Claude process. An idle chat is restarted right away (the process
- * then waits for input, already reachable from claude.ai/code); a busy one is restarted after its turn.
+ * Remote Control (claude.ai/code and the phone app) only works for an interactive `claude` in a terminal: the
+ * headless SDK process never opens the bridge. So the chat is handed to a real terminal window running
+ * `claude --resume <id> --remote-control`, and the editor follows the transcript file while that terminal owns
+ * the session. Closing the terminal (or turning the switch off) gives the session back to the editor.
  */
 export function setRemote(sessionId: string, on: boolean) {
   const s = sessions.get(sessionId);
   if (!s) return;
-  s.remote = on;
-  rememberChatModel(s);
-  if (s.status === 'running' || s.status === 'waiting') s.restartPending = true;
-  else {
+  if (on) {
+    if (s.status === 'running' || s.status === 'waiting') throw new Error('Дождитесь конца ответа или нажмите «Стоп», затем включите удалённый режим');
+    const cli = claudeExecutable();
+    if (!cli) throw new Error('Claude Code не найден');
     stopProcess(s);
-    if (on) start(s);
+    const name = s.title.replace(/[^\p{L}\p{N} _.-]/gu, '').slice(0, 40) || 'Claude Editor';
+    // A visible console so the user can also type there; the editor keeps showing the transcript.
+    // `start` needs a real console: with stdout redirected Claude Code falls back to print mode and no bridge opens.
+    const child = spawn(
+      'cmd.exe',
+      ['/c', 'start', `"Claude Remote Control — ${name}"`, '/D', `"${s.cwd}"`, `"${cli}"`, '--resume', s.id, '--remote-control', `"${name}"`],
+      { cwd: s.cwd, detached: true, stdio: 'ignore', windowsHide: true, shell: false, windowsVerbatimArguments: true },
+    );
+    child.unref();
+    s.remote = true;
+    s.setStatus('idle');
+    watchTranscript(s);
+  } else {
+    s.remote = false;
+    unwatchTranscript(s);
   }
+  rememberChatModel(s);
   s.publish(true);
+}
+
+/** While a terminal owns the session, the editor re-reads the transcript whenever it changes. */
+function watchTranscript(s: ChatSession) {
+  unwatchTranscript(s);
+  const file = findTranscript(s.id);
+  if (!file) return;
+  let timer: NodeJS.Timeout | null = null;
+  const reload = async () => {
+    try {
+      const { builder } = await loadTranscript(file);
+      s.builder = builder;
+      s.publish(true);
+    } catch {
+      /* file being written */
+    }
+  };
+  try {
+    s.transcriptWatch = fs.watch(file, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void reload(), 400);
+    });
+  } catch {
+    /* transcript vanished */
+  }
+}
+
+function unwatchTranscript(s: ChatSession) {
+  s.transcriptWatch?.close();
+  s.transcriptWatch = null;
 }
 
 /** Everything `/status` shows; live details only when the chat has a running process. */
@@ -662,6 +713,7 @@ export function closeChat(sessionId: string) {
   if (s.status === 'running' || s.status === 'waiting') return; // keep working in the background
   s.input?.close();
   s.q = null;
+  unwatchTranscript(s);
   sessions.delete(sessionId);
 }
 

@@ -88,6 +88,15 @@ function validLayout(l: any): boolean {
   return !!l && ['tree', 'chat', 'editor'].every((b) => [l.left, l.center, l.right].includes(b));
 }
 
+// First run with groups: everything open so far becomes the group «Основная».
+if (!stateFile.data.groups?.length) {
+  const d = stateFile.data;
+  const id = randomUUID();
+  d.groups = [{ id, name: 'Основная', projects: d.projects, favorites: d.favorites, openChats: d.openChats, activeChat: d.activeChat, chatProject: d.chatProject, openFiles: d.openFiles, activeFile: d.activeFile, treeOpen: d.ui.treeOpen }];
+  d.activeGroup = id;
+  stateFile.save();
+}
+
 /**
  * One-time repair: the project settings dialog used to drop a domain typed into the "add" field when Save was
  * pressed without Enter. The deploy site was saved though, so it is restored as the project's ping target.

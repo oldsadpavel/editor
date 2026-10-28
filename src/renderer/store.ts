@@ -17,6 +17,7 @@ import type {
   SessionInfo,
   SetupItem,
   PingResult,
+  ProjectGroup,
   TestResult,
   UsageInfo,
 } from '../shared/types';
@@ -183,6 +184,78 @@ export function toggleFavorite(path: string) {
   void saveApp({ favorites: fav.includes(path) ? fav.filter((f) => f !== path) : [...fav, path] });
 }
 
+// --- project groups -----------------------------------------------------------------------
+
+/** The active group's record, refreshed from the live top-level fields. */
+function snapshotGroup(): ProjectGroup[] {
+  const a = state.app!;
+  return (a.groups ?? []).map((g) =>
+    g.id === a.activeGroup
+      ? { ...g, projects: a.projects, favorites: a.favorites, openChats: a.openChats, activeChat: a.activeChat, chatProject: a.chatProject, openFiles: state.files.map((f) => f.path), activeFile: state.activeFile, treeOpen: a.ui.treeOpen }
+      : g,
+  );
+}
+
+/** Activates a group: its projects, favorites, chats and files replace the current ones (which are saved into their group). */
+export async function switchGroup(id: string) {
+  const a = state.app!;
+  if (id === a.activeGroup) return;
+  const groups = snapshotGroup();
+  const g = groups.find((x) => x.id === id);
+  if (!g) return;
+  for (const c of a.openChats) if (!g.openChats.includes(c)) void call('chat:close', c);
+  for (const f of state.files) if (!(g.openFiles ?? []).includes(f.path)) void call('fs:unwatch', f.path);
+  set({ files: [], activeFile: undefined, treeSelected: undefined });
+  await saveApp({
+    groups,
+    activeGroup: id,
+    projects: g.projects,
+    favorites: g.favorites,
+    openChats: g.openChats,
+    activeChat: g.activeChat,
+    chatProject: g.chatProject ?? g.projects[0]?.path,
+    openFiles: g.openFiles ?? [],
+    activeFile: g.activeFile,
+    ui: { ...a.ui, treeOpen: g.treeOpen ?? [] },
+  });
+  for (const c of g.openChats) {
+    if (!state.chats[c]) {
+      const snap = await call<ChatSnapshot>('chat:open', c).catch(() => null);
+      if (snap) set((s) => ({ chats: { ...s.chats, [c]: snap } }));
+    }
+  }
+  for (const p of g.openFiles ?? []) if (await call<boolean>('fs:exists', p).catch(() => false)) await openFile(p);
+  if (g.activeFile && state.files.some((f) => f.path === g.activeFile)) set({ activeFile: g.activeFile });
+  for (const p of g.projects) void loadSessions(p.path);
+  toast(`Группа «${g.name}»`);
+}
+
+export async function createGroup(name: string) {
+  name = name.trim();
+  if (!name) return;
+  const id = crypto.randomUUID();
+  const groups = [...snapshotGroup(), { id, name, projects: [], favorites: [], openChats: [] }];
+  await saveApp({ groups });
+  await switchGroup(id);
+}
+
+export async function renameGroup(id: string, name: string) {
+  name = name.trim();
+  if (!name) return;
+  await saveApp({ groups: snapshotGroup().map((g) => (g.id === id ? { ...g, name } : g)) });
+}
+
+export async function deleteGroup(id: string) {
+  const groups = snapshotGroup();
+  if (groups.length <= 1) return toast('Последнюю группу удалить нельзя', 'error');
+  const rest = groups.filter((g) => g.id !== id);
+  if (id === state.app!.activeGroup) {
+    await saveApp({ groups });
+    await switchGroup(rest[0].id);
+  }
+  await saveApp({ groups: rest });
+}
+
 // --- files --------------------------------------------------------------------------------
 
 /** Formats that are never text: opened straight in the system program. */
@@ -338,10 +411,9 @@ export function setAutoApprove(id: string, on: boolean) {
   void guard(call('chat:autoApprove', id, on));
 }
 
-export function setRemote(id: string, on: boolean) {
-  set((s) => (s.chats[id] ? { chats: { ...s.chats, [id]: { ...s.chats[id], remote: on } } } : {}));
-  void guard(call('chat:remote', id, on));
-  if (on) toast('Удалённое управление включено: чат появится на claude.ai/code и в приложении Claude');
+export async function setRemote(id: string, on: boolean) {
+  const ok = (await guard(call('chat:remote', id, on))) !== undefined;
+  if (ok && on) toast('Открыт терминал с Remote Control: через несколько секунд чат появится на claude.ai/code и в приложении Claude');
 }
 
 // --- drafts -------------------------------------------------------------------------------

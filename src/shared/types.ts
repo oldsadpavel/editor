@@ -87,6 +87,8 @@ export interface ChatSnapshot {
 export interface ApprovalEntry {
   at: number;
   sessionId: string;
+  /** Turn (question) during which the permission was requested. */
+  turnId?: string;
   tool: string;
   summary: string;
   /** auto — approved by the chat's auto-approve switch; allow/always/deny — the user's click. */
@@ -266,7 +268,24 @@ export interface AuthStatus {
   cliPath?: string;
 }
 
+/** A saved workspace: a set of related projects with the chats and files that were open in it. */
+export interface ProjectGroup {
+  id: string;
+  name: string;
+  projects: ProjectRef[];
+  favorites: string[];
+  openChats: string[];
+  activeChat?: string;
+  chatProject?: string;
+  openFiles?: string[];
+  activeFile?: string;
+  treeOpen?: string[];
+}
+
 export interface AppState {
+  /** Project groups; the active one's fields are mirrored into the top-level projects/openChats/… */
+  groups?: ProjectGroup[];
+  activeGroup?: string;
   projects: ProjectRef[];
   favorites: string[];
   openChats: string[];
