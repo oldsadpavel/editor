@@ -134,6 +134,10 @@ export class TurnBuilder {
     return t;
   }
 
+  isTurnOpen() {
+    return this.turnOpen;
+  }
+
   /** The current answer is over (result, interruption, error): the next question starts a new turn. */
   closeTurn() {
     this.turnOpen = false;
@@ -209,6 +213,8 @@ export class TurnBuilder {
     if (!Array.isArray(content)) return;
     const turn = this.current(at);
     this.countTokens(turn, entry.message);
+    const model = entry.message?.model;
+    if (typeof model === 'string' && model !== '<synthetic>' && !turn.models?.includes(model)) (turn.models ??= []).push(model);
     // tool_use means Claude keeps working; any other stop reason ends its answer.
     const stop = entry.message?.stop_reason;
     if (stop && stop !== 'tool_use' && stop !== 'pause_turn') this.closeTurn();

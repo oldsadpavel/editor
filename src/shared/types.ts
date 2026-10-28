@@ -53,6 +53,8 @@ export interface Turn {
   costUsd?: number;
   /** Tokens spent on this answer (all API calls of the turn). */
   tokens?: TurnTokens;
+  /** Models that produced this answer (e.g. claude-fable-5-1), in order of first use. */
+  models?: string[];
 }
 
 export interface TurnTokens {

@@ -15,6 +15,7 @@ interface Status {
   permissionMode: string | null;
   autoApprove: boolean;
   remote: boolean;
+  remoteStatus?: { state: 'off' | 'connecting' | 'connected' | 'exited'; detail?: string };
   version: string | null;
   outputStyle: string | null;
   tools: number | null;
@@ -89,7 +90,15 @@ export function StatusModal() {
               {st.permissionMode ?? 'из настроек'}
               {st.autoApprove ? ' · ⚡ автоодобрение' : ''}
             </Row>
-            <Row label="Удалённое управление">{st.remote ? '📱 включено (claude.ai/code и приложение Claude)' : 'выключено'}</Row>
+            <Row label="Удалённое управление">
+              {!st.remote
+                ? 'выключено'
+                : st.remoteStatus?.state === 'connected'
+                  ? `📱 подключено — ${st.remoteStatus.detail ?? 'claude.ai/code'}`
+                  : st.remoteStatus?.state === 'exited'
+                    ? `⚠ ${st.remoteStatus.detail}`
+                    : `⏳ подключаюсь… ${st.remoteStatus?.detail ?? ''}`}
+            </Row>
             <Row label="Аккаунт">{st.account.loggedIn ? `${st.account.email} · ${st.account.orgName ?? ''} · ${st.account.method ?? ''}` : 'не выполнен вход'}</Row>
             <Row label="Claude Code">{st.version ?? '—'}</Row>
             {st.tools !== null && <Row label="Инструментов">{st.tools}</Row>}

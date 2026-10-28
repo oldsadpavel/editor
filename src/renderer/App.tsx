@@ -5,13 +5,14 @@ import { ChatPanel } from './components/ChatPanel';
 import { EditorArea } from './components/Editor';
 import { ImageLightbox } from './components/ImageViewer';
 import { DropColumn, LayoutButton } from './components/Layout';
+import { ContextMenu, type MenuItem } from './components/ContextMenu';
 import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { StatusModal } from './components/StatusModal';
 import { HELP } from './help';
-import { init, isUnread, set, setUi, togglePanel, useStore } from './store';
+import { init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
 import { Markdown } from './util';
 
 const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
@@ -71,29 +72,67 @@ function UpdateButton() {
   );
 }
 
+/**
+ * Account of Claude Code: who is signed in, plus login (claude.ai / Console / SSO), switch account and logout.
+ * These are Claude Code's own credentials, so the terminal and IDE plugins follow the same account.
+ */
 function AuthButton() {
   const auth = useStore((s) => s.auth);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+  const run = async (label: string, channel: string, ...args: unknown[]) => {
+    setBusy(label);
+    try {
+      set({ auth: await call(channel, ...args) });
+    } catch (e: any) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+  const items: MenuItem[] = [
+    { label: auth?.loggedIn ? 'Сменить аккаунт (claude.ai, подписка)' : 'Войти через claude.ai (подписка)', action: () => run('Ждём вход в браузере…', 'auth:login', 'claudeai') },
+    { label: 'Войти через Anthropic Console (оплата по API)', action: () => run('Ждём вход в браузере…', 'auth:login', 'console') },
+    { label: 'Войти через SSO (корпоративный вход)', action: () => run('Ждём вход в браузере…', 'auth:login', 'sso') },
+    { label: 'Обновить статус входа', action: () => run('Проверяю…', 'auth:status') },
+    ...(auth?.loggedIn
+      ? [
+          {
+            label: 'Выйти из аккаунта',
+            danger: true,
+            action: () =>
+              confirm('Выйти из Claude? Это общий вход Claude Code: терминал и плагины IDE тоже выйдут. Работающие чаты остановятся с ошибкой авторизации.') &&
+              run('Выхожу…', 'auth:logout'),
+          },
+        ]
+      : []),
+  ];
+  const open = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY + 12 });
+
   if (!auth) return <span className="muted">Проверяю вход…</span>;
-  if (auth.loggedIn)
-    return (
-      <span className="auth ok" title={`${auth.method ?? ''} · ${auth.orgName ?? ''}\n${auth.cliPath ?? ''}`}>
-        ● {auth.email}
-      </span>
-    );
   return (
-    <button
-      className="btn primary small"
-      disabled={busy}
-      title={auth.error}
-      onClick={async () => {
-        setBusy(true);
-        set({ auth: await call('auth:login') });
-        setBusy(false);
-      }}
-    >
-      {busy ? 'Ждём вход в браузере…' : 'Войти в Claude'}
-    </button>
+    <>
+      {busy ? (
+        <span className="auth muted">
+          <span className="spinner small" /> {busy}
+        </span>
+      ) : auth.loggedIn ? (
+        <button className="auth ok auth-btn" title={`${auth.method ?? ''} · ${auth.orgName ?? ''}\n${auth.cliPath ?? ''}\nНажмите — сменить аккаунт или выйти`} onClick={open}>
+          ● {auth.email} ▾
+        </button>
+      ) : (
+        <span className="auth-login">
+          <button className="btn primary small" title={auth.error} onClick={() => run('Ждём вход в браузере…', 'auth:login', 'claudeai')}>
+            Войти в Claude
+          </button>
+          <button className="btn small" title="Другие способы входа" onClick={open}>
+            ▾
+          </button>
+        </span>
+      )}
+      {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
+    </>
   );
 }
 

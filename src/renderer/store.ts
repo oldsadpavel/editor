@@ -413,7 +413,7 @@ export function setAutoApprove(id: string, on: boolean) {
 
 export async function setRemote(id: string, on: boolean) {
   const ok = (await guard(call('chat:remote', id, on))) !== undefined;
-  if (ok && on) toast('Открыт терминал с Remote Control: через несколько секунд чат появится на claude.ai/code и в приложении Claude');
+  if (ok && on) toast('/RC: подключаюсь к claude.ai — через несколько секунд чат появится на claude.ai/code и в приложении Claude');
 }
 
 // --- drafts -------------------------------------------------------------------------------

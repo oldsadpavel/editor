@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem } from '../../shared/types';
+import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem, TurnItemTool } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
 import { loadDraft, markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
@@ -193,23 +193,8 @@ function TurnBody({
           </div>
         ))}
       </div>
-      <div className="turn-tabs">
-        <span className={`turn-tab ${tab === 'answer' ? 'on' : ''}`} onClick={() => setTab('answer')}>
-          Ответ
-        </span>
-        <span className={`turn-tab ${tab === 'files' ? 'on' : ''} ${!edits.length ? 'empty' : ''}`} onClick={() => setTab('files')} title="Файлы, изменённые в этом ответе">
-          ✎ Файлы {edits.length > 0 && <span className="count">{edits.length}</span>}
-        </span>
-        <span
-          className={`turn-tab ${tab === 'approvals' ? 'on' : ''} ${!approvals.length ? 'empty' : ''}`}
-          onClick={() => setTab('approvals')}
-          title="Что Claude спрашивал в этом ответе и как решено"
-        >
-          🛡 Разрешения {approvals.length > 0 && <span className="count">{approvals.length}</span>}
-          {autoN > 0 && <span className="muted"> ⚡{autoN}</span>}
-          {denyN > 0 && <span className="bad"> ✕{denyN}</span>}
-        </span>
-      </div>
+      <div className="turn-split">
+      <div className="turn-main">
       {tab === 'answer' && (
         <>
           {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
@@ -261,6 +246,24 @@ function TurnBody({
           {!approvals.length && <div className="muted small">В этом ответе Claude ничего не спрашивал.</div>}
         </div>
       )}
+      </div>
+      {/* Vertical tabs on the right of the answer */}
+      <div className="turn-side">
+        <span className={`side-tab ${tab === 'answer' ? 'on' : ''}`} onClick={() => setTab('answer')} title="Ответ">
+          <span className="side-ico">💬</span>
+        </span>
+        <span className={`side-tab ${tab === 'files' ? 'on' : ''} ${!edits.length ? 'empty' : ''}`} onClick={() => setTab('files')} title={`Файлы, изменённые в этом ответе: ${edits.length}`}>
+          <span className="side-ico">✎</span>{edits.length > 0 && <span className="count">{edits.length}</span>}
+        </span>
+        <span
+          className={`side-tab ${tab === 'approvals' ? 'on' : ''} ${!approvals.length ? 'empty' : ''} ${denyN ? 'deny' : autoN && autoN === approvals.length ? 'auto' : ''}`}
+          onClick={() => setTab('approvals')}
+          title={`Что Claude спрашивал в этом ответе и как решено${autoN ? `\n⚡ авто: ${autoN}` : ''}${denyN ? `\n✕ отклонено: ${denyN}` : ''}`}
+        >
+          <span className="side-ico">🛡</span>{approvals.length > 0 && <span className="count">{approvals.length}</span>}
+        </span>
+      </div>
+      </div>
     </div>
   );
 }
@@ -271,11 +274,22 @@ const kTokens = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M
  * Tokens spent on the answer. The headline is what the model processed (fresh input + cache writes + output);
  * cache reads are cheap and shown only in the tooltip.
  */
+/** «claude-fable-5-1» → «Fable 5.1»; unknown ids are shown as they are. */
+function modelName(id: string) {
+  const m = id.match(/^claude-([a-z]+)-(\d+)(?:-(\d+))?/);
+  return m ? `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] && m[3].length <= 2 ? '.' + m[3] : ''}` : id;
+}
+
 function TokensBadge({ turn }: { turn: Turn }) {
   const t = turn.tokens;
   if (!t) return null;
   const main = t.input + t.cacheWrite + t.output;
+  // Subagents (Agent/Task tool) did part of the work in their own context.
+  const agents = turn.items.filter((i) => i.kind === 'tool' && (i.name === 'Agent' || i.name === 'Task')).map((i) => (i as TurnItemTool).summary).filter(Boolean);
   const tip = [
+    turn.models?.length ? `Отвечал: ${turn.models.map((m) => `${modelName(m)} (${m})`).join(', ')}` : 'Модель: нет данных',
+    ...(agents.length ? [`Субагенты: ${agents.slice(0, 5).join('; ')}${agents.length > 5 ? ` и ещё ${agents.length - 5}` : ''}`] : []),
+    '',
     'Токены на этот ответ',
     `Вход: ${t.input.toLocaleString('ru-RU')}`,
     `Выход: ${t.output.toLocaleString('ru-RU')}`,
@@ -286,7 +300,7 @@ function TokensBadge({ turn }: { turn: Turn }) {
   ].join('\n');
   return (
     <span className="turn-tokens" title={tip}>
-      🪙 {kTokens(main)}
+      {turn.models?.length ? <span className="turn-model">{modelName(turn.models[turn.models.length - 1]).split(' ')[0]}</span> : null}🪙 {kTokens(main)}
     </span>
   );
 }
@@ -464,6 +478,13 @@ function PermissionCard({ req }: { req: PermissionRequest }) {
             Всегда разрешать
           </button>
         )}
+        <button
+          className="btn auto-all"
+          title="Включить автоодобрение для этого чата: этот и все следующие запросы одобряются сами (журнал — во вкладке «Разрешения»)"
+          onClick={() => setAutoApprove(req.sessionId, true)}
+        >
+          ⚡ Разрешать всё в этом чате
+        </button>
         <button className="btn danger" onClick={() => answer('deny')}>
           Отклонить
         </button>
@@ -576,6 +597,11 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
     const t = text.trim();
     if (!t && !attachments.length) return;
     // Editor-side commands are answered here, not sent to Claude.
+    if (t === '/rc' || t === '/remote-control') {
+      setText('');
+      void setRemote(chat.sessionId, !chat.remote);
+      return;
+    }
     if (t === '/status' || t === '/context') {
       setText('');
       set({ statusFor: { sessionId: chat.sessionId, section: t === '/context' ? 'context' : undefined } });
@@ -629,13 +655,12 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         value={text}
         placeholder={
           chat.remote
-            ? 'Чат в удалённом режиме — пишите в терминале или с телефона; здесь видна история'
+            ? 'Удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне; ответы видны и здесь, и там'
             : busy
             ? 'Claude работает… можно дописать — сообщение уйдёт в очередь'
             : 'Спросите Claude… Enter — отправить, Shift+Enter — перенос, Ctrl+V — вставить скриншот или файлы'
         }
         onPaste={onPaste}
-        disabled={!!chat.remote}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (menu.length) {
@@ -681,25 +706,26 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           ))}
         </select>
         <label
-          className={`auto-approve compact ${chat.autoApprove ? 'on' : ''}`}
+          className={`auto-approve approve-all ${chat.autoApprove ? 'on' : ''}`}
           title={
             chat.autoApprove
               ? 'Автоодобрение включено: всё, что Claude просит подтвердить (команды, правки, выполнение плана), одобряется само. Журнал — вкладка «Разрешения». Нажмите, чтобы выключить.'
               : 'Автоодобрение: одобрять всё, что Claude просит подтвердить. Каждое решение пишется во вкладку «Разрешения».'
           }
         >
-          <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />⚡
+          <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
+          ⚡ Подтверждать всё
         </label>
         <label
           className={`auto-approve remote ${chat.remote ? 'on' : ''}`}
           title={
             chat.remote
-              ? 'Чат отдан терминалу Remote Control: он виден на claude.ai/code и в приложении Claude. Редактор показывает историю, писать — в терминале или с телефона. Снимите галочку, чтобы вернуть чат в редактор (терминал можно закрыть).'
-              : 'Открыть этот чат в терминале с Remote Control, чтобы продолжать его с claude.ai/code и из приложения Claude на телефоне. Пока терминал открыт, редактор только показывает историю.'
+              ? '/RC (Remote Control) включён: чат виден и управляется с claude.ai/code и из приложения Claude, и отсюда тоже. Подтверждения — с телефона или ⚡ Авто. Снимите галочку, чтобы вернуть обычный режим.'
+              : '/RC — Remote Control, как в Claude Code: чат появится на claude.ai/code и в приложении Claude на телефоне; писать можно и там, и здесь. Нужен Git for Windows.'
           }
         >
           <input type="checkbox" checked={!!chat.remote} onChange={(e) => setRemote(chat.sessionId, e.target.checked)} />
-          📱 На телефон
+          /RC
         </label>
         {chat.remote && (
           <a className="small" href="https://claude.ai/code" target="_blank" title="Открыть список сессий на claude.ai/code">
@@ -739,6 +765,7 @@ interface SlashItem {
 const LOCAL_COMMANDS: SlashItem[] = [
   { name: 'status', description: 'Состояние чата: модель, режим, MCP-серверы, контекст, лимиты', local: true },
   { name: 'context', description: 'Сколько занято окно контекста и чем', local: true },
+  { name: 'rc', description: 'Remote Control: включить/выключить — чат на claude.ai/code и в приложении Claude', local: true },
 ];
 
 /** Editor commands first; Claude Code's own list follows (its /status and /context are replaced by the editor's). */
@@ -819,9 +846,13 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
 
   useEffect(() => markSeen(chat.sessionId), [chat.sessionId, chat.status]);
 
-  // A new question auto-expands so the live answer is visible.
+  // A new last question (asked here, from the phone, or re-read from the transcript with a new id) auto-expands
+  // so its answer is visible.
+  const lastSeenId = useRef(last?.id);
   useEffect(() => {
-    if (last?.live) setExpanded((s) => (s.has(last.id) ? s : new Set(s).add(last.id)));
+    if (!last) return;
+    if (last.live || last.id !== lastSeenId.current) setExpanded((s) => (s.has(last.id) ? s : new Set(s).add(last.id)));
+    lastSeenId.current = last.id;
   }, [last?.id, last?.live]);
 
   useEffect(() => {

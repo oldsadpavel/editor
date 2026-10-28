@@ -154,7 +154,8 @@ handle('image:copy', (p: string) => files.copyImage(p));
 handle('chat:image', (id: string, uuid: string, index: number) => files.transcriptImage(id, uuid, index));
 
 handle('auth:status', () => claude.authStatus());
-handle('auth:login', () => claude.login());
+handle('auth:login', (method?: 'claudeai' | 'console' | 'sso', email?: string) => claude.login(method, email));
+handle('auth:logout', () => claude.logout());
 
 handle('chat:list', (cwd: string) => claude.listProjectSessions(cwd));
 handle('chat:open', (id: string, cwd?: string) => claude.openChat(id, cwd));
