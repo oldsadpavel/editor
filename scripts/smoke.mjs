@@ -21,7 +21,7 @@ if (!fs.existsSync(path.join(dataDir, 'state.json'))) {
   );
 }
 
-const app = await electron.launch({ args: ['.'], env: { ...process.env, CLAUDE_EDITOR_DATA: path.resolve(dataDir) } });
+const app = await electron.launch({ args: ['.'], env: { ...process.env, CLAUDE_EDITOR_DATA: path.resolve(dataDir), CLAUDE_EDITOR_TRACE: path.resolve(out, 'trace.log') } });
 const win = await app.firstWindow();
 const logs = [];
 win.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));

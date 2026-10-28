@@ -156,6 +156,8 @@ export interface ChatSnapshot {
   compacting?: CompactState;
   /** Background tasks of the Claude process. */
   tasks?: BgTask[];
+  /** Claude Code's guess of the next question (Tab puts it into the field). */
+  suggestion?: string;
   /** Context size of the last request, to estimate how long a compaction takes. */
   contextTokens?: number;
   cwd: string;

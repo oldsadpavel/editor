@@ -179,6 +179,8 @@ class ChatSession {
   existsOnDisk = false;
   /** Background tasks of the Claude process (task_started / task_progress / task_notification). */
   tasks: BgTask[] = [];
+  /** Claude Code's predicted next question (prompt_suggestion), cleared when a question is sent. */
+  suggestion: string | undefined;
   /** Bash-mode runs (`!cmd`) waiting to be passed to Claude with the next question. */
   shellContext: string[] = [];
   /** History compaction in progress, and the context size of the last request (for the time estimate). */
@@ -204,6 +206,7 @@ class ChatSession {
       chrome: this.chrome,
       compacting: this.compacting,
       tasks: this.tasks.length ? this.tasks : undefined,
+      suggestion: this.suggestion,
       contextTokens: this.contextTokens,
       approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
@@ -411,6 +414,7 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   // A question sent while Claude is still answering joins the current turn (Claude Code answers them together).
   // The message carries this uuid into the transcript, so the turn keeps its id after a reload (rewind, fork).
   const uid = randomUUID();
+  s.suggestion = undefined;
   const context = s.shellContext.splice(0);
   const turn = s.builder.startTurn(
     text,
@@ -470,6 +474,8 @@ function start(s: ChatSession) {
       thinking: { type: 'adaptive', display: 'summarized' },
       // subagents: their texts and calls come through (shown under the Agent call), plus a one-line progress summary
       forwardSubagentText: true,
+      // the next question Claude Code predicts; the composer offers it on Tab
+      promptSuggestions: true,
       agentProgressSummaries: true,
       systemPrompt: { type: 'preset', preset: 'claude_code', append: EDITOR_INSTRUCTIONS },
       mcpServers: { editor: editorMcp(s.id, s.cwd) },
@@ -493,7 +499,11 @@ function start(s: ChatSession) {
 async function pump(s: ChatSession) {
   const q = s.q!;
   try {
-    for await (const m of q) handleMessage(s, m);
+    for await (const m of q) {
+      if (process.env.CLAUDE_EDITOR_TRACE && m.type !== "stream_event") fs.appendFileSync(process.env.CLAUDE_EDITOR_TRACE, `${m.type} ${(m as any).subtype ?? ""} ${(m as any).suggestion ?? ""}
+`);
+      handleMessage(s, m);
+    }
   } catch (e: any) {
     const msg = e?.message ?? String(e);
     failTurn(s, msg);
@@ -763,6 +773,12 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     case 'auth_status' as any: {
       const a: any = m;
       if (a.error) problems.report({ source: 'auth', severity: 'error', title: 'Ошибка авторизации Claude', detail: String(a.error) });
+      return;
+    }
+    case 'prompt_suggestion' as any: {
+      const sug = String((m as any).suggestion ?? '').trim();
+      s.suggestion = sug || undefined;
+      s.publish(true);
       return;
     }
     case 'rate_limit_event' as any: {

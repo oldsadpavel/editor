@@ -439,6 +439,9 @@ function TokensBadge({ turn }: { turn: Turn }) {
   const agents = turn.items.filter((i) => i.kind === 'tool' && (i.name === 'Agent' || i.name === 'Task')).map((i) => (i as TurnItemTool).summary).filter(Boolean);
   const tip = [
     turn.models?.length ? `Отвечал: ${turn.models.map((m) => `${modelName(m)} (${m})`).join(', ')}` : 'Модель: нет данных',
+    ...(turn.fallbacks?.length
+      ? turn.fallbacks.map((f) => `Защитный фильтр ${modelName(f.from ?? '?')} остановил ответ${f.category ? ` [${f.category}]` : ''} → ответил ${modelName(f.to ?? '?')}`)
+      : []),
     ...(agents.length ? [`Субагенты: ${agents.slice(0, 5).join('; ')}${agents.length > 5 ? ` и ещё ${agents.length - 5}` : ''}`] : []),
     '',
     'Токены на этот ответ',
@@ -459,7 +462,14 @@ function TokensBadge({ turn }: { turn: Turn }) {
   ].join('\n');
   return (
     <span className="turn-tokens" title={tip}>
-      {turn.models?.length ? <span className="turn-model">{modelName(turn.models[turn.models.length - 1]).split(' ')[0]}</span> : null}🪙 {kTokens(main)}
+      {turn.fallbacks?.length ? (
+        <span className="turn-model fallback">
+          {modelName(turn.fallbacks[0].from ?? '').split(' ')[0]}→{modelName(turn.fallbacks[turn.fallbacks.length - 1].to ?? turn.models?.[turn.models.length - 1] ?? '').split(' ')[0]}
+        </span>
+      ) : turn.models?.length ? (
+        <span className="turn-model">{modelName(turn.models[turn.models.length - 1]).split(' ')[0]}</span>
+      ) : null}
+      🪙 {kTokens(main)}
     </span>
   );
 }
@@ -942,6 +952,8 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
             ? `«${chat.title}» · удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне`
             : busy
             ? `«${chat.title}» · Claude работает… можно дописать — сообщение уйдёт в очередь`
+            : chat.suggestion
+            ? `↹ Tab: ${chat.suggestion}`
             : `Вопрос в «${chat.title}» (${basename(chat.cwd)})… Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы`
         }
         onPaste={onPaste}
@@ -966,6 +978,11 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
               setMention(null);
               return;
             }
+          }
+          if (e.key === 'Tab' && !text && chat.suggestion && !menu.length) {
+            e.preventDefault();
+            setText(chat.suggestion);
+            return;
           }
           if (!menu.length && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && history.length && (!text || histPos.current >= 0) && !e.shiftKey) {
             const next = histPos.current + (e.key === 'ArrowUp' ? 1 : -1);
