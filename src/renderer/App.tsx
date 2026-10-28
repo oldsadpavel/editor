@@ -52,6 +52,25 @@ function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: 
   );
 }
 
+/** Appears when a newer build was installed next to this one (scripts/install-local.ps1). */
+function UpdateButton() {
+  const update = useStore((s) => s.update);
+  if (!update) return null;
+  return (
+    <button
+      className="tb-btn update-btn"
+      title="Установлена новая версия редактора. Открытые чаты, файлы и раскладка восстановятся после перезапуска."
+      onClick={async () => {
+        const busy = await call<number>('chat:busyCount');
+        if (busy && !confirm(`Идёт ответ в ${busy} ${busy === 1 ? 'чате' : 'чатах'}. Перезапуск прервёт его. Перезапустить всё равно?`)) return;
+        await call('app:restartToUpdate');
+      }}
+    >
+      ⬆ Новая версия — перезапустить
+    </button>
+  );
+}
+
 function AuthButton() {
   const auth = useStore((s) => s.auth);
   const [busy, setBusy] = useState(false);
@@ -175,6 +194,7 @@ export function App() {
           ))}
         </div>
         <div className="grow" />
+        <UpdateButton />
         <UsageMeters />
         <LayoutButton />
         <AuthButton />

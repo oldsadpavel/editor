@@ -537,3 +537,10 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .st-sub { font-weight: 600; margin-bottom: 6px; }
 .st-bar { height: 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; margin-bottom: 4px; }
 .st-bar > span { display: block; height: 100%; background: var(--claude); }
+
+.update-btn { color: #fff; background: #2a5a33; border-color: var(--ok); animation: pulse-ok 1.8s ease-in-out infinite; }
+.update-btn:hover { background: #2f6b3a; }
+@keyframes pulse-ok {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(95, 184, 101, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(95, 184, 101, 0); }
+}

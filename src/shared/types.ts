@@ -342,6 +342,7 @@ export type MainEvent =
   | { type: 'ping'; results: PingResult[] }
   | { type: 'appState'; state: AppState }
   | { type: 'usage'; usage: UsageInfo }
+  | { type: 'update'; exe: string }
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'sessionsChanged'; cwd: string };

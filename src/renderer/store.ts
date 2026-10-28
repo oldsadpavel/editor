@@ -69,6 +69,8 @@ export interface Store {
   usage: UsageInfo | null;
   /** Selected tree node (target folder for Ctrl+V). */
   treeSelected?: string;
+  /** A newer build is installed (path of its exe): offer a restart. */
+  update?: string;
   /** Chat whose /status (or /context) card is shown. */
   statusFor?: { sessionId: string; section?: 'context' };
 }
@@ -427,6 +429,9 @@ function onEvent(e: MainEvent) {
     case 'usage':
       set({ usage: e.usage });
       return;
+    case 'update':
+      set({ update: e.exe });
+      return;
     case 'appState':
       set((s) => ({ app: { ...e.state, ui: s.app?.ui ?? e.state.ui } }));
       refreshSetup();
@@ -475,6 +480,7 @@ export async function init() {
   for (const p of app.projects) void loadSessions(p.path);
   call<AuthStatus>('auth:status').then((auth) => set({ auth }));
   refreshSetup();
+  call<string | null>('app:pendingUpdate').then((u) => u && set({ update: u }));
   window.addEventListener('focus', () => {
     const id = state.app?.activeChat;
     if (id && chatIsVisible(id)) markSeen(id);

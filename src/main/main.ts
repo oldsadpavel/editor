@@ -12,6 +12,7 @@ import * as keys from './keys';
 import * as ping from './ping';
 import * as problems from './problems';
 import { setupStatus } from './setup';
+import * as updates from './updates';
 import * as usage from './usage';
 import { flushAll, stateFile } from './store';
 import { findTranscript, normalize } from './transcript';
@@ -193,6 +194,9 @@ handle('tests:list', () => deploy.listTests());
 
 handle('ping:list', () => ping.list());
 handle('ping:now', (project?: string) => ping.pingNow(project));
+handle('app:pendingUpdate', () => updates.pendingUpdate());
+handle('app:restartToUpdate', () => updates.restartToUpdate());
+handle('chat:busyCount', () => claude.runningSessions().length);
 handle('usage:get', () => usage.lastUsage());
 handle('usage:refresh', () => usage.refreshUsage());
 handle('setup:status', () => setupStatus());
@@ -254,6 +258,7 @@ app.whenReady().then(() => {
   deploy.startDeployWatcher();
   ping.startPing();
   usage.startUsage();
+  updates.startUpdateWatch();
   setTimeout(() => void keys.scanKeys(), 3000);
   setInterval(() => void keys.scanKeys(), 60 * 60_000);
   setTimeout(() => void cache.scanCache(), 8000);

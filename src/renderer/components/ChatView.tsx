@@ -433,7 +433,7 @@ function AttachmentChips({ paths, onRemove }: { paths: string[]; onRemove: (p: s
   );
 }
 
-function Composer({ chat }: { chat: ChatSnapshot }) {
+function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) {
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<string[]>([]);
   const [dragOver, setDragOver] = useState(false);
@@ -514,6 +514,7 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
     const sent = { text, attachments };
     setText('');
     setAttachments([]);
+    onSent();
     const ok = await sendPrompt(chat.sessionId, t, { permissionMode: mode || undefined, model, effort, attachments: sent.attachments });
     if (!ok) {
       // Keep what the user typed if sending failed.
@@ -824,7 +825,17 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
       {chat.pending.map((p) => (
         <PermissionCard key={p.id} req={p} />
       ))}
-      {tab === 'chat' && <Composer chat={chat} />}
+      {tab === 'chat' && (
+        <Composer
+          chat={chat}
+          onSent={() => {
+            // A new question always brings the view to the end of the chat, even if it was scrolled up.
+            stick.current = true;
+            setQ('');
+            requestAnimationFrame(() => scroller.current && (scroller.current.scrollTop = scroller.current.scrollHeight));
+          }}
+        />
+      )}
       <div className="tabs bottom-tabs">
         <div className={`tab ${tab === 'chat' ? 'on' : ''}`} onClick={() => setTab('chat')}>
           💬 Чат
