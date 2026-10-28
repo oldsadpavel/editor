@@ -34,4 +34,6 @@ console.log('output:', JSON.stringify(text.slice(-400)));
 const cols = process.platform === 'win32' ? '[0-9]+' : '120'; // winpty keeps its own 80 columns
 const ok = new RegExp(`TTY true ${cols} ARG it's a test`).test(text) && /GOT hello/.test(text);
 console.log(ok ? 'PTY OK' : `PTY FAILED (exit ${code})`);
+// Visible in the run's public annotations (logs need a token).
+if (process.env.GITHUB_ACTIONS) console.log(`::${ok ? 'notice' : 'error'}::pty ${process.platform} exit=${code} ${pty.file} :: ${JSON.stringify(text.slice(-700)).replace(/%/g, '%25')}`);
 process.exit(ok ? 0 : 1);
