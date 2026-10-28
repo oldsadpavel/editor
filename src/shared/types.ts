@@ -191,6 +191,8 @@ export interface AppState {
   chatMeta: Record<string, ChatMeta>;
   deployTargets: Record<string, DeployTarget>;
   githubToken?: string;
+  /** Opt-in: use the github.com credential git already stores (Credential Manager) for CI status. */
+  githubFromGit?: boolean;
   keyPatterns: string[];
   ui: {
     leftWidth: number;

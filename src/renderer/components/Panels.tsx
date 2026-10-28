@@ -358,6 +358,7 @@ function TargetEditor({ repo }: { repo: string }) {
 export function DeploysPanel() {
   const deploys = useStore((s) => s.deploys);
   const token = useStore((s) => s.app!.githubToken ?? '');
+  const fromGit = useStore((s) => !!s.app!.githubFromGit);
   const [repos, setRepos] = useState<string[]>([]);
   const [settings, setSettings] = useState(false);
   useEffect(() => {
@@ -388,6 +389,10 @@ export function DeploysPanel() {
               onBlur={(e) => saveApp({ githubToken: e.target.value.trim() || undefined })}
             />
           </div>
+          <label className="check-row">
+            <input type="checkbox" checked={fromGit} onChange={(e) => saveApp({ githubFromGit: e.target.checked })} />
+            Если токен не указан — брать учётные данные github.com, которые уже сохранил git (Credential Manager). Используются только для запросов к api.github.com.
+          </label>
         </div>
       )}
       {deploys.map((d) => (

@@ -351,6 +351,7 @@ tr.k-expiring { background: rgba(224, 168, 74, 0.08); }
 .target-row input { flex: 1; }
 
 .test-repo { margin-bottom: 10px; }
+.trepo-head .muted { white-space: nowrap; }
 .trepo-head { display: flex; gap: 8px; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .test-row { display: flex; gap: 8px; align-items: center; padding: 4px; font-size: 12px; border-bottom: 1px solid var(--line-soft); }
 .test-row.fail { background: rgba(247, 84, 100, 0.08); }
@@ -371,3 +372,5 @@ tr.k-expiring { background: rgba(224, 168, 74, 0.08); }
 .modal-foot { display: flex; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 10px; font-size: 12px; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--bg3); border: 1px solid #55585e; padding: 8px 14px; border-radius: 8px; z-index: 300; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); }
 .toast.error { background: var(--err-soft); border-color: var(--err); }
+
+.check-row { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--fg2); }

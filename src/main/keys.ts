@@ -113,11 +113,11 @@ function scanFile(file: string): FoundKey[] {
   const found: FoundKey[] = [];
   const seen = new Set<string>();
   const lines = text.split(/\r?\n/);
-  const add = (line: number, name: string, kind: string, value: string, expiresAt?: number, note?: string) => {
+  const add = (line: number, name: string, kind: string, value: string, expiresAt?: number, note?: string, shown?: string) => {
     const id = createHash('sha1').update(file + '|' + value).digest('hex').slice(0, 16);
     if (seen.has(id)) return;
     seen.add(id);
-    found.push({ id, file, line: line + 1, name, kind, masked: mask(value), status: statusFor(expiresAt), expiresAt, note });
+    found.push({ id, file, line: line + 1, name, kind, masked: shown ?? mask(value), status: statusFor(expiresAt), expiresAt, note });
   };
 
   for (const block of text.matchAll(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g)) {
@@ -131,7 +131,7 @@ function scanFile(file: string): FoundKey[] {
   }
   for (const block of text.matchAll(/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g)) {
     const line = text.slice(0, block.index).split('\n').length - 1;
-    add(line, path.basename(file), 'Приватный ключ', file + block.index, undefined, 'Срока действия нет');
+    add(line, path.basename(file), 'Приватный ключ', file + block.index, undefined, 'Срока действия нет', 'PEM');
   }
 
   lines.forEach((l, i) => {

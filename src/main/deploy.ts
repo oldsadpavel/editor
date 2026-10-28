@@ -126,10 +126,30 @@ async function githubOf(r: RepoState) {
   return r.github;
 }
 
+let gitCredential: Promise<string | null> | null = null;
+
+/** Token git already uses for pushes to github.com (Windows Credential Manager etc.), never prompts. */
+function tokenFromGit(): Promise<string | null> {
+  gitCredential ??= new Promise((resolve) => {
+    const child = execFile(
+      'git',
+      ['credential', 'fill'],
+      { timeout: 10_000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' } },
+      (err, out) => resolve(err ? null : (out.match(/^password=(.+)$/m)?.[1]?.trim() ?? null)),
+    );
+    child.stdin?.end(['protocol=https', 'host=github.com', '', ''].join('\n'));
+  });
+  return gitCredential;
+}
+
+class GithubAccessError extends Error {}
+
 async function gh(pathname: string) {
   const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'claude-editor' };
-  if (stateFile.data.githubToken) headers.Authorization = `Bearer ${stateFile.data.githubToken}`;
+  const token = stateFile.data.githubToken || (stateFile.data.githubFromGit ? await tokenFromGit() : null);
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch('https://api.github.com' + pathname, { headers, signal: AbortSignal.timeout(15_000) });
+  if (res.status === 401 || res.status === 403 || res.status === 404) throw new GithubAccessError(`GitHub ${res.status}`);
   if (!res.ok) throw new Error(`GitHub ${res.status}`);
   return res.json();
 }
@@ -161,7 +181,16 @@ async function checkCi(ev: DeployEvent, r: RepoState) {
       detail: failed.length ? 'Упало: ' + failed.map((c) => c.name).join(', ') : pending.length ? `Выполняется: ${pending.length}` : 'Все проверки пройдены',
     };
   } catch (e: any) {
-    ev.ci = { state: 'pending', detail: `Нет доступа к GitHub API (${e.message}). Укажите токен в настройках деплоя.` };
+    if (e instanceof GithubAccessError) {
+      ev.ci = { state: 'none', detail: `Нет доступа к CI (${e.message}). Укажите GitHub токен в «Деплои → Сайты и доступ».` };
+      problems.report({
+        source: 'deploy',
+        severity: 'warning',
+        title: `Нет доступа к GitHub CI для ${g.owner}/${g.repo}`,
+        detail: 'Статус сборки не виден. Укажите токен с правом чтения checks в «Деплои → Сайты и доступ».',
+        key: `deploy|gh|${g.owner}/${g.repo}`,
+      });
+    } else ev.ci = { state: 'pending', detail: `GitHub API недоступен: ${e.message}` };
   }
 }
 
@@ -207,6 +236,12 @@ async function trackDeploy(ev: DeployEvent, r: RepoState) {
     }
     ev.state = deriveState(ev, !!target?.url);
     ev.updatedAt = Date.now();
+    if (!target?.url && ev.ci?.state === 'none') {
+      // Nothing to watch: no CI and no site. The push itself is the final state.
+      ev.state = 'pushed';
+      publish();
+      return;
+    }
     publish();
     if (ev.state === 'failed') {
       problems.report({
@@ -246,7 +281,6 @@ function deriveState(ev: DeployEvent, hasSite: boolean): DeployEvent['state'] {
     return ev.ci?.state === 'pending' ? 'building' : 'deploying';
   }
   if (ev.ci?.state === 'success') return 'live';
-  if (ev.ci?.state === 'none') return 'live';
   return 'building';
 }
 
