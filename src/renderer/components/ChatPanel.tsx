@@ -187,10 +187,12 @@ export function ChatPanel() {
                   ✎
                 </span>
               )}
-              {/* the project chip only when it adds something: not when the chat is named after its project */}
+              {/* the project chip only when it adds something: not when the chat is named after its project;
+                  first letter only, the full name slides out while the tab is hovered */}
               {app.projects.length > 1 && !c.title.toLowerCase().includes(basename(c.cwd).toLowerCase()) && (
                 <span className="tproj" title={c.cwd}>
-                  {basename(c.cwd)}
+                  {basename(c.cwd).slice(0, 1)}
+                  <span className="tproj-rest">{basename(c.cwd).slice(1)}</span>
                 </span>
               )}
               <span className="x" onClick={(e) => (e.stopPropagation(), closeChat(id))}>
