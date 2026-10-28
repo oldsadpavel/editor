@@ -5,14 +5,18 @@ import { closeChat, openChat, openFile, set, toast, updateDraft, useStore } from
 import { Markdown, basename, formatTime } from '../util';
 
 /** The model's reasoning: folded by default, like Ctrl+O in Claude Code. */
-export function ThinkingBlock({ text }: { text: string }) {
-  const [open, setOpen] = useState(false);
+export function ThinkingBlock({ text, live }: { text: string; live?: boolean }) {
+  // Open while it's the latest thing Claude is doing; folds once an answer or the next thinking follows.
+  // A click overrides it for this block.
+  const [manual, setManual] = useState<boolean | null>(null);
+  const open = manual ?? !!live;
+  const setOpen = (v: boolean) => setManual(v);
   return (
     <div className={`thinking-block ${open ? 'open' : ''}`}>
       <div className="tb-head" onClick={() => setOpen(!open)}>
-        <span className="twisty">{open ? '▾' : '▸'}</span> 💭 Размышления <span className="muted">· {text.length.toLocaleString('ru-RU')} символов</span>
+        <span className="twisty">{open ? '▾' : '▸'}</span> 💭 Размышления <span className="muted">· {live ? 'сейчас' : `${text.length.toLocaleString('ru-RU')} символов`}</span>
       </div>
-      {open && <div className="tb-body">{text}</div>}
+      {open && <div className="tb-body">{text.replace(/​/g, '').trim() || (live ? <span className="muted"><span className="spinner" /> думает…</span> : '')}</div>}
     </div>
   );
 }

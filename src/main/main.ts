@@ -199,6 +199,7 @@ handle('claude:configFiles', (cwd: string, kind: 'memory' | 'settings' | 'agents
 handle('files:search', (cwd: string, q: string) => files.searchFiles(cwd, q));
 handle('claude:plugins', () => claude.pluginList());
 handle('chat:mode', async (id: string, mode: string) => (await ensure(id), claude.setMode(id, mode)));
+handle('chat:options', async (id: string, o: { model?: string; effort?: string; permissionMode?: string }) => (await ensure(id), claude.setOptions(id, o)));
 handle('chat:chrome', async (id: string, on: boolean) => (await ensure(id), claude.setChrome(id, on)));
 handle('chat:status', async (id: string) => (await ensure(id), claude.chatStatus(id)));
 handle('chat:commands', async (id: string) => (await ensure(id), claude.chatCommands(id)));

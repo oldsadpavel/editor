@@ -164,6 +164,8 @@ export interface ChatSnapshot {
   title: string;
   status: ChatStatus;
   turns: Turn[];
+  /** Reasoning being streamed right now (shown open until the answer or the next block comes). */
+  partialThinking?: string;
   /** Streaming text not yet committed into a turn item. */
   partial?: string;
   permissionMode?: string;

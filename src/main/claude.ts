@@ -145,6 +145,7 @@ class ChatSession {
   builder = new TurnBuilder();
   status: ChatStatus = 'idle';
   partial = '';
+  partialThinking = '';
   title = 'Новый чат';
   permissionMode?: string;
   model?: string;
@@ -198,6 +199,7 @@ class ChatSession {
       status: this.status,
       turns: this.builder.turns,
       partial: this.partial || undefined,
+      partialThinking: this.partialThinking || undefined,
       permissionMode: this.permissionMode,
       model: this.model,
       effort: this.effort,
@@ -627,6 +629,16 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       const ev: any = (m as any).event;
       if (ev?.type === 'content_block_delta' && ev.delta?.type === 'text_delta' && !(m as any).parent_tool_use_id) {
         s.partial += ev.delta.text;
+        s.partialThinking = '';
+        s.publish();
+      }
+      // Claude started thinking: an open «thinking…» block right away (the summary itself often comes in one piece at the end)
+      if (ev?.type === 'content_block_start' && ev.content_block?.type === 'thinking' && !(m as any).parent_tool_use_id) {
+        s.partialThinking = '​';
+        s.publish();
+      }
+      if (ev?.type === 'content_block_delta' && ev.delta?.type === 'thinking_delta' && !(m as any).parent_tool_use_id) {
+        s.partialThinking += ev.delta.thinking ?? '';
         s.publish();
       }
       return;
@@ -656,6 +668,7 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
         const turn = split ?? prev;
         if (turn) turn.live = true;
       }
+      s.partialThinking = '';
       const u: any = (m.message as any)?.usage;
       if (u) s.contextTokens = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
       s.builder.ingest({ type: 'assistant', message: m.message, timestamp: now, uuid: m.uuid });
@@ -1308,5 +1321,28 @@ export async function setMode(sessionId: string, mode: string) {
   if (!s) return;
   s.permissionMode = mode;
   await s.q?.setPermissionMode(mode as any).catch(() => {});
+  s.publish(true);
+}
+
+/**
+ * Model, quality and permission mode picked in the composer: saved for the chat right away (not only when a
+ * question is sent) and applied to a running process in place.
+ */
+export async function setOptions(sessionId: string, o: { model?: string; effort?: string; permissionMode?: string }) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  if (o.model !== undefined && (o.model || undefined) !== s.model) {
+    s.model = o.model || undefined;
+    await s.q?.setModel(modelArg(s.model)).catch(() => {});
+  }
+  if (o.effort !== undefined && (o.effort || undefined) !== s.effort) {
+    s.effort = o.effort || undefined;
+    await s.q?.applyFlagSettings({ effortLevel: (s.effort as any) ?? null }).catch(() => {});
+  }
+  if (o.permissionMode !== undefined && o.permissionMode !== (s.permissionMode ?? '')) {
+    s.permissionMode = o.permissionMode || undefined;
+    if (o.permissionMode) await s.q?.setPermissionMode(o.permissionMode as any).catch(() => {});
+  }
+  rememberChatModel(s);
   s.publish(true);
 }

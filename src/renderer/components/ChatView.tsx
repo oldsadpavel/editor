@@ -276,6 +276,7 @@ function TurnBody({
   turn,
   cwd,
   partial,
+  partialThinking,
   sessionId,
   approvals,
   tab,
@@ -284,6 +285,7 @@ function TurnBody({
   turn: Turn;
   cwd: string;
   partial?: string;
+  partialThinking?: string;
   sessionId: string;
   approvals: ApprovalEntry[];
   tab: BodyTab;
@@ -335,7 +337,7 @@ function TurnBody({
           {turn.shell && <ShellCard run={turn.shell} />}
           {turn.todos?.length ? <TodoCard todos={turn.todos} /> : null}
           {blocks.map((b, i) =>
-            b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : b.kind === 'thinking' ? <ThinkingBlock key={i} text={b.text} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />,
+            b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : b.kind === 'thinking' ? <ThinkingBlock key={i} text={b.text} live={!!turn.live && i === blocks.length - 1 && !partial && !partialThinking} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />,
           )}
           {turn.compacts?.length ? <CompactMarks marks={turn.compacts} /> : null}
           {turn.fallbacks?.map((f, i) => (
@@ -343,6 +345,7 @@ function TurnBody({
               🛡 {f.from ? modelName(f.from) : 'Модель'}: защитный фильтр остановил ответ{f.category ? ` [${f.category}]` : ''} → продолжил {f.to ? modelName(f.to) : 'другой моделью'} · история чата перечитана заново
             </div>
           ))}
+          {partialThinking && !partial && <ThinkingBlock key="live-thinking" text={partialThinking} live />}
           {partial && <Markdown text={partial} cwd={cwd} />}
           {turn.live && !partial && (
             <div className="thinking">
@@ -505,6 +508,7 @@ function TurnRow({
   open,
   onToggle,
   partial,
+  partialThinking,
   highlight,
   sessionId,
   approvals,
@@ -514,6 +518,7 @@ function TurnRow({
   open: boolean;
   onToggle: () => void;
   partial?: string;
+  partialThinking?: string;
   highlight?: boolean;
   sessionId: string;
   approvals: ApprovalEntry[];
@@ -589,7 +594,7 @@ function TurnRow({
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
         </span>
       </div>
-      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} sessionId={sessionId} approvals={approvals} tab={bodyTab} setTab={setBodyTab} />}
+      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} partialThinking={partialThinking} sessionId={sessionId} approvals={approvals} tab={bodyTab} setTab={setBodyTab} />}
     </div>
   );
 }
@@ -1013,21 +1018,21 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         }}
       />
       <div className="composer-bar">
-        <select value={model} onChange={(e) => setModel(e.target.value)} title="Какая модель отвечает (меняется на лету, история чата сохраняется)">
+        <select value={model} onChange={(e) => (setModel(e.target.value), void call('chat:options', chat.sessionId, { model: e.target.value }))} title="Какая модель отвечает (меняется на лету, история чата сохраняется)">
           {MODELS.map((m) => (
             <option key={m.id} value={m.id} title={m.label}>
               {m.short}
             </option>
           ))}
         </select>
-        <select value={effort} onChange={(e) => setEffort(e.target.value)} title="Качество ответа: сколько модель думает перед ответом">
+        <select value={effort} onChange={(e) => (setEffort(e.target.value), void call('chat:options', chat.sessionId, { effort: e.target.value }))} title="Качество ответа: сколько модель думает перед ответом">
           {EFFORTS.map((m) => (
             <option key={m.id} value={m.id} title={m.label}>
               {m.short}
             </option>
           ))}
         </select>
-        <select value={mode} onChange={(e) => setMode(e.target.value)} title="Режим разрешений">
+        <select value={mode} onChange={(e) => (setMode(e.target.value), void call('chat:options', chat.sessionId, { permissionMode: e.target.value }))} title="Режим разрешений">
           {MODES.map((m) => (
             <option key={m.id} value={m.id} title={m.label}>
               {m.short}
@@ -1320,6 +1325,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
                 open={expanded.has(t.id) || (!!needle && turns.length <= 3)}
                 onToggle={() => toggle(t.id)}
                 partial={t === last ? chat.partial : undefined}
+                partialThinking={t === last ? chat.partialThinking : undefined}
                 highlight={focus?.turnId === t.id}
                 approvals={approvalsByTurn.get(t.id) ?? NO_APPROVALS}
               />
