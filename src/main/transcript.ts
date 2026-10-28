@@ -192,9 +192,10 @@ export class TurnBuilder {
     const content = entry.message?.content;
     if (entry.isMeta || entry.isCompactSummary) return;
     if (typeof content === 'string') {
-      const text = cleanPrompt(content);
+      // A plain string too can carry the attachment list (prompts typed into an interactive Claude, e.g. /RC).
+      const { prompt: text, attachments } = splitAttachments(cleanPrompt(content), []);
       if (text.startsWith('[Request interrupted')) this.closeTurn();
-      if (!isNoisePrompt(text)) this.startTurn(text, at, entry.uuid ?? String(at));
+      if (!isNoisePrompt(text) || attachments.length) this.startTurn(text, at, entry.uuid ?? String(at), attachments);
       return;
     }
     if (!Array.isArray(content)) return;

@@ -10,12 +10,20 @@ import { emit } from './bus';
 import { IMAGE_EXT } from './files';
 import * as problems from './problems';
 import * as remote from './remote';
-import { stateFile } from './store';
+import { dataDir, stateFile } from './store';
 import { ATTACHMENTS_HEADER, TurnBuilder, findTranscript, loadTranscript } from './transcript';
 import * as usage from './usage';
 import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
 
 /** Prefers the user's installed Claude Code so login, settings and version match the terminal. */
+/**
+ * Model name as Claude Code should get it. With the bare alias `haiku` Claude Code reports Haiku in init but runs the
+ * main loop on Sonnet (checked 28.10.2026, Claude Code via SDK and -p); the full id works. Other aliases are fine.
+ */
+export function modelArg(m: string | undefined): string | undefined {
+  return m === 'haiku' ? 'claude-haiku-5-5' : m;
+}
+
 export function claudeExecutable(): string | undefined {
   const exe = process.platform === 'win32' ? 'claude.exe' : 'claude';
   // Apps started from Finder/Dock don't get the shell PATH, so the usual install locations are checked explicitly.
@@ -353,11 +361,11 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   const attachments = opts.attachments ?? [];
   if (s.remote) {
     if (!s.remoteProc || s.remoteProc.exited !== undefined) throw new Error('Удалённый процесс Claude не запущен — выключите и снова включите /RC');
-    if (attachments.some((p) => IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()))) throw new Error('В удалённом режиме картинки не прикрепить (только пути к файлам)');
+    // Interactive Claude has no image blocks over stdin: it gets the paths and opens them with Read (images too).
     const body = attachments.length ? [text, '', ATTACHMENTS_HEADER, ...attachments.map((p) => `- ${p}`)].join('\n') : text;
     remote.send(s.remoteProc, body);
     s.remoteSent = { text: text.trim(), at: Date.now() };
-    const turn = s.builder.startTurn(text, Date.now(), randomUUID(), attachments.map((p) => ({ kind: 'file' as const, path: p })));
+    const turn = s.builder.startTurn(text, Date.now(), randomUUID(), attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? ('image' as const) : ('file' as const), path: p })));
     turn.live = true;
     s.setStatus('running');
     return;
@@ -390,7 +398,7 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   else {
     // A running session switches model, effort and permission mode in place; history and context stay.
     if (opts.permissionMode) await s.q.setPermissionMode(opts.permissionMode as any).catch(() => {});
-    if (modelChanged) await s.q.setModel(s.model).catch(() => {});
+    if (modelChanged) await s.q.setModel(modelArg(s.model)).catch(() => {});
     if (effortChanged) await s.q.applyFlagSettings({ effortLevel: (s.effort as any) ?? null }).catch(() => {});
   }
   s.input!.push({
@@ -416,7 +424,7 @@ function start(s: ChatSession) {
       mcpServers: { editor: editorMcp(s.id, s.cwd) },
       allowedTools: ['mcp__editor'],
       ...(s.permissionMode ? { permissionMode: s.permissionMode as any } : {}),
-      ...(s.model ? { model: s.model } : {}),
+      ...(s.model ? { model: modelArg(s.model) } : {}),
       ...(s.effort ? { effort: s.effort } : {}),
       ...(s.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       canUseTool: (toolName: string, input: Record<string, unknown>, opts: any) => askPermission(s, toolName, input, opts),
@@ -742,7 +750,9 @@ export function setRemote(sessionId: string, on: boolean) {
       cwd: s.cwd,
       name,
       permissionMode: s.autoApprove ? 'bypassPermissions' : s.permissionMode,
-      model: s.model,
+      model: modelArg(s.model),
+      // pasted screenshots live in the editor's attachments folder, outside the project: readable without asking
+      addDirs: [path.join(dataDir(), 'attachments')],
       transcript: findTranscript(s.id),
     });
     s.remote = true;
@@ -794,7 +804,12 @@ function watchTranscript(s: ChatSession) {
       // Typed here a moment ago but Claude hasn't written it yet: keep showing our question as running.
       if (s.remoteSent) {
         const seen = !!last0 && (last0.prompt.trim() === s.remoteSent.text || !!last0.more?.some((m) => m.prompt.trim() === s.remoteSent!.text));
-        if (!seen && Date.now() - s.remoteSent.at < 60_000) return;
+        if (!seen && Date.now() - s.remoteSent.at < 60_000) {
+          // look again shortly even if the file stays quiet
+          if (timer) clearTimeout(timer);
+          timer = setTimeout(() => void reload(), 3000);
+          return;
+        }
         s.remoteSent = null;
       }
       const changed = shape(builder) !== shape(s.builder);
