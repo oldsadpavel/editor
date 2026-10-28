@@ -12,6 +12,7 @@ import * as keys from './keys';
 import * as ping from './ping';
 import * as problems from './problems';
 import { setupStatus } from './setup';
+import * as settingsIo from './settings-io';
 import * as updates from './updates';
 import * as usage from './usage';
 import { flushAll, stateFile } from './store';
@@ -190,6 +191,14 @@ handle('deploys:setTarget', async (repo: string, t: DeployTarget | null) => {
   await deploy.watchPath(root);
   return root;
 });
+handle('settings:export', () => settingsIo.exportSettings(win));
+handle('settings:import', async () => {
+  const file = await settingsIo.importSettings(win);
+  // Projects, groups and layout change at once: simplest is a fresh UI on the new state.
+  if (file) setTimeout(() => win?.webContents.reload(), 300);
+  return file;
+});
+handle('deploys:probe', (repo: string) => deploy.probeTarget(repo));
 handle('tests:run', (repo: string) => deploy.runTests(repo));
 handle('tests:list', () => deploy.listTests());
 

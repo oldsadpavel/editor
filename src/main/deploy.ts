@@ -328,6 +328,39 @@ async function runOne(repo: string, t: SmokeTest, deployId?: string): Promise<Te
   }
 }
 
+export interface ProbeResult {
+  url: string;
+  status?: number;
+  /** Commit hashes found on the page (7–40 hex chars that look like a git sha). */
+  found: string[];
+  headSha?: string;
+  /** Whether the page shows the local HEAD (or the pushed remote branch). */
+  matchesHead: boolean;
+  snippet?: string;
+  error?: string;
+}
+
+/**
+ * What the deploy target shows right now, compared with the repository's HEAD: answers «does the site already
+ * run the code I have locally / just pushed?» without waiting for a push.
+ */
+export async function probeTarget(repo: string): Promise<ProbeResult> {
+  const root = (await gitRoot(repo)) ?? repo;
+  const target = stateFile.data.deployTargets[root.toLowerCase()];
+  if (!target?.url) throw new Error('Для репозитория не указан адрес проверки деплоя');
+  const head = await git(root, ['rev-parse', 'HEAD']).catch(() => undefined);
+  const upstream = await git(root, ['rev-parse', '@{u}']).catch(() => undefined);
+  try {
+    const res = await fetch(target.url, { cache: 'no-store', redirect: 'follow', signal: AbortSignal.timeout(20_000), headers: { 'Cache-Control': 'no-cache' } });
+    const body = await res.text();
+    const found = [...new Set(body.match(/\b[0-9a-f]{7,40}\b/g) ?? [])].filter((h) => /[a-f]/.test(h) && /\d/.test(h)).slice(0, 5);
+    const matches = (sha?: string) => !!sha && (body.includes(sha) || body.includes(sha.slice(0, 7)));
+    return { url: target.url, status: res.status, found, headSha: head, matchesHead: matches(head) || matches(upstream), snippet: body.slice(0, 300) };
+  } catch (e: any) {
+    return { url: target.url, found: [], headSha: head, matchesHead: false, error: e.message };
+  }
+}
+
 export function setTarget(repo: string, target: DeployTarget | null) {
   const key = repo.toLowerCase();
   if (target) stateFile.data.deployTargets[key] = target;

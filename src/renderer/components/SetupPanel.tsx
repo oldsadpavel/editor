@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DeployTarget, SetupAction, SetupItem } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, get, refreshSetup, saveApp, set, toast, togglePanel, useStore } from '../store';
+import { addProjects, get, refreshSetup, saveApp, set, startAutoDeploySetup, toast, togglePanel, useStore } from '../store';
 import { MODES } from './ChatView';
 import { PanelFrame } from './Panels';
 
@@ -105,7 +105,52 @@ function ActionControl({ a }: { a: SetupAction }) {
           {a.label}
         </button>
       );
+    case 'autoDeploySetup':
+      return (
+        <div className="setup-form">
+          <button
+            className="btn primary small"
+            title="Откроется новый чат в проекте с готовым заданием: Claude добавит маркер версии, привяжет его и проверит первый деплой"
+            onClick={() => startAutoDeploySetup(a.project, a.site)}
+          >
+            🤖 Автонастроить проверку деплоя
+          </button>
+        </div>
+      );
+    case 'probeDeploy':
+      return <ProbeButton repo={a.repo} />;
   }
+}
+
+function ProbeButton({ repo }: { repo: string }) {
+  const [res, setRes] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="setup-form">
+      <button
+        className="btn small"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const r = await call<{ status?: number; found: string[]; headSha?: string; matchesHead: boolean; error?: string }>('deploys:probe', repo);
+            setRes(
+              r.error
+                ? `Ошибка: ${r.error}`
+                : `HTTP ${r.status} · на сайте: ${r.found.map((h) => h.slice(0, 7)).join(', ') || 'хэш не найден'} · HEAD ${r.headSha?.slice(0, 7) ?? '?'} · ${r.matchesHead ? '✓ совпадает' : '✕ не совпадает'}`,
+            );
+          } catch (e: any) {
+            setRes(e.message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? 'Проверяю…' : 'Проверить сейчас'}
+      </button>
+      {res && <span className={res.includes('✓') ? 'ok small' : 'bad small'}>{res}</span>}
+    </div>
+  );
 }
 
 function Row({ item, showGroup }: { item: SetupItem; showGroup?: boolean }) {
@@ -122,7 +167,7 @@ function Row({ item, showGroup }: { item: SetupItem; showGroup?: boolean }) {
           {showGroup && <span className="src">{item.group}</span>} {item.title}
         </div>
         {item.detail && <div className="setup-detail">{item.detail}</div>}
-        {item.action && (item.level === 'todo' || item.action.kind === 'permissionMode' || item.action.kind === 'openPanel' || item.action.kind === 'projectSettings') && <ActionControl a={item.action} />}
+        {item.action && (item.level === 'todo' || item.action.kind === 'permissionMode' || item.action.kind === 'openPanel' || item.action.kind === 'projectSettings' || item.action.kind === 'probeDeploy') && <ActionControl a={item.action} />}
       </div>
       {item.dismissable && (item.level === 'todo' || dismissed) && (
         <button className="btn small" onClick={toggleDismiss} title={dismissed ? 'Вернуть в список дел' : 'Скрыть из списка дел'}>
@@ -143,9 +188,32 @@ export function SetupPanel() {
       id="setup"
       title={todo.length ? `Настроить сейчас: ${todo.length}` : 'Всё настроено'}
       actions={
-        <button className="btn small" onClick={() => refreshSetup()}>
-          ⟳ Проверить
-        </button>
+        <>
+          <button
+            className="btn small"
+            title="Сохранить настройки (проекты, группы, домены, деплой, тесты, раскладку) в файл. Токены и черновики не попадают."
+            onClick={async () => {
+              const f = await call<string | null>('settings:export').catch((e) => (toast(e.message, 'error'), null));
+              if (f) toast(`Настройки сохранены: ${f}`);
+            }}
+          >
+            ⇪ Экспорт
+          </button>
+          <button
+            className="btn small"
+            title="Загрузить настройки из файла экспорта (заменит проекты, группы, домены, раскладку)"
+            onClick={async () => {
+              if (!confirm('Заменить текущие настройки настройками из файла? Токены, черновики и отметки прочитанного останутся.')) return;
+              const f = await call<string | null>('settings:import').catch((e) => (toast(e.message, 'error'), null));
+              if (f) toast(`Настройки загружены из ${f}`);
+            }}
+          >
+            ⇩ Импорт
+          </button>
+          <button className="btn small" onClick={() => refreshSetup()}>
+            ⟳ Проверить
+          </button>
+        </>
       }
     >
       {todo.length > 0 && (

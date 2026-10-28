@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DeployEvent, DeployTarget, PanelId, Problem, ProblemSource, SmokeTest } from '../../shared/types';
 import { call } from '../api';
-import { get, openChat, openFile, saveApp, setUi, toast, togglePanel, useStore, type Store } from '../store';
+import { get, openChat, openFile, saveApp, setToolDock, setUi, toast, togglePanel, useStore, type Store } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { CachePanel } from './CachePanel';
 import { SetupPanel } from './SetupPanel';
@@ -32,6 +32,7 @@ function ackPanel(panel: PanelId) {
 export function PanelFrame({ id, title, children, actions }: { id: PanelId; title: string; children: React.ReactNode; actions?: React.ReactNode }) {
   const alerts = useStore((s) => panelAlerts(s, id));
   const max = useStore((s) => !!s.app!.ui.bottomMax);
+  const docked = useStore((s) => s.app!.ui.toolDock === 'right');
   const toggleMax = () => setUi({ bottomMax: !max });
   return (
     <div className={`panel bottom-panel ${alerts ? 'alerting' : ''}`}>
@@ -45,8 +46,17 @@ export function PanelFrame({ id, title, children, actions }: { id: PanelId; titl
         <div className="grow" />
         {actions}
         <Help id={id} />
-        <button className="icon-btn" title={max ? 'Вернуть обычный размер' : 'Развернуть на всю центральную часть'} onClick={toggleMax}>
-          {max ? '⤡' : '⤢'}
+        {!docked && (
+          <button className="icon-btn" title={max ? 'Вернуть обычный размер' : 'Развернуть на всю центральную часть'} onClick={toggleMax}>
+            {max ? '⤡' : '⤢'}
+          </button>
+        )}
+        <button
+          className="icon-btn"
+          title={docked ? 'Вернуть блоки вниз' : 'Перенести блоки в правую колонку (там открыт один блок за раз)'}
+          onClick={() => setToolDock(docked ? 'bottom' : 'right')}
+        >
+          {docked ? '⇩' : '⇥'}
         </button>
         <button className="icon-btn" title="Скрыть" onClick={() => togglePanel(id, false)}>
           ×

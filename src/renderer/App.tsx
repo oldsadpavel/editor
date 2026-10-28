@@ -297,13 +297,38 @@ function Workspace() {
           </Fragment>
         );
       })}
+      <ToolDock />
     </div>
+  );
+}
+
+/**
+ * Tool blocks (Настройка, Ошибки, Пинг…) docked as a narrow column on the far right. Only one is open there at a time
+ * (togglePanel closes the others), so it gets the whole height.
+ */
+function ToolDock() {
+  const ui = useStore((s) => s.app!.ui);
+  if (ui.toolDock !== 'right') return null;
+  const open = BOTTOM_PANELS.filter((p) => ui.visible[p.id]);
+  if (!open.length) return null;
+  const width = ui.toolWidth ?? 380;
+  return (
+    <>
+      <Splitter dir="x" onDrag={(d) => setUi({ toolWidth: clamp(width - d, 260, window.innerWidth - 500) })} />
+      <div className="col tool-dock" style={{ width }}>
+        {open.map(({ id, C }) => (
+          <div key={id} className="bottom-slot" style={{ flex: 1 }}>
+            <C />
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
 function CenterColumn({ Block }: { Block: () => React.ReactElement }) {
   const ui = useStore((s) => s.app!.ui);
-  const bottom = BOTTOM_PANELS.filter((p) => ui.visible[p.id]);
+  const bottom = ui.toolDock === 'right' ? [] : BOTTOM_PANELS.filter((p) => ui.visible[p.id]);
   const max = !!ui.bottomMax && bottom.length > 0;
   const area = useRef<HTMLDivElement>(null);
   const flex = ui.bottomFlex ?? {};

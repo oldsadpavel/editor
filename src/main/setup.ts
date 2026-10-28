@@ -110,7 +110,10 @@ export async function setupStatus(): Promise<SetupItem[]> {
     }
 
     const target = st.deployTargets[r.root.toLowerCase()];
-    if (!target?.url)
+    // The project's own production site (deploy target, else its first https domain) is what Claude can wire up.
+    const project = st.projects.find((p) => p.path.toLowerCase() === r.root.toLowerCase() || p.path.toLowerCase().startsWith(r.root.toLowerCase() + path.sep));
+    const site = target?.url || project?.domains?.find((d) => /^https?:\/\//.test(d.target))?.target;
+    if (!target?.url && !site)
       items.push({
         id: `site:${r.root}`,
         level: 'todo',
@@ -120,7 +123,17 @@ export async function setupStatus(): Promise<SetupItem[]> {
         action: { kind: 'deployTarget', repo: r.root },
         dismissable: true,
       });
-    else items.push({ id: `site:${r.root}`, level: 'ok', group, title: `Сайт: ${target.url}`, detail: target.mode === 'sha' ? 'ждём хэш коммита на странице' : 'ждём изменение страницы' });
+    else if (target?.mode !== 'sha')
+      items.push({
+        id: `autodeploy:${r.root}`,
+        level: 'todo',
+        group,
+        title: 'Проверка деплоя не автоматическая',
+        detail: `${target?.url ? `Сейчас: ${target.url} — «изменение страницы», это неточно.` : `Сайт: ${site}.`} Claude может сам добавить в проект маркер версии (адрес, который отдаёт хэш коммита), привязать его и проверить первый деплой.`,
+        action: { kind: 'autoDeploySetup', repo: r.root, site: site!, project: project?.path ?? r.root },
+        dismissable: true,
+      });
+    else items.push({ id: `site:${r.root}`, level: 'ok', group, title: `Проверка деплоя: ${target.url}`, detail: 'ждём хэш запушенного коммита — проверка автоматическая', action: { kind: 'probeDeploy', repo: r.root } });
 
     if (target?.url && !target.tests?.length)
       items.push({

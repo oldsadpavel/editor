@@ -165,9 +165,28 @@ export function setUi(patch: Partial<AppState['ui']>) {
   void saveApp({ ui: { ...state.app!.ui, ...patch } });
 }
 
+/** Tool blocks that live at the bottom or in the right dock. */
+export const TOOL_PANELS: PanelId[] = ['setup', 'problems', 'ping', 'deploys', 'tests', 'keys', 'cache'];
+
 export function togglePanel(id: PanelId, value?: boolean) {
-  const visible = { ...state.app!.ui.visible, [id]: value ?? !state.app!.ui.visible[id] };
+  const ui = state.app!.ui;
+  const on = value ?? !ui.visible[id];
+  const visible = { ...ui.visible, [id]: on };
+  // The right dock is narrow: opening a tool block there closes the others.
+  if (on && ui.toolDock === 'right' && TOOL_PANELS.includes(id)) for (const t of TOOL_PANELS) if (t !== id) visible[t] = false;
   setUi({ visible });
+}
+
+/** Moves all tool blocks to the bottom of the center column or to a narrow column on the right. */
+export function setToolDock(dock: 'bottom' | 'right') {
+  const ui = state.app!.ui;
+  const visible = { ...ui.visible };
+  if (dock === 'right') {
+    // Keep just one open (the first visible), the dock shows one at a time.
+    const first = TOOL_PANELS.find((t) => visible[t]);
+    for (const t of TOOL_PANELS) visible[t] = t === first;
+  }
+  setUi({ toolDock: dock, visible, bottomMax: false });
 }
 
 export async function addProjects() {
@@ -369,6 +388,40 @@ export async function newChat(cwd: string) {
   if (!snap) return;
   set((s) => ({ chats: { ...s.chats, [snap.sessionId]: snap } }));
   await saveApp({ openChats: [...state.app!.openChats, snap.sessionId], activeChat: snap.sessionId });
+  return snap.sessionId;
+}
+
+/** The task Claude gets for wiring up an automatic deploy check (version marker on the site). */
+function autoDeployPrompt(site: string) {
+  const base = site.replace(/\/+$/, '');
+  return [
+    `Настрой автоматическую проверку деплоя этого проекта. Продакшен-сайт: ${base}`,
+    '',
+    'Цель: после каждого git push редактор должен сам понять, что на сайте уже работает новый коммит.',
+    'Для этого сайт должен отдавать хэш коммита, из которого он собран (маркер версии).',
+    '',
+    '1. Разберись, на чём проект и как он деплоится (CI, Coolify, Docker, nginx, хостинг…).',
+    `2. Сделай так, чтобы по адресу ${base}/version.json отдавался JSON {"commit":"<полный sha>","builtAt":"<ISO-время>"}.`,
+    '   Хэш должен попадать на этапе сборки или деплоя (git rev-parse HEAD в CI, build-arg Docker, файл, который пишет скрипт деплоя),',
+    '   а не вычисляться на сервере из папки, где может не быть .git. Если /version.json невозможен (например, роутинг SPA) — выбери',
+    '   другой адрес или метатег на главной и объясни почему.',
+    '3. Привяжи адрес: mcp__editor__set_deploy_target(url=<адрес маркера>, mode="sha").',
+    `4. Добавь smoke-тест главной страницы: mcp__editor__add_smoke_test(name="Главная", url="${base}/", expectStatus=200).`,
+    '5. Закоммить и запушь. Затем проверяй mcp__editor__check_deploy_target, пока адрес не отдаст новый хэш (деплой виден и во вкладке',
+    '   «Деплои» редактора), и коротко сообщи результат.',
+    '6. Если нужно моё действие (секреты, доступ к серверу, переменные в панели хостинга) — сообщи через mcp__editor__report_problem и опиши шаги.',
+  ].join('\n');
+}
+
+/** Opens a new chat in the project and hands Claude the deploy-check setup task. */
+export async function startAutoDeploySetup(project: string, site: string) {
+  if (!state.app!.ui.visible.chat) togglePanel('chat', true);
+  await saveApp({ chatProject: project });
+  const id = await newChat(project);
+  if (!id) return;
+  await renameChat(id, 'Автонастройка проверки деплоя');
+  await sendPrompt(id, autoDeployPrompt(site), {});
+  toast('Claude настраивает проверку деплоя — смотрите новый чат');
 }
 
 export async function closeChat(id: string) {

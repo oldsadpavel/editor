@@ -327,6 +327,9 @@ export interface AppState {
     bottomFlex?: Record<string, number>;
     /** Bottom blocks take the whole center column (the center block is collapsed). */
     bottomMax?: boolean;
+    /** Where the tool blocks (Настройка, Ошибки, Пинг…) live; on the right only one is open at a time. */
+    toolDock?: 'bottom' | 'right';
+    toolWidth?: number;
     /** Sort order of the project tree: per folder, with a default for the rest. */
     treeSort?: Record<string, TreeSort>;
     treeSortDefault?: TreeSort;
@@ -408,6 +411,8 @@ export type SetupAction =
   | { kind: 'githubAccess'; repo: string; github: string }
   | { kind: 'deployTarget'; repo: string }
   | { kind: 'addTest'; repo: string }
+  | { kind: 'autoDeploySetup'; repo: string; site: string; project: string }
+  | { kind: 'probeDeploy'; repo: string }
   | { kind: 'permissionMode'; current?: string; fromClaude?: string }
   | { kind: 'openPanel'; panel: PanelId; label: string }
   | { kind: 'projectSettings'; project: string };

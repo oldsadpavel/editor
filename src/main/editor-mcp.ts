@@ -23,8 +23,12 @@ export const EDITOR_INSTRUCTIONS = `
   (сломанная сборка, упавший сервис, нехватка доступа, ручное действие для пользователя). Не дублируй туда мелочи.
   Когда проблема устранена — \`mcp__editor__resolve_problem\`.
 - **Деплои** — пуши отслеживаются автоматически (по смене remote-ref после \`git push\`).
-  Если репозиторий связан с сайтом, укажи его через \`mcp__editor__set_deploy_target\` (url сайта; mode="sha",
-  если сайт отдаёт хэш коммита, иначе "change"). После пуша можешь проверить статус через \`mcp__editor__get_editor_state\`.
+  Надёжная проверка — **маркер версии**: сайт отдаёт хэш коммита, из которого собран (по соглашению
+  \`https://<домен>/version.json\` → \`{"commit":"<полный sha>","builtAt":"<ISO>"}\`). Хэш попадает туда при сборке/деплое
+  (git rev-parse HEAD в CI, build-arg, файл, записанный скриптом деплоя), а не из рабочей папки сервера.
+  Привязка — \`mcp__editor__set_deploy_target\` (url адреса версии, mode="sha"; без маркера — url сайта и mode="change").
+  Что сайт отдаёт сейчас и совпадает ли с HEAD — \`mcp__editor__check_deploy_target\`.
+  После пуша статус — \`mcp__editor__get_editor_state\`.
 - **Тесты** — smoke-тесты после деплоя: \`mcp__editor__add_smoke_test\` (url, ожидаемый статус, текст в ответе, лимит времени).
   Запуск вручную — \`mcp__editor__run_tests\`. Падение теста попадает в «Ошибки».
 - **Ключи** — редактор ищет ключи по шаблонам путей. Если хранишь ключ в новом месте, добавь шаблон
@@ -103,6 +107,19 @@ export function editorMcp(sessionId: string, cwd: string) {
           t.tests = [...t.tests.filter((x) => x.name !== a.name), { id: randomUUID(), name: a.name, url: a.url, expectStatus: a.expectStatus, contains: a.contains, maxMs: a.maxMs }];
           deploy.setTarget(root, t);
           return ok(`Тест «${a.name}» добавлен (${t.tests.length} всего)`);
+        },
+      ),
+      tool(
+        'check_deploy_target',
+        'Что сейчас отдаёт адрес проверки деплоя репозитория и совпадает ли найденный хэш коммита с локальным HEAD (или запушенной веткой).',
+        { repo: z.string().optional().describe('Путь к репозиторию; по умолчанию текущий проект') },
+        async (a) => {
+          const r = await deploy.probeTarget(a.repo ?? cwd);
+          return ok(
+            r.error
+              ? `${r.url}: ошибка ${r.error}. HEAD ${r.headSha?.slice(0, 7) ?? '?'}`
+              : `${r.url}: HTTP ${r.status}. Хэши на странице: ${r.found.join(', ') || 'нет'}. HEAD ${r.headSha?.slice(0, 7) ?? '?'}. ${r.matchesHead ? 'СОВПАДАЕТ — сайт работает на этом коммите' : 'НЕ совпадает'}.\nНачало ответа: ${r.snippet}`,
+          );
         },
       ),
       tool(

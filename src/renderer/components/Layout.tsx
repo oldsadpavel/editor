@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ColumnId, MainBlock } from '../../shared/types';
-import { LAYOUT_PRESETS, get, moveBlock, setUi, useStore } from '../store';
+import { LAYOUT_PRESETS, get, moveBlock, setToolDock, setUi, useStore } from '../store';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 
 const COLUMN_LABEL: Record<ColumnId, string> = { left: 'слева', center: 'в центр (самое большое место)', right: 'справа' };
@@ -8,7 +8,13 @@ export const BLOCK_LABEL: Record<MainBlock, string> = { tree: 'Проекты', 
 const DRAG_TYPE = 'application/x-editor-block';
 
 export function presetItems(): MenuItem[] {
-  return LAYOUT_PRESETS.map((p) => ({ label: `Раскладка: ${p.label}`, action: () => setUi({ layout: p.layout }) }));
+  const docked = get().app!.ui.toolDock === 'right';
+  return [
+    ...LAYOUT_PRESETS.map((p) => ({ label: `Раскладка: ${p.label}`, action: () => setUi({ layout: p.layout }) })),
+    docked
+      ? { label: 'Блоки (Ошибки, Настройка…) — вниз', action: () => setToolDock('bottom') }
+      : { label: 'Блоки (Ошибки, Настройка…) — в правую колонку', action: () => setToolDock('right') },
+  ];
 }
 
 /**
