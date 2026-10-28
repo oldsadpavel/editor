@@ -137,7 +137,7 @@ export interface DeployEvent {
   updatedAt: number;
 }
 
-export type ProblemSource = 'chat' | 'deploy' | 'keys' | 'auth' | 'fs' | 'app' | 'tests';
+export type ProblemSource = 'chat' | 'deploy' | 'keys' | 'auth' | 'fs' | 'app' | 'tests' | 'cache';
 
 export interface Problem {
   id: string;
@@ -194,6 +194,9 @@ export interface AppState {
   /** Opt-in: use the github.com credential git already stores (Credential Manager) for CI status. */
   githubFromGit?: boolean;
   keyPatterns: string[];
+  /** Files older than this many days count as cleanable AI cache (chat transcripts use cacheChatDays). */
+  cacheDays?: number;
+  cacheChatDays?: number;
   ui: {
     leftWidth: number;
     rightWidth: number;
@@ -203,7 +206,7 @@ export interface AppState {
   };
 }
 
-export type PanelId = 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests';
+export type PanelId = 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests' | 'cache';
 
 export interface DirEntry{ name: string; path: string; dir: boolean }
 
@@ -214,6 +217,37 @@ export type MainEvent =
   | { type: 'deploys'; deploys: DeployEvent[] }
   | { type: 'keys'; result: KeyScanResult }
   | { type: 'tests'; results: TestResult[] }
+  | { type: 'cache'; report: CacheReport }
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'sessionsChanged'; cwd: string };
+
+export interface CacheCategory {
+  id: string;
+  title: string;
+  paths: string[];
+  /** safe — only regenerable/temporary data; caution — deleting loses history (chats, rewind). */
+  safety: 'safe' | 'caution';
+  note: string;
+  files: number;
+  bytes: number;
+  cleanableFiles: number;
+  cleanableBytes: number;
+  /** Age threshold in days used for "cleanable"; 0 = rule is not age based (e.g. old versions). */
+  days: number;
+}
+
+export interface CacheFile {
+  path: string;
+  bytes: number;
+  mtime: number;
+  category: string;
+  cleanable: boolean;
+}
+
+export interface CacheReport {
+  scannedAt: number;
+  disk?: { path: string; free: number; total: number };
+  categories: CacheCategory[];
+  biggest: CacheFile[];
+}

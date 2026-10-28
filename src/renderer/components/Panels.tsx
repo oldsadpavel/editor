@@ -3,12 +3,14 @@ import type { DeployEvent, DeployTarget, PanelId, Problem, ProblemSource, SmokeT
 import { call } from '../api';
 import { get, openChat, openFile, saveApp, toast, togglePanel, useStore, type Store } from '../store';
 import { Help, basename, formatTime } from '../util';
+import { CachePanel } from './CachePanel';
 
 const PANEL_SOURCES: Record<string, ProblemSource[] | null> = {
   problems: null,
   keys: ['keys'],
   deploys: ['deploy'],
   tests: ['tests'],
+  cache: ['cache'],
 };
 
 /** Unread problems that belong to a panel; drives header/toolbar highlighting. */
@@ -23,7 +25,7 @@ function ackPanel(panel: PanelId) {
   for (const p of get().problems) if (!p.acknowledged && (!sources || sources.includes(p.source))) void call('problems:ack', p.id);
 }
 
-function PanelFrame({ id, title, children, actions }: { id: PanelId; title: string; children: React.ReactNode; actions?: React.ReactNode }) {
+export function PanelFrame({ id, title, children, actions }: { id: PanelId; title: string; children: React.ReactNode; actions?: React.ReactNode }) {
   const alerts = useStore((s) => panelAlerts(s, id));
   return (
     <div className={`panel bottom-panel ${alerts ? 'alerting' : ''}`}>
@@ -56,6 +58,7 @@ const SOURCE_LABEL: Record<ProblemSource, string> = {
   fs: 'Файлы',
   app: 'Редактор',
   tests: 'Тесты',
+  cache: 'Кеш',
 };
 
 function ProblemRow({ p }: { p: Problem }) {
@@ -513,5 +516,6 @@ export const BOTTOM_PANELS: { id: PanelId; C: () => React.ReactElement }[] = [
   { id: 'deploys', C: DeploysPanel },
   { id: 'tests', C: TestsPanel },
   { id: 'keys', C: KeysPanel },
+  { id: 'cache', C: CachePanel },
 ];
 

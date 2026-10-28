@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer } from '../shared/types';
 import { setSink } from './bus';
+import * as cache from './cache';
 import * as claude from './claude';
 import * as deploy from './deploy';
 import * as keys from './keys';
@@ -150,6 +151,11 @@ handle('deploys:setTarget', (repo: string, t: DeployTarget | null) => deploy.set
 handle('tests:run', (repo: string) => deploy.runTests(repo));
 handle('tests:list', () => deploy.listTests());
 
+handle('cache:scan', () => cache.scanCache());
+handle('cache:last', () => cache.lastCache());
+handle('cache:clean', (id: string) => cache.cleanCategory(id));
+handle('cache:delete', (p: string) => cache.deleteItem(p));
+
 handle('keys:scan', () => keys.scanKeys());
 handle('keys:last', () => keys.lastScan());
 handle('keys:setPatterns', (p: string[]) => keys.setPatterns(p));
@@ -189,6 +195,8 @@ app.whenReady().then(() => {
   deploy.startDeployWatcher();
   setTimeout(() => void keys.scanKeys(), 3000);
   setInterval(() => void keys.scanKeys(), 60 * 60_000);
+  setTimeout(() => void cache.scanCache(), 8000);
+  setInterval(() => void cache.scanCache(), 6 * 60 * 60_000);
 });
 
 app.on('window-all-closed', () => {

@@ -2,6 +2,7 @@ import { useRef, useSyncExternalStore } from 'react';
 import type {
   AppState,
   AuthStatus,
+  CacheReport,
   ChatMeta,
   ChatSnapshot,
   DeployEvent,
@@ -37,6 +38,7 @@ export interface Store {
   deploys: DeployEvent[];
   tests: TestResult[];
   keys: KeyScanResult | null;
+  cache: CacheReport | null;
   /** Turn to scroll to inside a chat (from the Files tab or a problem link). */
   focusTurn?: { sessionId: string; turnId: string; nonce: number };
   help?: string;
@@ -53,6 +55,7 @@ let state: Store = {
   deploys: [],
   tests: [],
   keys: null,
+  cache: null,
 };
 
 const listeners = new Set<() => void>();
@@ -278,6 +281,9 @@ function onEvent(e: MainEvent) {
     case 'keys':
       set({ keys: e.result });
       return;
+    case 'cache':
+      set({ cache: e.report });
+      return;
     case 'fileChanged':
       void onFileChanged(e.path);
       return;
@@ -298,13 +304,14 @@ export async function init() {
   bridge.on(onEvent);
   const app = await call<AppState>('state:get');
   set({ app });
-  const [problems, deploys, tests, keys] = await Promise.all([
+  const [problems, deploys, tests, keys, cache] = await Promise.all([
     call<Problem[]>('problems:list'),
     call<DeployEvent[]>('deploys:list'),
     call<TestResult[]>('tests:list'),
     call<KeyScanResult | null>('keys:last'),
+    call<CacheReport | null>('cache:last'),
   ]);
-  set({ problems, deploys, tests, keys });
+  set({ problems, deploys, tests, keys, cache });
   for (const id of app.openChats) {
     const snap = await call<ChatSnapshot>('chat:open', id).catch(() => null);
     if (snap) set((s) => ({ chats: { ...s.chats, [id]: snap } }));

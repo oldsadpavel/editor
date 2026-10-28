@@ -16,6 +16,7 @@ const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
   { id: 'deploys', label: 'Деплои', icon: '🚀' },
   { id: 'tests', label: 'Тесты', icon: '🧪' },
   { id: 'keys', label: 'Ключи', icon: '🔑' },
+  { id: 'cache', label: 'Кеш ИИ', icon: '🧹' },
 ];
 
 function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: string }) {
@@ -26,7 +27,7 @@ function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: 
     id === 'chat'
       ? Object.values(s.chats).filter((c) => c.status === 'running' || c.status === 'waiting').length
       : id === 'deploys'
-        ? s.deploys.filter((d) => ['pushed', 'building', 'deploying'].includes(d.state)).length
+        ? s.deploys.filter((d) => d.state === 'building' || d.state === 'deploying').length
         : 0,
   );
   const waiting = useStore((s) => (id === 'chat' ? Object.values(s.chats).some((c) => c.status === 'waiting') : false));

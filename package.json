@@ -54,5 +54,39 @@
     "electron@45.1.0": true,
     "esbuild@0.28.2": true,
     "electron-winstaller@5.4.0": true
+  },
+  "author": "oldsadpavel",
+  "build": {
+    "appId": "com.oldsadpavel.claude-editor",
+    "productName": "Claude Editor",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "package.json",
+      "!dist/**/*.map",
+      "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "ClaudeEditor-${version}-portable.exe"
+    },
+    "mac": {
+      "target": [
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "npmRebuild": false
   }
 }
