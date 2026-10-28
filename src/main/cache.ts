@@ -9,8 +9,6 @@ import * as problems from './problems';
 import { stateFile } from './store';
 
 const DAY = 86_400_000;
-const FREE_WARN_RATIO = 0.1;
-const CLEANABLE_WARN_BYTES = 1024 ** 3;
 
 const home = os.homedir();
 const claudeDir = path.join(home, '.claude');
@@ -220,9 +218,12 @@ export async function scanCache(): Promise<CacheReport> {
 
 const gb = (b: number) => (b / 1024 ** 3).toFixed(1) + ' ГБ';
 
+/** Below this much free space on the system disk the user gets a warning (and a cleanup hint). */
+const LOW_DISK_BYTES = 3 * 1024 ** 3;
+
 function reportProblems(r: CacheReport) {
   const safe = r.categories.filter((c) => c.safety === 'safe').reduce((s, c) => s + c.cleanableBytes, 0);
-  if (r.disk && r.disk.free / r.disk.total < FREE_WARN_RATIO) {
+  if (r.disk && r.disk.free < LOW_DISK_BYTES) {
     problems.report({
       source: 'cache',
       severity: 'warning',
@@ -231,18 +232,8 @@ function reportProblems(r: CacheReport) {
       key: 'cache|disk',
     });
   } else problems.resolve('cache|disk');
-  if (safe > CLEANABLE_WARN_BYTES) {
-    problems.report({
-      source: 'cache',
-      severity: 'warning',
-      title: `ИИ накопил ${gb(safe)} мусора, который можно удалить`,
-      detail: r.categories
-        .filter((c) => c.safety === 'safe' && c.cleanableBytes > 0)
-        .map((c) => `${c.title}: ${gb(c.cleanableBytes)}`)
-        .join('\n'),
-      key: 'cache|trash',
-    });
-  } else problems.resolve('cache|trash');
+  // How much cache can be cleaned is shown in the panel itself; it is not an alarm.
+  problems.resolve('cache|trash');
 }
 
 async function removeEmptyDirs(dir: string, root: string) {

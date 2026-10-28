@@ -212,7 +212,15 @@ const samePath = (a: string, b: string) => path.resolve(a).toLowerCase() === pat
 
 export async function openChat(sessionId: string, cwdHint?: string): Promise<ChatSnapshot> {
   let s = sessions.get(sessionId);
-  if (s) return s.snapshot();
+  if (s) {
+    // The title may have been changed elsewhere (/rename in the chat, terminal, IDE plugin).
+    if (s.status !== 'running' && s.status !== 'waiting' && findTranscript(sessionId)) {
+      const info = (await listSessions({ dir: s.cwd, includeWorktrees: false }).catch(() => [])).find((x) => x.sessionId === sessionId);
+      const title = info?.customTitle || info?.summary || info?.firstPrompt;
+      if (title) s.title = title;
+    }
+    return s.snapshot();
+  }
   const file = findTranscript(sessionId);
   s = new ChatSession(sessionId, cwdHint ?? os.homedir());
   if (file) {

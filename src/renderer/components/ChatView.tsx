@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem, TurnItemTool } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
-import { loadDraft, markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
+import { loadDraft, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { fileIcon } from './icons';
@@ -588,7 +588,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
   const menu = slashQuery === null ? [] : mergeCommands(commands ?? []).filter((c) => c.name.toLowerCase().includes(slashQuery)).slice(0, 12);
   useEffect(() => setMenuIndex(0), [slashQuery]);
   const pickCommand = (c: SlashItem) => {
-    setText(`/${c.name}${c.local ? '' : ' '}`);
+    setText(`/${c.name}${c.local && !c.argumentHint ? '' : ' '}`);
     ref.current?.focus();
   };
 
@@ -596,6 +596,13 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
     const t = text.trim();
     if (!t && !attachments.length) return;
     // Editor-side commands are answered here, not sent to Claude.
+    const rename = t.match(/^\/rename\s+(.+)$/s);
+    if (rename) {
+      setText('');
+      void renameChat(chat.sessionId, rename[1].trim());
+      toast(`Чат переименован: ${rename[1].trim()}`);
+      return;
+    }
     if (t === '/rc' || t === '/remote-control') {
       setText('');
       void setRemote(chat.sessionId, !chat.remote);
@@ -764,6 +771,7 @@ interface SlashItem {
 const LOCAL_COMMANDS: SlashItem[] = [
   { name: 'status', description: 'Состояние чата: модель, режим, MCP-серверы, контекст, лимиты', local: true },
   { name: 'context', description: 'Сколько занято окно контекста и чем', local: true },
+  { name: 'rename', description: 'Переименовать этот чат: /rename новое имя', argumentHint: '<имя>', local: true },
   { name: 'rc', description: 'Remote Control: включить/выключить — чат на claude.ai/code и в приложении Claude', local: true },
 ];
 

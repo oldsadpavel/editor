@@ -372,7 +372,9 @@ export async function loadSessions(cwd: string) {
 }
 
 export async function openChat(id: string, cwd?: string) {
-  if (!state.chats[id]) {
+  // Always re-read: the title or history may have changed while the tab was closed.
+  const wasOpen = state.app!.openChats.includes(id);
+  if (!wasOpen || !state.chats[id]) {
     const snap = await guard(call<ChatSnapshot>('chat:open', id, cwd));
     if (!snap) return;
     set((s) => ({ chats: { ...s.chats, [id]: snap } }));

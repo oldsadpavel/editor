@@ -140,14 +140,19 @@ function AuthButton() {
 /** Drag handle that resizes a neighbouring panel. */
 function Splitter({ dir, onDrag }: { dir: 'x' | 'y'; onDrag: (delta: number) => void }) {
   const start = useRef(0);
+  // The window listener lives for the whole drag, so it must call the latest onDrag (which sees the current size),
+  // not the one from the render when the mouse went down — otherwise every move restarts from the old size.
+  const latest = useRef(onDrag);
+  latest.current = onDrag;
   return (
     <div
       className={`splitter ${dir}`}
       onMouseDown={(e) => {
+        e.preventDefault();
         start.current = dir === 'x' ? e.clientX : e.clientY;
         const move = (ev: MouseEvent) => {
           const pos = dir === 'x' ? ev.clientX : ev.clientY;
-          onDrag(pos - start.current);
+          latest.current(pos - start.current);
           start.current = pos;
         };
         const up = () => {

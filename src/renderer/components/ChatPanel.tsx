@@ -5,6 +5,7 @@ import { Help, basename, formatTime } from '../util';
 import { ChatView } from './ChatView';
 import { BlockHandle } from './Layout';
 import { TabStrip, middleClose } from './Tabs';
+import { ContextMenu, type MenuItem } from './ContextMenu';
 
 export function StatusDot({ id, status }: { id: string; status?: ChatSnapshot['status'] }) {
   const unread = useStore((s) => isUnread(id, s));
@@ -99,6 +100,7 @@ export function ChatPanel() {
   const chats = useStore((s) => s.chats);
   const [showHistory, setShowHistory] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [tabMenu, setTabMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const cwd = app.chatProject ?? app.projects[0]?.path;
   const active = app.activeChat && chats[app.activeChat] ? app.activeChat : undefined;
 
@@ -152,6 +154,18 @@ export function ChatPanel() {
               title={`${c.title}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
               onClick={() => openChat(id)}
               onDoubleClick={() => setEditing(id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                setTabMenu({
+                  x: e.clientX,
+                  y: e.clientY,
+                  items: [
+                    { label: 'Переименовать', action: () => setEditing(id) },
+                    { label: 'Закрыть', action: () => closeChat(id) },
+                    { label: 'Закрыть остальные', action: () => app.openChats.filter((x) => x !== id).forEach((x) => closeChat(x)) },
+                  ],
+                });
+              }}
               {...middleClose(() => closeChat(id))}
             >
               <StatusDot id={id} status={c.status} />
@@ -166,6 +180,11 @@ export function ChatPanel() {
               ) : (
                 <span className="ttitle">{c.title}</span>
               )}
+              {editing !== id && (
+                <span className="tab-rename" title="Переименовать" onClick={(e) => (e.stopPropagation(), setEditing(id))}>
+                  ✎
+                </span>
+              )}
               {app.projects.length > 1 && <span className="tproj">{basename(c.cwd)}</span>}
               <span className="x" onClick={(e) => (e.stopPropagation(), closeChat(id))}>
                 ×
@@ -174,6 +193,7 @@ export function ChatPanel() {
           );
         })}
       </TabStrip>
+      {tabMenu && <ContextMenu {...tabMenu} onClose={() => setTabMenu(null)} />}
       {active ? (
         <ChatView key={active} chat={chats[active]} />
       ) : (

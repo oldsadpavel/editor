@@ -193,6 +193,8 @@ export async function scanKeys(): Promise<KeyScanResult> {
 
   problems.resolve('keys|');
   for (const k of keys) {
+    // Certificates (often old copies or chain files) are listed in the panel but don't raise an alarm.
+    if (k.kind === 'Сертификат') continue;
     if (k.status === 'expired' || k.status === 'invalid' || k.status === 'expiring') {
       problems.report({
         source: 'keys',

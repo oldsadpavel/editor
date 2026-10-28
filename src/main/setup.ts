@@ -164,10 +164,10 @@ export async function setupStatus(): Promise<SetupItem[]> {
   const cache = lastCache();
   if (cache) {
     const safe = cache.categories.filter((c) => c.safety === 'safe').reduce((s, c) => s + c.cleanableBytes, 0);
-    const lowDisk = cache.disk && cache.disk.free / cache.disk.total < 0.1;
+    const lowDisk = cache.disk && cache.disk.free < 3 * 1024 ** 3;
     items.push({
       id: 'cache',
-      level: safe > 500 * 1024 ** 2 || lowDisk ? 'todo' : 'ok',
+      level: lowDisk ? 'todo' : safe > 500 * 1024 ** 2 ? 'info' : 'ok',
       group: 'Диск',
       title: safe > 500 * 1024 ** 2 ? `Можно освободить ${gb(safe)} мусора ИИ` : 'Мусора ИИ немного',
       detail: cache.disk ? `Свободно на ${cache.disk.path} ${gb(cache.disk.free)} из ${gb(cache.disk.total)}` : undefined,
