@@ -69,6 +69,8 @@ export interface Store {
   usage: UsageInfo | null;
   /** Selected tree node (target folder for Ctrl+V). */
   treeSelected?: string;
+  /** Chat whose /status (or /context) card is shown. */
+  statusFor?: { sessionId: string; section?: 'context' };
 }
 
 let state: Store = {
@@ -326,6 +328,42 @@ export function setAutoApprove(id: string, on: boolean) {
   void guard(call('chat:autoApprove', id, on));
 }
 
+export function setRemote(id: string, on: boolean) {
+  set((s) => (s.chats[id] ? { chats: { ...s.chats, [id]: { ...s.chats[id], remote: on } } } : {}));
+  void guard(call('chat:remote', id, on));
+  if (on) toast('Удалённое управление включено: чат появится на claude.ai/code и в приложении Claude');
+}
+
+// --- session restore ----------------------------------------------------------------------
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+/** Open files and the active tab are saved (debounced) so they come back after a restart. */
+function persistOpenFiles() {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    const patch = { openFiles: state.files.map((f) => f.path), activeFile: state.activeFile };
+    set((s) => ({ app: s.app && { ...s.app, ...patch } }));
+    void call('state:set', patch).catch(() => {});
+  }, 500);
+}
+
+let lastFiles: string | undefined;
+listeners.add(() => {
+  const key = state.files.map((f) => f.path).join('|') + '#' + (state.activeFile ?? '');
+  if (state.app && key !== lastFiles) {
+    if (lastFiles !== undefined) persistOpenFiles();
+    lastFiles = key;
+  }
+});
+
+/** Expanded/collapsed folder in the project tree, remembered across restarts. */
+export function setTreeOpen(path: string, open: boolean) {
+  const key = path.toLowerCase();
+  const list = state.app!.ui.treeOpen ?? [];
+  if (open === list.includes(key)) return;
+  setUi({ treeOpen: open ? [...list, key] : list.filter((p) => p !== key) });
+}
+
 // --- layout -------------------------------------------------------------------------------
 
 export const LAYOUT_PRESETS: { id: string; label: string; layout: Layout }[] = [
@@ -429,6 +467,11 @@ export async function init() {
     const snap = await call<ChatSnapshot>('chat:open', id).catch(() => null);
     if (snap) set((s) => ({ chats: { ...s.chats, [id]: snap } }));
   }
+  // Editor tabs from the last run (files that no longer exist are skipped silently).
+  for (const p of app.openFiles ?? []) {
+    if (await call<boolean>('fs:exists', p).catch(() => false)) await openFile(p);
+  }
+  if (app.activeFile && state.files.some((f) => f.path === app.activeFile)) set({ activeFile: app.activeFile });
   for (const p of app.projects) void loadSessions(p.path);
   call<AuthStatus>('auth:status').then((auth) => set({ auth }));
   refreshSetup();

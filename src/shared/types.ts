@@ -75,6 +75,8 @@ export interface ChatSnapshot {
   effort?: string;
   /** Every permission request is approved automatically (and logged). */
   autoApprove?: boolean;
+  /** Remote Control on: the session is reachable from claude.ai/code and the Claude app. */
+  remote?: boolean;
   /** Permission decisions in this chat, oldest first. */
   approvals: ApprovalEntry[];
   pending: PermissionRequest[];
@@ -288,7 +290,12 @@ export interface AppState {
   /** One-time data repairs already applied. */
   repairs?: string[];
   /** Per-chat model/effort chosen in the composer (remembered across restarts). */
-  chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean }>;
+  chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean }>;
+  /** Files open in the editor and the active one, restored on start. */
+  openFiles?: string[];
+  activeFile?: string;
+  /** Main window position/size, restored on start. */
+  window?: { x?: number; y?: number; width: number; height: number; maximized?: boolean };
   ui: {
     layout: Layout;
     /** Relative widths of the bottom blocks shown side by side. */
@@ -298,6 +305,8 @@ export interface AppState {
     /** Sort order of the project tree: per folder, with a default for the rest. */
     treeSort?: Record<string, TreeSort>;
     treeSortDefault?: TreeSort;
+    /** Expanded tree folders (lower-case paths), restored on start. */
+    treeOpen?: string[];
     leftWidth: number;
     rightWidth: number;
     bottomHeight: number;

@@ -103,6 +103,12 @@ class ChatSession {
   model?: string;
   effort?: string;
   autoApprove = false;
+  /** Remote Control: the session can also be continued from claude.ai/code and the Claude app. */
+  remote = false;
+  /** Restart the Claude process after the current turn (a startup-only option changed while busy). */
+  restartPending = false;
+  /** The `system/init` message of the running process: model, version, MCP servers, commands. */
+  init: any = null;
   approvals: ApprovalEntry[] = [];
   /** Cumulative cost reported by the current Claude process (reset when a new process starts). */
   costSoFar = 0;
@@ -126,6 +132,7 @@ class ChatSession {
       model: this.model,
       effort: this.effort,
       autoApprove: this.autoApprove,
+      remote: this.remote,
       approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
     };
@@ -203,6 +210,7 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
   s.model = saved?.model;
   s.effort = saved?.effort;
   s.autoApprove = !!saved?.autoApprove;
+  s.remote = !!saved?.remote;
   s.approvals = approvals.forChat(sessionId);
   sessions.set(sessionId, s);
   return s.snapshot();
@@ -261,7 +269,7 @@ function buildContent(text: string, attachments: string[]) {
 }
 
 function rememberChatModel(s: ChatSession) {
-  stateFile.data.chatModels = { ...stateFile.data.chatModels, [s.id]: { model: s.model, effort: s.effort, autoApprove: s.autoApprove } };
+  stateFile.data.chatModels = { ...stateFile.data.chatModels, [s.id]: { model: s.model, effort: s.effort, autoApprove: s.autoApprove, remote: s.remote } };
   stateFile.save();
 }
 
@@ -315,6 +323,7 @@ function start(s: ChatSession) {
       ...(s.permissionMode ? { permissionMode: s.permissionMode as any } : {}),
       ...(s.model ? { model: s.model } : {}),
       ...(s.effort ? { effort: s.effort } : {}),
+      ...(s.remote ? { settings: { remoteControlAtStartup: true } } : {}),
       ...(s.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       canUseTool: (toolName: string, input: Record<string, unknown>, opts: any) => askPermission(s, toolName, input, opts),
       stderr: (data: string) => {
@@ -417,10 +426,16 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       }
       s.setStatus('idle');
       markCompleted(s);
+      if (s.restartPending) {
+        s.restartPending = false;
+        stopProcess(s);
+        if (s.remote) start(s);
+      }
       return;
     }
     case 'system': {
       const sm: any = m;
+      if (sm.subtype === 'init') s.init = sm;
       if (sm.subtype === 'session_state_changed') {
         if (sm.state === 'requires_action') s.setStatus('waiting');
         // 'idle' is the SDK's authoritative "turn is over" signal.
@@ -516,6 +531,75 @@ export function answerPermission(sessionId: string, requestId: string, a: Permis
 }
 
 /** Turns auto-approve on/off for a chat; turning it on also approves what is already waiting. */
+/** Stops the chat's Claude process; the next prompt (or restartIdle) resumes the same session in a new one. */
+function stopProcess(s: ChatSession) {
+  const input = s.input;
+  s.q = null;
+  s.input = null;
+  s.init = null;
+  input?.close();
+}
+
+/**
+ * Remote Control is a startup option of the Claude process. An idle chat is restarted right away (the process
+ * then waits for input, already reachable from claude.ai/code); a busy one is restarted after its turn.
+ */
+export function setRemote(sessionId: string, on: boolean) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  s.remote = on;
+  rememberChatModel(s);
+  if (s.status === 'running' || s.status === 'waiting') s.restartPending = true;
+  else {
+    stopProcess(s);
+    if (on) start(s);
+  }
+  s.publish(true);
+}
+
+/** Everything `/status` shows; live details only when the chat has a running process. */
+export async function chatStatus(sessionId: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  const q = s.q;
+  const [mcp, context, account] = await Promise.all([
+    q ? q.mcpServerStatus().catch(() => null) : null,
+    q ? q.getContextUsage().catch(() => null) : null,
+    authStatus(),
+  ]);
+  return {
+    sessionId: s.id,
+    title: s.title,
+    cwd: s.cwd,
+    status: s.status,
+    processRunning: !!q,
+    model: s.init?.model ?? s.model ?? null,
+    modelChoice: s.model ?? null,
+    effort: s.effort ?? null,
+    permissionMode: s.init?.permissionMode ?? s.permissionMode ?? null,
+    autoApprove: s.autoApprove,
+    remote: s.remote,
+    version: s.init?.claude_code_version ?? null,
+    outputStyle: s.init?.output_style ?? null,
+    tools: s.init?.tools?.length ?? null,
+    mcp: ((mcp as any[]) ?? s.init?.mcp_servers ?? []).map((x: any) => ({ name: x.name, status: x.status })),
+    context: context ? { used: (context as any).totalTokens, max: (context as any).maxTokens, percent: (context as any).percentage, categories: ((context as any).categories ?? []).filter((c: any) => c.tokens > 0).map((c: any) => ({ name: c.name, tokens: c.tokens })) } : null,
+    account,
+    turns: s.builder.turns.length,
+    usage: usage.lastUsage(),
+  };
+}
+
+/** Slash commands of the chat's session (from the running process), for the `/` menu. */
+export async function chatCommands(sessionId: string): Promise<{ name: string; description: string; argumentHint?: string }[]> {
+  const s = sessions.get(sessionId);
+  if (s?.q) {
+    const list = await s.q.supportedCommands().catch(() => null);
+    if (list) return list.map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint }));
+  }
+  return (s?.init?.slash_commands ?? []).map((n: string) => ({ name: n, description: '' }));
+}
+
 export function setAutoApprove(sessionId: string, on: boolean) {
   const s = sessions.get(sessionId);
   if (!s) return;

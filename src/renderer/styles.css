@@ -519,3 +519,21 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .meter.bad .meter-val { color: var(--err); font-weight: 700; }
 .meter-val { text-align: right; font-variant-numeric: tabular-nums; }
 .turn-tokens { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---------- slash menu & status ---------- */
+.composer { position: relative; }
+.slash-menu { position: absolute; left: 8px; right: 8px; bottom: calc(100% - 4px); z-index: 30; max-height: 320px; overflow: auto; background: var(--bg2); border: 1px solid #4e5157; border-radius: 8px; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45); padding: 4px; }
+.slash-item { display: flex; gap: 8px; align-items: baseline; padding: 5px 8px; border-radius: 5px; cursor: pointer; }
+.slash-item.on { background: var(--accent-soft); }
+.slash-name { font-family: var(--mono); color: var(--claude); white-space: nowrap; }
+.slash-desc { color: var(--fg2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.auto-approve.remote.on { color: #b8d3ff; border-color: #3d5a94; background: var(--accent-soft); }
+.status-modal { width: min(760px, 94vw); }
+.st-grid { display: flex; flex-direction: column; gap: 2px; }
+.st-row { display: grid; grid-template-columns: 190px 1fr; gap: 10px; padding: 3px 0; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; }
+.st-label { color: var(--fg2); }
+.st-val { word-break: break-word; }
+.st-context { margin-top: 12px; }
+.st-sub { font-weight: 600; margin-bottom: 6px; }
+.st-bar { height: 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; margin-bottom: 4px; }
+.st-bar > span { display: block; height: 100%; background: var(--claude); }

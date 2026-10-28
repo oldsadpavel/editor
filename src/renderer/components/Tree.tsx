@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DirEntry, TreeSort, TreeSortBy } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, get, openFile, saveApp, set, setUi, toggleFavorite, toast, useStore } from '../store';
+import { addProjects, get, openFile, saveApp, set, setTreeOpen, setUi, toggleFavorite, toast, useStore } from '../store';
 import { Help, basename, dirname } from '../util';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { BlockHandle } from './Layout';
@@ -68,7 +68,9 @@ async function pasteInto(dir: string) {
 }
 
 function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; root?: boolean; onMenu: (e: React.MouseEvent, entry: DirEntry, root?: boolean) => void }) {
-  const [open, setOpen] = useState(false);
+  // Expanded folders are remembered across restarts.
+  const open = useStore((s) => !!entry.dir && !!s.app!.ui.treeOpen?.includes(entry.path.toLowerCase()));
+  const setOpen = (v: boolean) => setTreeOpen(entry.path, v);
   const [kids, setKids] = useState<DirEntry[] | null>(childrenCache.get(entry.path) ?? null);
   const active = useStore((s) => s.activeFile === entry.path);
   const selected = useStore((s) => s.treeSelected === entry.path);

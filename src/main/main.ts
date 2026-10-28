@@ -161,6 +161,9 @@ handle('chat:new', (cwd: string) => claude.newChat(cwd));
 handle('chat:send', (id: string, text: string, opts?: SendOptions) => claude.send(id, text, opts ?? {}));
 handle('chat:interrupt', (id: string) => claude.interrupt(id));
 handle('chat:autoApprove', (id: string, on: boolean) => claude.setAutoApprove(id, on));
+handle('chat:remote', (id: string, on: boolean) => claude.setRemote(id, on));
+handle('chat:status', (id: string) => claude.chatStatus(id));
+handle('chat:commands', (id: string) => claude.chatCommands(id));
 handle('chat:rename', (id: string, title: string) => claude.rename(id, title));
 handle('chat:close', (id: string) => claude.closeChat(id));
 handle('chat:permission', (id: string, reqId: string, a: PermissionAnswer) => claude.answerPermission(id, reqId, a));
@@ -205,9 +208,11 @@ handle('keys:setPatterns', (p: string[]) => keys.setPatterns(p));
 // --- window -------------------------------------------------------------------------------
 
 function createWindow() {
+  const saved = stateFile.data.window;
   win = new BrowserWindow({
-    width: 1600,
-    height: 1000,
+    width: saved?.width ?? 1600,
+    height: saved?.height ?? 1000,
+    ...(saved?.x !== undefined && saved?.y !== undefined ? { x: saved.x, y: saved.y } : {}),
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#1e1f22',
@@ -227,6 +232,14 @@ function createWindow() {
   });
   win.webContents.on('before-input-event', (_e, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') win?.webContents.toggleDevTools();
+  });
+  if (saved?.maximized) win.maximize();
+  // Window size and position survive restarts.
+  win.on('close', () => {
+    if (!win) return;
+    const b = win.getNormalBounds();
+    stateFile.data.window = { x: b.x, y: b.y, width: b.width, height: b.height, maximized: win.isMaximized() };
+    stateFile.save();
   });
   win.on('closed', () => (win = null));
 }

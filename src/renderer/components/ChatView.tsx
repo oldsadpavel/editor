@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
-import { markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, toast, useStore, type LightboxItem } from '../store';
+import { markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, setRemote, toast, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { fileIcon } from './icons';
@@ -487,9 +487,30 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
     el.style.height = Math.min(el.scrollHeight, 260) + 'px';
   }, [text]);
 
+  // `/` menu: editor commands plus the session's own Claude Code commands (loaded when the menu opens).
+  const [commands, setCommands] = useState<SlashItem[] | null>(null);
+  const [menuIndex, setMenuIndex] = useState(0);
+  const slashQuery = /^\/[^\s]*$/.test(text) ? text.slice(1).toLowerCase() : null;
+  useEffect(() => {
+    if (slashQuery === null || commands) return;
+    void call<SlashItem[]>('chat:commands', chat.sessionId).then((list) => setCommands(list), () => setCommands([]));
+  }, [slashQuery !== null]);
+  const menu = slashQuery === null ? [] : mergeCommands(commands ?? []).filter((c) => c.name.toLowerCase().includes(slashQuery)).slice(0, 12);
+  useEffect(() => setMenuIndex(0), [slashQuery]);
+  const pickCommand = (c: SlashItem) => {
+    setText(`/${c.name}${c.local ? '' : ' '}`);
+    ref.current?.focus();
+  };
+
   const submit = async () => {
     const t = text.trim();
     if (!t && !attachments.length) return;
+    // Editor-side commands are answered here, not sent to Claude.
+    if (t === '/status' || t === '/context') {
+      setText('');
+      set({ statusFor: { sessionId: chat.sessionId, section: t === '/context' ? 'context' : undefined } });
+      return;
+    }
     const sent = { text, attachments };
     setText('');
     setAttachments([]);
@@ -512,6 +533,26 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
       onDrop={onDrop}
     >
       <AttachmentChips paths={attachments} onRemove={(p) => setAttachments((a) => a.filter((x) => x !== p))} />
+      {menu.length > 0 && (
+        <div className="slash-menu">
+          {menu.map((c, i) => (
+            <div
+              key={c.name}
+              className={`slash-item ${i === menuIndex ? 'on' : ''}`}
+              onMouseEnter={() => setMenuIndex(i)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pickCommand(c);
+              }}
+            >
+              <span className="slash-name">/{c.name}</span>
+              {c.argumentHint && <span className="muted"> {c.argumentHint}</span>}
+              <span className="slash-desc">{c.description}</span>
+              {c.local && <span className="chip">редактор</span>}
+            </div>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         value={text}
@@ -523,6 +564,19 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
         onPaste={onPaste}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
+          if (menu.length) {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              e.preventDefault();
+              setMenuIndex((i) => (i + (e.key === 'ArrowDown' ? 1 : menu.length - 1)) % menu.length);
+              return;
+            }
+            // Tab completes; Enter completes too unless the command is already typed in full.
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && text.trim() !== `/${menu[menuIndex].name}`)) {
+              e.preventDefault();
+              pickCommand(menu[menuIndex]);
+              return;
+            }
+          }
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             void submit();
@@ -556,6 +610,18 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
           <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
           ⚡ Автоодобрение
         </label>
+        <label
+          className={`auto-approve remote ${chat.remote ? 'on' : ''}`}
+          title="Удалённое управление (Remote Control): этот чат можно продолжать с claude.ai/code и из приложения Claude на телефоне"
+        >
+          <input type="checkbox" checked={!!chat.remote} onChange={(e) => setRemote(chat.sessionId, e.target.checked)} />
+          📱 Удалённо
+        </label>
+        {chat.remote && (
+          <a className="small" href="https://claude.ai/code" target="_blank" title="Открыть список сессий на claude.ai/code">
+            claude.ai/code ↗
+          </a>
+        )}
         <button className="btn small" title="Прикрепить файл (или Ctrl+V / перетащите файл сюда)" onClick={() => pickFiles(addFiles)}>
           📎
         </button>
@@ -576,6 +642,25 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
       </div>
     </div>
   );
+}
+
+interface SlashItem {
+  name: string;
+  description: string;
+  argumentHint?: string;
+  /** Handled by the editor itself instead of being sent to Claude Code. */
+  local?: boolean;
+}
+
+const LOCAL_COMMANDS: SlashItem[] = [
+  { name: 'status', description: 'Состояние чата: модель, режим, MCP-серверы, контекст, лимиты', local: true },
+  { name: 'context', description: 'Сколько занято окно контекста и чем', local: true },
+];
+
+/** Editor commands first; Claude Code's own list follows (its /status and /context are replaced by the editor's). */
+function mergeCommands(session: SlashItem[]): SlashItem[] {
+  const local = new Set(LOCAL_COMMANDS.map((c) => c.name));
+  return [...LOCAL_COMMANDS, ...session.filter((c) => !local.has(c.name))];
 }
 
 /** System "open file" dialog through a hidden <input type=file>; paths come from the preload bridge. */

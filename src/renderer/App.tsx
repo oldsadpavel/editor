@@ -9,6 +9,7 @@ import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
+import { StatusModal } from './components/StatusModal';
 import { HELP } from './help';
 import { init, isUnread, set, setUi, togglePanel, useStore } from './store';
 import { Markdown } from './util';
@@ -185,6 +186,7 @@ export function App() {
       <HelpModal />
       <ProjectSettings />
       <ImageLightbox />
+      <StatusModal />
       <Toast />
     </div>
   );
