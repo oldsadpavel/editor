@@ -39,7 +39,7 @@ export interface Turn {
   images: number;
   attachments?: TurnAttachment[];
   /** Further questions sent before Claude answered: Claude Code answers them together, so they share this turn. */
-  more?: { prompt: string; at: number; attachments?: TurnAttachment[] }[];
+  more?: { prompt: string; at: number; attachments?: TurnAttachment[]; pending?: boolean }[];
   startedAt: number;
   /** Time of the last assistant output in this turn. */
   answeredAt?: number;

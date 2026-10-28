@@ -152,6 +152,7 @@ export class TurnBuilder {
     if (!last?.more?.length || this.turnOpen) return null;
     const [first, ...rest] = last.more;
     delete last.more;
+    first.pending = false;
     last.images -= [first, ...rest].reduce((n, m) => n + (m.attachments?.filter((a) => a.kind === 'image').length ?? 0), 0);
     const turn = this.startTurn(first.prompt, first.at, `${last.id}-q`, first.attachments);
     if (rest.length) {
@@ -184,6 +185,7 @@ export class TurnBuilder {
     const at = ts(entry.timestamp);
     if (entry.type === 'user') this.ingestUser(entry, at);
     else if (entry.type === 'assistant') this.ingestAssistant(entry, at);
+    else if (entry.type === 'attachment' && entry.attachment?.type === 'queued_command') this.ingestQueued(entry.attachment, at);
   }
 
   private ingestUser(entry: any, at: number) {
@@ -206,6 +208,15 @@ export class TurnBuilder {
     const { prompt, attachments } = splitAttachments(cleanPrompt(text), refs);
     if (prompt.startsWith('[Request interrupted')) this.closeTurn();
     if ((prompt && !isNoisePrompt(prompt)) || attachments.length) this.startTurn(prompt, at, entry.uuid ?? String(at), attachments);
+  }
+
+  /** A question sent while Claude was working and taken into the running answer (not a separate user entry). */
+  private ingestQueued(a: any, at: number) {
+    const prompt = cleanPrompt(String(a.prompt ?? ''));
+    const last = this.turns[this.turns.length - 1];
+    if (!prompt || isNoisePrompt(prompt) || !last) return;
+    if (last.prompt === prompt || last.more?.some((m) => m.prompt === prompt)) return;
+    (last.more ??= []).push({ prompt, at: a.timestamp ? ts(a.timestamp) : at });
   }
 
   private ingestAssistant(entry: any, at: number) {
@@ -309,7 +320,7 @@ export async function loadTranscript(file: string): Promise<{ builder: TurnBuild
   let cwd: string | undefined;
   const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
   for await (const line of rl) {
-    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"')) continue;
+    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"')) continue;
     let entry: any;
     try {
       entry = JSON.parse(line);

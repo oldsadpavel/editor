@@ -126,6 +126,8 @@ class ChatSession {
   /** Transcript watcher while the hidden Remote Control process owns the session. */
   transcriptWatch: fs.FSWatcher | null = null;
   remoteProc: remote.RemoteProc | null = null;
+  /** Transcript watcher while queued questions wait to be taken by Claude. */
+  queueWatch: fs.FSWatcher | null = null;
   /** The `system/init` message of the running process: model, version, MCP servers, commands. */
   init: any = null;
   approvals: ApprovalEntry[] = [];
@@ -322,6 +324,12 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? 'image' : 'file', path: p })),
   );
   turn.live = true;
+  const queued = turn.more?.[turn.more.length - 1];
+  if (queued && queued.at >= Date.now() - 1000 && queued.prompt === text) {
+    // Queued behind the running answer: grey until Claude actually takes it (see watchQueue).
+    queued.pending = true;
+    watchQueue(s);
+  }
   if (s.title === 'Новый чат') s.title = (text || path.basename(attachments[0] ?? '')).slice(0, 60);
   s.partial = '';
   s.setStatus('running');
@@ -384,6 +392,72 @@ async function pump(s: ChatSession) {
       if (s.status === 'running' || s.status === 'waiting') s.setStatus('idle');
       else s.publish(true);
     }
+  }
+}
+
+/**
+ * Claude Code writes a queued prompt into the transcript only when it actually takes it (a `dequeue` plus the
+ * user entry). While a chat has queued questions, the transcript tail is checked on every change and each
+ * question found there stops being "pending".
+ */
+function watchQueue(s: ChatSession) {
+  if (s.queueWatch) return;
+  const file = findTranscript(s.id);
+  if (!file) return;
+  let timer: NodeJS.Timeout | null = null;
+  const check = () => {
+    const pending = s.builder.turns.flatMap((t) => t.more ?? []).filter((m) => m.pending);
+    if (!pending.length) {
+      s.queueWatch?.close();
+      s.queueWatch = null;
+      return;
+    }
+    let tail = '';
+    try {
+      const fd = fs.openSync(file, 'r');
+      const size = fs.fstatSync(fd).size;
+      const len = Math.min(size, 256 * 1024);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, size - len);
+      fs.closeSync(fd);
+      tail = buf.toString('utf8');
+    } catch {
+      return;
+    }
+    const taken = new Set<string>();
+    for (const line of tail.split('\n')) {
+      if (!line.includes('"type":"user"') && !line.includes('queued_command') && !line.includes('absorbed_mid_turn')) continue;
+      try {
+        const e = JSON.parse(line);
+        // Taken mid-answer: an attachment `queued_command` (and a queue-operation `remove`, reason absorbed_mid_turn).
+        if (e.type === 'attachment' && e.attachment?.type === 'queued_command' && typeof e.attachment.prompt === 'string') taken.add(e.attachment.prompt.trim());
+        else if (e.type === 'queue-operation' && e.reason === 'absorbed_mid_turn' && typeof e.content === 'string') taken.add(e.content.trim());
+        else if (e.type === 'user') {
+          // Taken as its own turn: a regular user entry.
+          const c = e.message?.content;
+          const text = typeof c === 'string' ? c : Array.isArray(c) ? c.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : '';
+          if (text) taken.add(text.trim());
+        }
+      } catch {
+        /* partial line */
+      }
+    }
+    let changed = false;
+    for (const m of pending) {
+      if ([...taken].some((t) => t === m.prompt.trim() || t.startsWith(m.prompt.trim()))) {
+        m.pending = false;
+        changed = true;
+      }
+    }
+    if (changed) s.publish(true);
+  };
+  try {
+    s.queueWatch = fs.watch(file, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(check, 250);
+    });
+  } catch {
+    /* no transcript yet */
   }
 }
 

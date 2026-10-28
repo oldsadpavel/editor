@@ -172,7 +172,8 @@ function TurnBody({
   const autoN = approvals.filter((a) => a.decision === 'auto').length;
   const denyN = approvals.filter((a) => a.decision === 'deny').length;
   return (
-    <div className="turn-body">
+    <div className="turn-body turn-split">
+      <div className="turn-main">
       <div className="question">
         <div className="q-label">
           {turn.more?.length ? `Вопрос 1 из ${turn.more.length + 1}` : 'Вопрос'} · {formatTime(turn.startedAt)}
@@ -184,17 +185,16 @@ function TurnBody({
           !turn.prompt && turn.images > 0 && !turn.more?.length && <div className="q-text">[{turn.images} изображение]</div>
         )}
         {turn.more?.map((m, i) => (
-          <div key={i} className="q-more">
+          <div key={i} className={`q-more ${m.pending ? 'pending' : ''}`} title={m.pending ? 'В очереди: Claude ещё не взял этот вопрос в работу' : 'Claude взял этот вопрос в работу'}>
             <div className="q-label">
-              Вопрос {i + 2} из {turn.more!.length + 1} · {formatTime(m.at)} · отправлен, пока Claude отвечал — ответ общий
+              Вопрос {i + 2} из {turn.more!.length + 1} · {formatTime(m.at)} ·{' '}
+              {m.pending ? '⏳ в очереди — Claude ещё не взял' : '✓ взят в работу — ответ общий'}
             </div>
             {m.prompt && <div className="q-text">{m.prompt}</div>}
             {m.attachments?.length ? <TurnAttachments sessionId={sessionId} list={m.attachments} /> : null}
           </div>
         ))}
       </div>
-      <div className="turn-split">
-      <div className="turn-main">
       {tab === 'answer' && (
         <>
           {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
@@ -262,7 +262,6 @@ function TurnBody({
         >
           <span className="side-ico">🛡</span>{approvals.length > 0 && <span className="count">{approvals.length}</span>}
         </span>
-      </div>
       </div>
     </div>
   );
