@@ -52,7 +52,8 @@ a:hover { text-decoration: underline; }
   background: var(--bg2); border-bottom: 1px solid var(--line);
 }
 .brand { font-weight: 600; color: var(--claude); margin-right: 6px; white-space: nowrap; }
-.tb-group { display: flex; gap: 4px; }
+.tb-group { display: flex; gap: 4px; min-width: 0; flex-shrink: 1; overflow-x: auto; scrollbar-width: none; }
+.tb-group::-webkit-scrollbar { display: none; }
 .tb-btn {
   display: flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 10px;
@@ -611,3 +612,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .tab-more:hover { background: var(--bg3); color: var(--fg); }
 .tool-dock { display: flex; flex-direction: column; min-width: 0; border-left: 1px solid var(--line); }
 .tool-dock .bottom-slot { min-height: 0; }
+
+/* the account and meters never get pushed off-screen by the block buttons */
+.topbar > .meters, .topbar > .auth-btn, .topbar > .auth-login, .topbar > .help-btn, .topbar > .update-btn { flex-shrink: 0; }
+.auth-btn { display: inline-flex; align-items: center; gap: 5px; max-width: 160px; }
+.auth-avatar { width: 18px; height: 18px; border-radius: 50%; background: #2a5a33; color: #b8f0bd; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; flex: none; }
+.auth-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }

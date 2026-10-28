@@ -119,7 +119,8 @@ function AuthButton() {
         </span>
       ) : auth.loggedIn ? (
         <button className="auth ok auth-btn" title={`${auth.method ?? ''} · ${auth.orgName ?? ''}\n${auth.cliPath ?? ''}\nНажмите — сменить аккаунт или выйти`} onClick={open}>
-          ● {auth.email} ▾
+          <span className="auth-avatar">{(auth.email ?? '?')[0].toUpperCase()}</span>
+          <span className="auth-name">{auth.email?.split('@')[0]}</span> ▾
         </button>
       ) : (
         <span className="auth-login">
