@@ -268,6 +268,8 @@ export interface AuthStatus {
   orgName?: string;
   error?: string;
   cliPath?: string;
+  /** Claude Code itself is missing: the editor offers to install it. */
+  notInstalled?: boolean;
 }
 
 /** A saved workspace: a set of related projects with the chats and files that were open in it. */
@@ -436,6 +438,7 @@ export interface CacheReport {
 
 export type SetupAction =
   | { kind: 'login' }
+  | { kind: 'installClaude' }
   | { kind: 'addProject' }
   | { kind: 'githubAccess'; repo: string; github: string }
   | { kind: 'deployTarget'; repo: string }

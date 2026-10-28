@@ -4,7 +4,7 @@ import path from 'node:path';
 
 /**
  * Remote Control for a chat: an interactive `claude --resume <id> --remote-control` kept alive in a hidden
- * pseudo-terminal (winpty from Git for Windows). Only an interactive Claude opens the bridge to claude.ai, so this
+ * pseudo-terminal (winpty from Git for Windows; the built-in `script` on macOS and Linux). Only an interactive Claude opens the bridge to claude.ai, so this
  * is what makes the chat appear on the phone; the editor types into the same process through its stdin and shows
  * the transcript, so both sides see and drive the same session.
  */
@@ -39,14 +39,30 @@ function childEnv() {
   return { ...env, TERM: 'xterm-256color', COLUMNS: '120', LINES: '40' };
 }
 
+const shQuote = (s: string) => "'" + s.replace(/'/g, "'\\''") + "'";
+
+/**
+ * How to run a command inside a hidden pseudo-terminal whose input is our pipe: winpty on Windows, `script` on
+ * macOS (BSD syntax) and Linux (util-linux syntax). The terminal gets a fixed 120×40 size, since a pipe has none.
+ */
+export function ptyCommand(cmd: string, args: string[]): { file: string; args: string[] } {
+  if (process.platform === 'win32') {
+    const winpty = findWinpty();
+    if (!winpty) throw new Error('Нужен Git for Windows (winpty.exe из его состава): установите Git с https://git-scm.com');
+    return { file: winpty, args: ['-Xallow-non-tty', '-Xplain', '--', cmd, ...args] };
+  }
+  const inner = `stty cols 120 rows 40 2>/dev/null; exec ${[cmd, ...args].map(shQuote).join(' ')}`;
+  if (process.platform === 'darwin') return { file: '/usr/bin/script', args: ['-q', '/dev/null', '/bin/sh', '-c', inner] };
+  return { file: 'script', args: ['-q', '-e', '-c', `/bin/sh -c ${shQuote(inner)}`, '/dev/null'] };
+}
+
 export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; transcript: string | null }): RemoteProc {
-  if (process.platform !== 'win32') throw new Error('Удалённый режим пока только для Windows');
-  const winpty = findWinpty();
-  if (!winpty) throw new Error('Нужен Git for Windows (winpty.exe из его состава): установите Git с https://git-scm.com');
-  const args = ['-Xallow-non-tty', '-Xplain', '--', opts.cli, '--resume', opts.sessionId, '--remote-control', opts.name];
+  const args = ['--resume', opts.sessionId, '--remote-control', opts.name];
   if (opts.permissionMode) args.push('--permission-mode', opts.permissionMode);
   if (opts.model) args.push('--model', opts.model);
-  const child = spawn(winpty, args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: childEnv() });
+  const pty = ptyCommand(opts.cli, args);
+  // detached on macOS/Linux: own process group, so stop() can end claude together with `script`.
+  const child = spawn(pty.file, pty.args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32', env: childEnv() });
   const proc: RemoteProc = { child, startedAt: Date.now(), tail: '', connected: false };
   let bypassAnswered = false;
   const onData = (d: Buffer) => {
@@ -98,7 +114,16 @@ export function stop(proc: RemoteProc) {
     /* already gone */
   }
   setTimeout(() => {
-    if (proc.exited === undefined && proc.child.pid) spawn('taskkill', ['/T', '/F', '/PID', String(proc.child.pid)], { stdio: 'ignore', windowsHide: true });
+    const pid = proc.child.pid;
+    if (proc.exited !== undefined || !pid) return;
+    if (process.platform === 'win32') spawn('taskkill', ['/T', '/F', '/PID', String(pid)], { stdio: 'ignore', windowsHide: true });
+    else {
+      try {
+        process.kill(-pid, 'SIGTERM');
+      } catch {
+        /* already gone */
+      }
+    }
   }, 700);
 }
 

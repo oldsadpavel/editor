@@ -45,7 +45,9 @@ export async function setupStatus(): Promise<SetupItem[]> {
 
   const auth = await authStatus();
   items.push(
-    auth.loggedIn
+    auth.notInstalled
+      ? { id: 'auth', level: 'todo', group: 'Claude', title: 'Установите Claude Code', detail: 'Редактор работает через Claude Code. Установка официальным установщиком займёт минуту, потом — вход.', action: { kind: 'installClaude' } }
+      : auth.loggedIn
       ? { id: 'auth', level: 'ok', group: 'Claude', title: `Вход в Claude: ${auth.email}`, detail: auth.orgName }
       : { id: 'auth', level: 'todo', group: 'Claude', title: 'Войдите в Claude', detail: auth.error ?? 'Без входа чаты не работают.', action: { kind: 'login' } },
   );

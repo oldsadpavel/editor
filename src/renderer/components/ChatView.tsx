@@ -727,7 +727,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           title={
             chat.remote
               ? '/RC (Remote Control) включён: чат виден и управляется с claude.ai/code и из приложения Claude, и отсюда тоже. Подтверждения — с телефона или ⚡ Авто. Снимите галочку, чтобы вернуть обычный режим.'
-              : '/RC — Remote Control, как в Claude Code: чат появится на claude.ai/code и в приложении Claude на телефоне; писать можно и там, и здесь. Нужен Git for Windows.'
+              : '/RC — Remote Control, как в Claude Code: чат появится на claude.ai/code и в приложении Claude на телефоне; писать можно и там, и здесь. На Windows нужен Git for Windows (winpty), на macOS ничего не нужно.'
           }
         >
           <input type="checkbox" checked={!!chat.remote} onChange={(e) => setRemote(chat.sessionId, e.target.checked)} />

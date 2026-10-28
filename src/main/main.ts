@@ -158,6 +158,8 @@ handle('chat:image', (id: string, uuid: string, index: number) => files.transcri
 handle('auth:status', () => claude.authStatus());
 handle('auth:login', (method?: 'claudeai' | 'console' | 'sso', email?: string) => claude.login(method, email));
 handle('auth:logout', () => claude.logout());
+handle('claude:installCommand', () => claude.installCommand().display);
+handle('claude:install', () => claude.installClaude());
 
 handle('chat:list', (cwd: string) => claude.listProjectSessions(cwd));
 handle('chat:open', (id: string, cwd?: string) => claude.openChat(id, cwd));

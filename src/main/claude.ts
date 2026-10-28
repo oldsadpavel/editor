@@ -36,7 +36,7 @@ export function claudeExecutable(): string | undefined {
 
 export function authStatus(): Promise<AuthStatus> {
   const cli = claudeExecutable();
-  if (!cli) return Promise.resolve({ loggedIn: false, error: 'Claude Code не найден. Установите: https://claude.com/claude-code' });
+  if (!cli) return Promise.resolve({ loggedIn: false, notInstalled: true, error: 'Claude Code не установлен — без него чаты не работают.' });
   return new Promise((resolve) => {
     execFile(cli, ['auth', 'status'], { timeout: 20000, windowsHide: true }, (err, stdout) => {
       try {
@@ -60,6 +60,30 @@ export function login(method: 'claudeai' | 'console' | 'sso' = 'claudeai', email
   const args = ['auth', 'login', `--${method}`, ...(email ? ['--email', email] : [])];
   return new Promise((resolve) => {
     execFile(cli, args, { timeout: 5 * 60_000, windowsHide: true }, () => resolve(authStatus()));
+  });
+}
+
+/** The official installer command for this OS (shown to the user before it runs). */
+export function installCommand(): { file: string; args: string[]; display: string } {
+  if (process.platform === 'win32') {
+    const display = 'irm https://claude.ai/install.ps1 | iex';
+    return { file: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', display], display };
+  }
+  const display = 'curl -fsSL https://claude.ai/install.sh | bash';
+  return { file: '/bin/bash', args: ['-lc', display], display };
+}
+
+/** Installs Claude Code with the official installer (native build into ~/.local/bin), then reports the new status. */
+export function installClaude(): Promise<AuthStatus & { log?: string }> {
+  const cmd = installCommand();
+  return new Promise((resolve) => {
+    execFile(cmd.file, cmd.args, { timeout: 10 * 60_000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 }, async (err, stdout, stderr) => {
+      const log = `${stdout}
+${stderr}`.trim().slice(-2000);
+      const st = await authStatus();
+      resolve({ ...st, log, ...(st.notInstalled ? { error: `Установка не удалась: ${err?.message ?? ''}
+${log.slice(-600)}` } : {}) });
+    });
   });
 }
 

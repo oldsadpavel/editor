@@ -12,6 +12,7 @@ import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { StatusModal } from './components/StatusModal';
 import { CloudModal } from './components/CloudModal';
+import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
 import { init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
 import { Markdown } from './util';
@@ -113,6 +114,12 @@ function AuthButton() {
   const open = (e: React.MouseEvent) => setMenu({ x: e.clientX, y: e.clientY + 12 });
 
   if (!auth) return <span className="muted">Проверяю вход…</span>;
+  if (auth.notInstalled)
+    return (
+      <span className="auth-login" title="Claude Code не найден — без него чаты не работают">
+        <InstallClaudeButton />
+      </span>
+    );
   return (
     <>
       {busy ? (

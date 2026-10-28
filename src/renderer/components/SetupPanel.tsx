@@ -13,10 +13,33 @@ async function saveTarget(repo: string, patch: Partial<DeployTarget>) {
   await saveApp({ deployTargets: { ...get().app!.deployTargets, [key]: next } });
 }
 
+/** Installs Claude Code with the official installer; the command is shown before it runs. */
+export async function installClaude() {
+  const cmd = await call<string>('claude:installCommand');
+  if (!confirm(`Установить Claude Code официальным установщиком?\n\n${cmd}\n\nЗаймёт около минуты. Потом останется войти в аккаунт Claude.`)) return;
+  toast('Устанавливаю Claude Code…');
+  const st = await call<import('../../shared/types').AuthStatus>('claude:install').catch((e) => ({ loggedIn: false, notInstalled: true, error: e.message }));
+  set({ auth: st });
+  void refreshSetup();
+  if (st.notInstalled) toast(st.error ?? 'Установка не удалась', 'error');
+  else toast('Claude Code установлен — теперь войдите в аккаунт');
+}
+
+export function InstallClaudeButton() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button className="btn primary small" disabled={busy} onClick={async () => (setBusy(true), await installClaude(), setBusy(false))}>
+      {busy ? 'Устанавливаю…' : '⬇ Установить Claude Code'}
+    </button>
+  );
+}
+
 function ActionControl({ a }: { a: SetupAction }) {
   const [v, setV] = useState('');
   const [mode, setMode] = useState<DeployTarget['mode']>('change');
   switch (a.kind) {
+    case 'installClaude':
+      return <InstallClaudeButton />;
     case 'login':
       return (
         <button className="btn primary small" onClick={async () => set({ auth: await call('auth:login') })}>
