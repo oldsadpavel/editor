@@ -164,7 +164,7 @@ code.path-link { background: rgba(84, 138, 247, 0.12); }
 .tab .x:hover { background: #55585e; opacity: 1; }
 .tab .dirty { color: var(--claude); font-size: 10px; }
 .tab .ttitle { overflow: hidden; text-overflow: ellipsis; }
-.tab .tproj { font-size: 10px; color: var(--muted); background: var(--bg3); border-radius: 3px; padding: 0 4px; }
+.tab .tproj { flex: none; font-size: 10px; line-height: 16px; height: 16px; color: var(--muted); background: var(--bg3); border-radius: 3px; padding: 0 5px; }
 .tab.alert { color: var(--err); }
 
 /* ---------- tree ---------- */
@@ -619,8 +619,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .auth-avatar { width: 18px; height: 18px; border-radius: 50%; background: #2a5a33; color: #b8f0bd; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; flex: none; }
 .auth-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
-.tab-rename { opacity: 0; font-size: 11px; padding: 0 2px; border-radius: 3px; color: var(--fg2); }
-.tab:hover .tab-rename { opacity: 0.7; }
+.tab-rename { display: none; flex: none; font-size: 11px; line-height: 16px; padding: 0 2px; border-radius: 3px; color: var(--fg2); opacity: 0.5; }
+.tab.on .tab-rename { display: inline; }
+.tab.on:hover .tab-rename { opacity: 0.8; }
 .tab-rename:hover { opacity: 1 !important; background: #55585e; color: var(--fg); }
 
 /* Whole tab is highlighted: files changed on disk but not looked at (orange), chats with unread answers (blue). */

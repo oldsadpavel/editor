@@ -187,7 +187,12 @@ export function ChatPanel() {
                   ✎
                 </span>
               )}
-              {app.projects.length > 1 && <span className="tproj">{basename(c.cwd)}</span>}
+              {/* the project chip only when it adds something: not when the chat is named after its project */}
+              {app.projects.length > 1 && !c.title.toLowerCase().includes(basename(c.cwd).toLowerCase()) && (
+                <span className="tproj" title={c.cwd}>
+                  {basename(c.cwd)}
+                </span>
+              )}
               <span className="x" onClick={(e) => (e.stopPropagation(), closeChat(id))}>
                 ×
               </span>
