@@ -32,6 +32,10 @@ export interface OpenFile {
   binary: boolean;
   /** 'image' files are shown in the image viewer instead of the code editor. */
   kind?: 'text' | 'image';
+  /** Changed on disk (by Claude or another program) and not looked at since. */
+  unseen?: boolean;
+  /** When the file last changed on disk while open (for «recently edited first»). */
+  changedAt?: number;
   size?: number;
   changedOnDisk?: boolean;
   /** Bumped when the content is replaced from disk so the editor reloads its document. */
@@ -349,13 +353,31 @@ async function onFileChanged(path: string) {
     // Saved in Paint (or by Claude): bump the version so the viewer reloads the picture.
     const st = await call<{ size: number; mtime: number }>('fs:stat', f.path).catch(() => null);
     set((s) => ({ files: s.files.map((x) => (x === f ? { ...x, version: x.version + 1, size: st?.size ?? x.size, mtime: st?.mtime ?? x.mtime } : x)) }));
+    markChanged(f.path);
     return;
   }
   const r = await call<{ text: string; mtime: number }>('fs:read', f.path).catch(() => null);
   if (!r || r.text === f.savedText) return;
   if (f.text === f.savedText) await reloadFile(f.path);
   else set((s) => ({ files: s.files.map((x) => (x.path === f.path ? { ...x, changedOnDisk: true } : x)) }));
+  markChanged(f.path);
 }
+
+/** A change nobody looked at yet: highlighted until the tab is shown (the active tab in a focused window counts as seen). */
+function markChanged(path: string) {
+  const seen = state.activeFile === path && document.hasFocus();
+  set((s) => ({ files: s.files.map((x) => (x.path === path ? { ...x, changedAt: Date.now(), unseen: !seen } : x)) }));
+}
+
+/** Showing a file clears its «changed, not seen» mark. */
+listeners.add(() => {
+  const f = state.activeFile && state.files.find((x) => x.path === state.activeFile && x.unseen);
+  if (f && document.hasFocus()) set((s) => ({ files: s.files.map((x) => (x === f ? { ...x, unseen: false } : x)) }));
+});
+window.addEventListener('focus', () => {
+  const f = state.activeFile && state.files.find((x) => x.path === state.activeFile && x.unseen);
+  if (f) set((s) => ({ files: s.files.map((x) => (x === f ? { ...x, unseen: false } : x)) }));
+});
 
 // --- chats --------------------------------------------------------------------------------
 

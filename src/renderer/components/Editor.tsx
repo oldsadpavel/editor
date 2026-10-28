@@ -162,9 +162,10 @@ export function EditorArea() {
             <div
               key={f.path}
               data-tab-key={f.path}
-              data-tab-label={`${fileIcon(f.path)} ${basename(f.path)}${dirty ? ' ●' : ''}`}
-              className={`tab ${f.path === active ? 'on' : ''}`}
-              title={`${f.path}\nСредняя кнопка мыши — закрыть`}
+              data-tab-label={`${f.unseen ? '🟠 ' : ''}${fileIcon(f.path)} ${basename(f.path)}${dirty ? ' ●' : ''}`}
+              data-tab-sort={f.changedAt ?? 0}
+              className={`tab ${f.path === active ? 'on' : ''} ${f.unseen ? 'unseen' : ''}`}
+              title={`${f.path}${f.unseen ? '\nИзменён на диске — вы ещё не смотрели' : ''}\nСредняя кнопка мыши — закрыть`}
               onClick={() => set({ activeFile: f.path })}
               {...middleClose(() => closeFile(f.path))}
             >

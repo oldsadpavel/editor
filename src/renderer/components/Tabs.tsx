@@ -40,6 +40,7 @@ export function TabStrip({
 }) {
   const row = useRef<HTMLDivElement>(null);
   const [hidden, setHidden] = useState<{ key: string; label: string }[]>([]);
+  const [all, setAll] = useState<{ key: string; label: string; sort: number; hidden: boolean; unseen: boolean }[]>([]);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   const measure = () => {
@@ -47,11 +48,20 @@ export function TabStrip({
     if (!el) return;
     const box = el.getBoundingClientRect();
     const out: { key: string; label: string }[] = [];
+    const every: typeof all = [];
     for (const t of Array.from(el.querySelectorAll<HTMLElement>('[data-tab-key]'))) {
       const r = t.getBoundingClientRect();
-      if (r.left < box.left - 1 || r.right > box.right + 1) out.push({ key: t.dataset.tabKey!, label: t.dataset.tabLabel ?? t.dataset.tabKey! });
+      const off = r.left < box.left - 1 || r.right > box.right + 1;
+      const item = { key: t.dataset.tabKey!, label: t.dataset.tabLabel ?? t.dataset.tabKey! };
+      if (off) out.push(item);
+      every.push({ ...item, sort: Number(t.dataset.tabSort ?? 0), hidden: off, unseen: t.classList.contains('unseen') });
     }
     setHidden((prev) => (prev.length === out.length && prev.every((p, i) => p.key === out[i].key) ? prev : out));
+    setAll((prev) =>
+      prev.length === every.length && prev.every((p, i) => p.key === every[i].key && p.label === every[i].label && p.sort === every[i].sort && p.hidden === every[i].hidden)
+        ? prev
+        : every,
+    );
   };
 
   useLayoutEffect(measure);
@@ -84,8 +94,12 @@ export function TabStrip({
       >
         {children}
       </div>
-      {hidden.length > 0 && (
-        <button className="tab-more" title={`Не поместились: ${hidden.length}`} onClick={(e) => setMenu({ x: e.clientX, y: e.clientY + 10 })}>
+      {(hidden.length > 0 || all.some((t) => t.unseen && t.hidden)) && (
+        <button
+          className={`tab-more ${all.some((t) => t.unseen && t.hidden) ? 'unseen' : ''}`}
+          title={`Все открытые (недавно изменённые сверху). Не поместились: ${hidden.length}`}
+          onClick={(e) => setMenu({ x: e.clientX, y: e.clientY + 10 })}
+        >
           »{hidden.length}
         </button>
       )}
@@ -93,7 +107,10 @@ export function TabStrip({
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={hidden.map((h) => ({ label: h.label, action: () => onPick(h.key) }))}
+          // Recently changed first, then the rest in tab order; tabs out of view are marked.
+          items={[...all]
+            .sort((a, b) => b.sort - a.sort)
+            .map((t) => ({ label: `${t.label}${t.hidden ? '' : '  ·  на экране'}`, action: () => onPick(t.key) }))}
           onClose={() => setMenu(null)}
         />
       )}
