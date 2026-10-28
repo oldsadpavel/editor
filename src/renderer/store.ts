@@ -11,6 +11,7 @@ import type {
   PanelId,
   Problem,
   SessionInfo,
+  SetupItem,
   TestResult,
 } from '../shared/types';
 import { bridge, call } from './api';
@@ -39,6 +40,7 @@ export interface Store {
   tests: TestResult[];
   keys: KeyScanResult | null;
   cache: CacheReport | null;
+  setup: SetupItem[];
   /** Turn to scroll to inside a chat (from the Files tab or a problem link). */
   focusTurn?: { sessionId: string; turnId: string; nonce: number };
   help?: string;
@@ -56,6 +58,7 @@ let state: Store = {
   tests: [],
   keys: null,
   cache: null,
+  setup: [],
 };
 
 const listeners = new Set<() => void>();
@@ -106,6 +109,17 @@ export async function saveApp(patch: Partial<AppState>) {
   const app = { ...state.app!, ...patch };
   set({ app });
   await guard(call('state:set', patch));
+  if (!('ui' in patch && Object.keys(patch).length === 1)) refreshSetup();
+}
+
+let setupTimer: ReturnType<typeof setTimeout> | null = null;
+/** Recomputes the setup checklist (debounced): called after settings change and on relevant events. */
+export function refreshSetup() {
+  if (setupTimer) clearTimeout(setupTimer);
+  setupTimer = setTimeout(async () => {
+    const setup = await call<SetupItem[]>('setup:status').catch(() => null);
+    if (setup) set({ setup });
+  }, 400);
 }
 
 export function setUi(patch: Partial<AppState['ui']>) {
@@ -274,15 +288,18 @@ function onEvent(e: MainEvent) {
       return;
     case 'deploys':
       set({ deploys: e.deploys });
+      refreshSetup();
       return;
     case 'tests':
       set({ tests: e.results });
       return;
     case 'keys':
       set({ keys: e.result });
+      refreshSetup();
       return;
     case 'cache':
       set({ cache: e.report });
+      refreshSetup();
       return;
     case 'fileChanged':
       void onFileChanged(e.path);
@@ -318,6 +335,7 @@ export async function init() {
   }
   for (const p of app.projects) void loadSessions(p.path);
   call<AuthStatus>('auth:status').then((auth) => set({ auth }));
+  refreshSetup();
   window.addEventListener('focus', () => {
     const id = state.app?.activeChat;
     if (id && chatIsVisible(id)) markSeen(id);

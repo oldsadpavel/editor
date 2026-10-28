@@ -10,6 +10,7 @@ import { init, isUnread, set, setUi, togglePanel, useStore } from './store';
 import { Markdown } from './util';
 
 const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
+  { id: 'setup', label: 'Настройка', icon: '⚙' },
   { id: 'tree', label: 'Проекты', icon: '🗂' },
   { id: 'chat', label: 'ИИ-чат', icon: '✳' },
   { id: 'problems', label: 'Ошибки', icon: '⛔' },
@@ -30,14 +31,16 @@ function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: 
         ? s.deploys.filter((d) => d.state === 'building' || d.state === 'deploying').length
         : 0,
   );
+  const todo = useStore((s) => (id === 'setup' ? s.setup.filter((i) => i.level === 'todo').length : 0));
   const waiting = useStore((s) => (id === 'chat' ? Object.values(s.chats).some((c) => c.status === 'waiting') : false));
-  const cls = ['tb-btn', visible ? 'on' : '', alerts ? (visible ? 'alert-open' : 'alert') : '', waiting && !visible ? 'alert' : ''].join(' ');
+  const cls = ['tb-btn', visible ? 'on' : '', alerts ? (visible ? 'alert-open' : 'alert') : '', waiting && !visible ? 'alert' : '', todo && !visible ? 'attn' : ''].join(' ');
   return (
     <button className={cls} onClick={() => togglePanel(id)} title={`${visible ? 'Скрыть' : 'Показать'}: ${label}`}>
       <span className="tb-icon">{icon}</span>
       {label}
       {running > 0 && <span className="spinner small" title="Выполняется" />}
       {alerts > 0 && <span className="badge red">{alerts}</span>}
+      {todo > 0 && <span className="badge orange" title="Что нужно настроить">{todo}</span>}
       {unread > 0 && <span className="badge blue" title="Готовые непрочитанные ответы">{unread}</span>}
     </button>
   );

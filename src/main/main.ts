@@ -9,6 +9,7 @@ import * as claude from './claude';
 import * as deploy from './deploy';
 import * as keys from './keys';
 import * as problems from './problems';
+import { setupStatus } from './setup';
 import { flushAll, stateFile } from './store';
 import { findTranscript, normalize } from './transcript';
 
@@ -151,6 +152,7 @@ handle('deploys:setTarget', (repo: string, t: DeployTarget | null) => deploy.set
 handle('tests:run', (repo: string) => deploy.runTests(repo));
 handle('tests:list', () => deploy.listTests());
 
+handle('setup:status', () => setupStatus());
 handle('cache:scan', () => cache.scanCache());
 handle('cache:last', () => cache.lastCache());
 handle('cache:clean', (id: string) => cache.cleanCategory(id));

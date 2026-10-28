@@ -286,7 +286,8 @@ function PermissionCard({ req }: { req: PermissionRequest }) {
 
 function Composer({ chat }: { chat: ChatSnapshot }) {
   const [text, setText] = useState('');
-  const [mode, setMode] = useState(chat.permissionMode ?? '');
+  const defaultMode = useStore((s) => s.app!.defaultPermissionMode ?? '');
+  const [mode, setMode] = useState(chat.permissionMode ?? defaultMode);
   const ref = useRef<HTMLTextAreaElement>(null);
   const busy = chat.status === 'running' || chat.status === 'waiting';
   const activeFile = useStore((s) => s.activeFile);
@@ -355,6 +356,8 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
     </div>
   );
 }
+
+export { MODES };
 
 export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const [tab, setTab] = useState<'chat' | 'files' | 'deploys'>('chat');

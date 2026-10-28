@@ -197,6 +197,10 @@ export interface AppState {
   /** Files older than this many days count as cleanable AI cache (chat transcripts use cacheChatDays). */
   cacheDays?: number;
   cacheChatDays?: number;
+  /** Permission mode for new chats; undefined = whatever Claude Code settings say. */
+  defaultPermissionMode?: string;
+  /** Setup checklist items the user marked as not needed. */
+  setupDismissed?: string[];
   ui: {
     leftWidth: number;
     rightWidth: number;
@@ -206,7 +210,7 @@ export interface AppState {
   };
 }
 
-export type PanelId = 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests' | 'cache';
+export type PanelId = 'setup' | 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests' | 'cache';
 
 export interface DirEntry{ name: string; path: string; dir: boolean }
 
@@ -250,4 +254,24 @@ export interface CacheReport {
   disk?: { path: string; free: number; total: number };
   categories: CacheCategory[];
   biggest: CacheFile[];
+}
+
+export type SetupAction =
+  | { kind: 'login' }
+  | { kind: 'addProject' }
+  | { kind: 'githubAccess'; repo: string; github: string }
+  | { kind: 'deployTarget'; repo: string }
+  | { kind: 'addTest'; repo: string }
+  | { kind: 'permissionMode'; current?: string; fromClaude?: string }
+  | { kind: 'openPanel'; panel: PanelId; label: string };
+
+export interface SetupItem {
+  id: string;
+  /** todo — needs your action now; ok — done; info — FYI. */
+  level: 'todo' | 'ok' | 'info';
+  group: string;
+  title: string;
+  detail?: string;
+  action?: SetupAction;
+  dismissable?: boolean;
 }

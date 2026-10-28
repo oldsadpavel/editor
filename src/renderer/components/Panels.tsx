@@ -4,6 +4,7 @@ import { call } from '../api';
 import { get, openChat, openFile, saveApp, toast, togglePanel, useStore, type Store } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { CachePanel } from './CachePanel';
+import { SetupPanel } from './SetupPanel';
 
 const PANEL_SOURCES: Record<string, ProblemSource[] | null> = {
   problems: null,
@@ -15,6 +16,7 @@ const PANEL_SOURCES: Record<string, ProblemSource[] | null> = {
 
 /** Unread problems that belong to a panel; drives header/toolbar highlighting. */
 export function panelAlerts(s: Store, panel: PanelId): number {
+  if (panel === 'setup') return 0;
   const sources = PANEL_SOURCES[panel];
   if (sources === undefined) return 0;
   return s.problems.filter((p) => !p.acknowledged && (!sources || sources.includes(p.source))).length;
@@ -512,6 +514,7 @@ export function TestsPanel() {
 }
 
 export const BOTTOM_PANELS: { id: PanelId; C: () => React.ReactElement }[] = [
+  { id: 'setup', C: SetupPanel },
   { id: 'problems', C: ProblemsPanel },
   { id: 'deploys', C: DeploysPanel },
   { id: 'tests', C: TestsPanel },

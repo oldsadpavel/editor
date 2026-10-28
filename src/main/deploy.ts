@@ -360,3 +360,38 @@ export function startDeployWatcher() {
 export function stopDeployWatcher() {
   if (timer) clearInterval(timer);
 }
+
+export interface RepoInfo {
+  root: string;
+  github: string | null;
+  /** ok — CI status is readable; denied — private repo without a usable token; error — GitHub unreachable. */
+  ci: 'ok' | 'denied' | 'error' | 'none';
+  pushes: number;
+}
+
+const accessCache = new Map<string, { at: number; token: string; ci: RepoInfo['ci'] }>();
+
+/** Watched repositories with their GitHub CI accessibility (cached for 10 minutes or until the token changes). */
+export async function repoInfo(): Promise<RepoInfo[]> {
+  const tokenKey = `${stateFile.data.githubToken ?? ''}|${stateFile.data.githubFromGit ? 1 : 0}`;
+  return Promise.all(
+    [...repos.values()].map(async (r) => {
+      const g = await githubOf(r);
+      const pushes = deploysFile.data.filter((d) => d.repo.toLowerCase() === r.root.toLowerCase()).length;
+      if (!g) return { root: r.root, github: null, ci: 'none' as const, pushes };
+      const key = r.root.toLowerCase();
+      const hit = accessCache.get(key);
+      let ci: RepoInfo['ci'];
+      if (hit && hit.token === tokenKey && Date.now() - hit.at < 10 * 60_000) ci = hit.ci;
+      else {
+        ci = await gh(`/repos/${g.owner}/${g.repo}`).then(
+          () => 'ok' as const,
+          (e) => (e instanceof GithubAccessError ? ('denied' as const) : ('error' as const)),
+        );
+        accessCache.set(key, { at: Date.now(), token: tokenKey, ci });
+        if (ci === 'ok') problems.resolve(`deploy|gh|${g.owner}/${g.repo}`);
+      }
+      return { root: r.root, github: `${g.owner}/${g.repo}`, ci, pushes };
+    }),
+  );
+}
