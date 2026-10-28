@@ -763,15 +763,20 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           ))}
         </div>
       )}
+      {/* Which chat this goes to — hard to miss, so a question doesn't land in the wrong chat. */}
+      <div className="composer-target" title={`${chat.title}\n${chat.cwd}`}>
+        <span className="muted">Пишете в:</span> <b>{chat.title}</b>
+        <span className="ct-project">{basename(chat.cwd)}</span>
+      </div>
       <textarea
         ref={ref}
         value={text}
         placeholder={
           chat.remote
-            ? 'Удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне; ответы видны и здесь, и там'
+            ? `«${chat.title}» · удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне`
             : busy
-            ? 'Claude работает… можно дописать — сообщение уйдёт в очередь'
-            : 'Спросите Claude… Enter — отправить, Shift+Enter — перенос, Ctrl+V — вставить скриншот или файлы'
+            ? `«${chat.title}» · Claude работает… можно дописать — сообщение уйдёт в очередь`
+            : `Вопрос в «${chat.title}» (${basename(chat.cwd)})… Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы`
         }
         onPaste={onPaste}
         onChange={(e) => setText(e.target.value)}

@@ -673,3 +673,14 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .cg-label { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; line-height: 12px; padding: 0 5px; border-radius: 3px; background: var(--bg3); color: var(--fg2); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .chat-group:hover .cg-label { color: var(--fg); }
 .cg-tabs { display: flex; }
+
+/* ---------- the active chat must be obvious (Claude's terracotta; blue means "new answer") ---------- */
+.chat-tabs .tab.on { background: rgba(217, 119, 87, 0.26); color: #fff; font-weight: 600; box-shadow: inset 0 -3px 0 var(--claude), inset 0 0 0 1px rgba(217, 119, 87, 0.6); }
+.chat-tabs .tab.on .ttitle { color: #fff; }
+.chat-tabs .tab:not(.on) { opacity: 0.8; }
+.chat-tabs .tab:not(.on):hover { opacity: 1; }
+.chat-group:has(.tab.on) .cg-label { background: var(--claude); color: #fff; font-weight: 600; }
+.chat-group:has(.tab.on) .cg-lines line { stroke: var(--claude); }
+.composer-target { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 0 2px 4px; min-width: 0; white-space: nowrap; }
+.composer-target b { color: #fff; overflow: hidden; text-overflow: ellipsis; }
+.composer-target .ct-project { flex: none; font-size: 10.5px; padding: 0 6px; border-radius: 3px; background: rgba(217, 119, 87, 0.3); color: #ffd9cc; }
