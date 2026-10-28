@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 contextBridge.exposeInMainWorld('bridge', {
   invoke: async (channel: string, ...args: unknown[]) => {
@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('bridge', {
     ipcRenderer.on('event', listener);
     return () => ipcRenderer.removeListener('event', listener);
   },
+  /** Real path of a File from a paste/drop event ('' for in-memory data such as a screenshot). */
+  pathForFile: (file: File) => webUtils.getPathForFile(file),
 });

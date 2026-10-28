@@ -36,7 +36,7 @@ const steps = process.argv.slice(3);
 globalThis.win = win;
 for (const s of steps) {
   const mod = await import(pathToFileURL(path.resolve(s)).href);
-  await mod.default(win, shot);
+  await mod.default(win, shot, app);
 }
 fs.writeFileSync(path.join(out, 'console.log'), logs.join('\n'));
 await app.close();

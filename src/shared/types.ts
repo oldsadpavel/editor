@@ -24,10 +24,20 @@ export interface TurnItemTool {
 }
 export type TurnItem = TurnItemText | TurnItemTool;
 
+export interface TurnAttachment {
+  kind: 'image' | 'file';
+  /** File on disk (pasted/attached in this editor). */
+  path?: string;
+  /** Image stored only inside the transcript (e.g. pasted in the terminal): entry uuid + content block index. */
+  ref?: { uuid: string; index: number };
+  mediaType?: string;
+}
+
 export interface Turn {
   id: string;
   prompt: string;
   images: number;
+  attachments?: TurnAttachment[];
   startedAt: number;
   /** Time of the last assistant output in this turn. */
   answeredAt?: number;
@@ -39,6 +49,15 @@ export interface Turn {
   live?: boolean;
   error?: string;
   costUsd?: number;
+  /** Tokens spent on this answer (all API calls of the turn). */
+  tokens?: TurnTokens;
+}
+
+export interface TurnTokens {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
 }
 
 export interface ChatSnapshot {
@@ -50,8 +69,37 @@ export interface ChatSnapshot {
   /** Streaming text not yet committed into a turn item. */
   partial?: string;
   permissionMode?: string;
+  /** Model alias for this chat (fable/opus/sonnet/haiku); undefined = Claude Code default. */
+  model?: string;
+  /** Reasoning effort for this chat; undefined = Claude Code default. */
+  effort?: string;
+  /** Every permission request is approved automatically (and logged). */
+  autoApprove?: boolean;
+  /** Permission decisions in this chat, oldest first. */
+  approvals: ApprovalEntry[];
   pending: PermissionRequest[];
 }
+
+export interface ApprovalEntry {
+  at: number;
+  sessionId: string;
+  tool: string;
+  summary: string;
+  /** auto — approved by the chat's auto-approve switch; allow/always/deny — the user's click. */
+  decision: 'auto' | 'allow' | 'always' | 'deny';
+}
+
+/** Per-message options sent with a prompt. */
+export interface SendOptions {
+  permissionMode?: string;
+  model?: string;
+  effort?: string;
+  attachments?: string[];
+}
+
+export type ColumnId = 'left' | 'center' | 'right';
+export type MainBlock = 'tree' | 'chat' | 'editor';
+export type Layout = Record<ColumnId, MainBlock>;
 
 export interface PermissionRequest {
   id: string;
@@ -233,7 +281,23 @@ export interface AppState {
   defaultPermissionMode?: string;
   /** Setup checklist items the user marked as not needed. */
   setupDismissed?: string[];
+  /** Model and effort for new chats; undefined = Claude Code default. */
+  defaultModel?: string;
+  defaultEffort?: string;
+  defaultAutoApprove?: boolean;
+  /** One-time data repairs already applied. */
+  repairs?: string[];
+  /** Per-chat model/effort chosen in the composer (remembered across restarts). */
+  chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean }>;
   ui: {
+    layout: Layout;
+    /** Relative widths of the bottom blocks shown side by side. */
+    bottomFlex?: Record<string, number>;
+    /** Bottom blocks take the whole center column (the center block is collapsed). */
+    bottomMax?: boolean;
+    /** Sort order of the project tree: per folder, with a default for the rest. */
+    treeSort?: Record<string, TreeSort>;
+    treeSortDefault?: TreeSort;
     leftWidth: number;
     rightWidth: number;
     bottomHeight: number;
@@ -244,7 +308,19 @@ export interface AppState {
 
 export type PanelId = 'setup' | 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests' | 'cache' | 'ping';
 
-export interface DirEntry{ name: string; path: string; dir: boolean }
+export interface DirEntry {
+  name: string;
+  path: string;
+  dir: boolean;
+  size?: number;
+  mtime?: number;
+}
+
+export type TreeSortBy = 'name' | 'mtime' | 'size' | 'type';
+export interface TreeSort {
+  by: TreeSortBy;
+  desc: boolean;
+}
 
 export type MainEvent =
   | { type: 'chat'; snapshot: ChatSnapshot }
@@ -256,6 +332,7 @@ export type MainEvent =
   | { type: 'cache'; report: CacheReport }
   | { type: 'ping'; results: PingResult[] }
   | { type: 'appState'; state: AppState }
+  | { type: 'usage'; usage: UsageInfo }
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'sessionsChanged'; cwd: string };
@@ -309,4 +386,22 @@ export interface SetupItem {
   detail?: string;
   action?: SetupAction;
   dismissable?: boolean;
+}
+
+export interface UsageWindow {
+  /** Percent of the window already used, 0-100. */
+  percent: number;
+  resetsAt?: number;
+}
+
+/** claude.ai plan limits: the 5-hour session window and the weekly window (plus per-model weekly windows). */
+export interface UsageInfo {
+  available: boolean;
+  plan?: string;
+  session?: UsageWindow;
+  week?: UsageWindow;
+  models?: (UsageWindow & { name: string })[];
+  extra?: { percent?: number; used?: number; limit?: number; currency?: string };
+  checkedAt?: number;
+  error?: string;
 }

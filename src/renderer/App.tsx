@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
-import type { PanelId } from '../shared/types';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import type { ColumnId, MainBlock, PanelId } from '../shared/types';
 import { call } from './api';
 import { ChatPanel } from './components/ChatPanel';
 import { EditorArea } from './components/Editor';
+import { ImageLightbox } from './components/ImageViewer';
+import { DropColumn, LayoutButton } from './components/Layout';
 import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
+import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { HELP } from './help';
 import { init, isUnread, set, setUi, togglePanel, useStore } from './store';
@@ -161,10 +164,6 @@ export function App() {
   }, [unreadCount]);
 
   if (!ready || !app) return <div className="boot">Загрузка…</div>;
-  const v = app.ui.visible;
-  const bottom = BOTTOM_PANELS.filter((p) => v[p.id]);
-  const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
-
   return (
     <div className="app">
       <div className="topbar">
@@ -175,47 +174,111 @@ export function App() {
           ))}
         </div>
         <div className="grow" />
+        <UsageMeters />
+        <LayoutButton />
         <AuthButton />
         <button className="icon-btn help-btn" title="Инструкция" onClick={() => set({ help: 'general' })}>
           ?
         </button>
       </div>
-      <div className="workspace">
-        {v.tree && (
-          <>
-            <div style={{ width: app.ui.leftWidth }} className="col">
-              <TreePanel />
-            </div>
-            <Splitter dir="x" onDrag={(d) => setUi({ leftWidth: clamp(app.ui.leftWidth + d, 180, 700) })} />
-          </>
-        )}
-        <div className="col center">
-          <div className="center-top">
-            <EditorArea />
-          </div>
-          {bottom.length > 0 && (
-            <>
-              <Splitter dir="y" onDrag={(d) => setUi({ bottomHeight: clamp(app.ui.bottomHeight - d, 120, window.innerHeight - 200) })} />
-              <div className="bottom-area" style={{ height: app.ui.bottomHeight }}>
-                {bottom.map(({ id, C }) => (
-                  <C key={id} />
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-        {v.chat && (
-          <>
-            <Splitter dir="x" onDrag={(d) => setUi({ rightWidth: clamp(app.ui.rightWidth - d, 340, window.innerWidth - 400) })} />
-            <div style={{ width: app.ui.rightWidth }} className="col">
-              <ChatPanel />
-            </div>
-          </>
-        )}
-      </div>
+      <Workspace />
       <HelpModal />
       <ProjectSettings />
+      <ImageLightbox />
       <Toast />
     </div>
+  );
+}
+
+const BLOCKS: Record<MainBlock, () => React.ReactElement> = { tree: TreePanel, chat: ChatPanel, editor: EditorArea };
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
+
+/**
+ * Three columns filled according to ui.layout. The center column is elastic and also hosts the bottom blocks;
+ * if the block assigned to the center is hidden, the editor (which can't be hidden) takes the elastic place.
+ */
+function Workspace() {
+  const ui = useStore((s) => s.app!.ui);
+  const v = ui.visible;
+  const shown = (b: MainBlock) => b === 'editor' || v[b];
+  const columns = (['left', 'center', 'right'] as ColumnId[]).filter((c) => shown(ui.layout[c]));
+  const flexColumn: ColumnId = shown(ui.layout.center) ? 'center' : columns.find((c) => ui.layout[c] === 'editor')!;
+  const flexIndex = columns.indexOf(flexColumn);
+
+  return (
+    <div className="workspace">
+      {columns.map((c, i) => {
+        const block = ui.layout[c];
+        const Block = BLOCKS[block];
+        if (c === flexColumn)
+          return (
+            <DropColumn key={c} column={c} className="col center">
+              <CenterColumn Block={Block} />
+            </DropColumn>
+          );
+        const before = i < flexIndex;
+        const width = before ? ui.leftWidth : ui.rightWidth;
+        const splitter = (
+          <Splitter
+            dir="x"
+            onDrag={(d) =>
+              setUi(before ? { leftWidth: clamp(ui.leftWidth + d, 180, window.innerWidth - 360) } : { rightWidth: clamp(ui.rightWidth - d, 240, window.innerWidth - 360) })
+            }
+          />
+        );
+        return (
+          <Fragment key={c}>
+            {!before && splitter}
+            <DropColumn column={c} className="col" style={{ width }}>
+              <Block />
+            </DropColumn>
+            {before && splitter}
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function CenterColumn({ Block }: { Block: () => React.ReactElement }) {
+  const ui = useStore((s) => s.app!.ui);
+  const bottom = BOTTOM_PANELS.filter((p) => ui.visible[p.id]);
+  const max = !!ui.bottomMax && bottom.length > 0;
+  const area = useRef<HTMLDivElement>(null);
+  const flex = ui.bottomFlex ?? {};
+
+  /** Moves the border between two neighbouring bottom blocks by `dx` pixels. */
+  const resizePair = (a: PanelId, b: PanelId, dx: number) => {
+    const width = area.current?.clientWidth ?? 1;
+    const total = bottom.reduce((s, p) => s + (flex[p.id] ?? 1), 0);
+    const delta = (dx / width) * total;
+    const fa = flex[a] ?? 1;
+    const fb = flex[b] ?? 1;
+    const min = total * 0.08;
+    if (fa + delta < min || fb - delta < min) return;
+    setUi({ bottomFlex: { ...flex, [a]: fa + delta, [b]: fb - delta } });
+  };
+
+  return (
+    <>
+      <div className="center-top" style={max ? { display: 'none' } : undefined}>
+        <Block />
+      </div>
+      {bottom.length > 0 && (
+        <>
+          {!max && <Splitter dir="y" onDrag={(d) => setUi({ bottomHeight: clamp(ui.bottomHeight - d, 90, window.innerHeight - 110) })} />}
+          <div className="bottom-area" ref={area} style={max ? { flex: 1 } : { height: ui.bottomHeight }}>
+            {bottom.map(({ id, C }, i) => (
+              <Fragment key={id}>
+                {i > 0 && <Splitter dir="x" onDrag={(d) => resizePair(bottom[i - 1].id, id, d)} />}
+                <div className="bottom-slot" style={{ flex: flex[id] ?? 1 }}>
+                  <C />
+                </div>
+              </Fragment>
+            ))}
+          </div>
+        </>
+      )}
+    </>
   );
 }

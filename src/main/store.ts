@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AppState, DeployEvent, Problem, TestResult } from '../shared/types';
@@ -26,6 +27,7 @@ const DEFAULT_STATE: AppState = {
   deployTargets: {},
   keyPatterns: DEFAULT_KEY_PATTERNS,
   ui: {
+    layout: { left: 'tree', center: 'editor', right: 'chat' },
     leftWidth: 300,
     rightWidth: 520,
     bottomHeight: 220,
@@ -78,8 +80,26 @@ export const stateFile = JsonFile.load<AppState>('state.json', structuredClone(D
     ...DEFAULT_STATE.ui,
     ...(loaded.ui ?? {}),
     visible: { ...DEFAULT_STATE.ui.visible, ...(loaded.ui?.visible ?? {}) },
+    layout: validLayout(loaded.ui?.layout) ? loaded.ui.layout : DEFAULT_STATE.ui.layout,
   },
 }));
+
+function validLayout(l: any): boolean {
+  return !!l && ['tree', 'chat', 'editor'].every((b) => [l.left, l.center, l.right].includes(b));
+}
+
+/**
+ * One-time repair: the project settings dialog used to drop a domain typed into the "add" field when Save was
+ * pressed without Enter. The deploy site was saved though, so it is restored as the project's ping target.
+ */
+if (!stateFile.data.repairs?.includes('empty-domains')) {
+  for (const p of stateFile.data.projects) {
+    const site = stateFile.data.deployTargets[p.path.toLowerCase()]?.url;
+    if (site && Array.isArray(p.domains) && p.domains.length === 0) p.domains = [{ id: randomUUID(), target: site }];
+  }
+  stateFile.data.repairs = [...(stateFile.data.repairs ?? []), 'empty-domains'];
+  stateFile.save();
+}
 
 export const deploysFile = JsonFile.load<DeployEvent[]>('deploys.json', [], (l) => (Array.isArray(l) ? l : []));
 export const problemsFile = JsonFile.load<Problem[]>('problems.json', [], (l) => (Array.isArray(l) ? l : []));

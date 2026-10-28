@@ -5,7 +5,11 @@ import type {
   CacheReport,
   ChatMeta,
   ChatSnapshot,
+  ColumnId,
   DeployEvent,
+  Layout,
+  MainBlock,
+  SendOptions,
   KeyScanResult,
   MainEvent,
   PanelId,
@@ -14,8 +18,10 @@ import type {
   SetupItem,
   PingResult,
   TestResult,
+  UsageInfo,
 } from '../shared/types';
 import { bridge, call } from './api';
+import { isImage } from './clipboard';
 
 export interface OpenFile {
   path: string;
@@ -23,9 +29,19 @@ export interface OpenFile {
   savedText: string;
   mtime: number;
   binary: boolean;
+  /** 'image' files are shown in the image viewer instead of the code editor. */
+  kind?: 'text' | 'image';
+  size?: number;
   changedOnDisk?: boolean;
   /** Bumped when the content is replaced from disk so the editor reloads its document. */
   version: number;
+}
+
+export interface LightboxItem {
+  /** URL to show (efile:// or data:). */
+  src: string;
+  /** File on disk, if any (needed for Paint / reveal). */
+  path?: string;
 }
 
 export interface Store {
@@ -49,6 +65,10 @@ export interface Store {
   focusTurn?: { sessionId: string; turnId: string; nonce: number };
   help?: string;
   toast?: { text: string; kind: 'info' | 'error'; nonce: number };
+  lightbox?: { items: LightboxItem[]; index: number };
+  usage: UsageInfo | null;
+  /** Selected tree node (target folder for Ctrl+V). */
+  treeSelected?: string;
 }
 
 let state: Store = {
@@ -64,6 +84,7 @@ let state: Store = {
   cache: null,
   setup: [],
   ping: [],
+  usage: null,
 };
 
 const listeners = new Set<() => void>();
@@ -152,13 +173,32 @@ export function toggleFavorite(path: string) {
 
 // --- files --------------------------------------------------------------------------------
 
+/** Formats that are never text: opened straight in the system program. */
+const SYSTEM_EXT = /\.(pdf|docx?|xlsx?|pptx?|odt|ods|rtf|zip|rar|7z|gz|tar|exe|msi|dll|mp4|mov|avi|mkv|webm|mp3|wav|ogg|flac|psd|ai|ttf|otf|woff2?)$/i;
+
+export async function openInSystem(path: string) {
+  if (await guard(call('shell:openPath', path)) !== undefined) toast(`Открыто в системной программе: ${path.split(/[\\/]/).pop()}`);
+}
+
+/**
+ * Opens a file: text → code editor tab, image → image viewer tab, anything else binary → the system program
+ * (no tab, the editor can't show it anyway).
+ */
 export async function openFile(path: string, line?: number) {
   const existing = state.files.find((f) => f.path.toLowerCase() === path.toLowerCase());
   if (!existing) {
-    const r = await guard(call<{ text: string; binary: boolean; mtime: number }>('fs:read', path));
-    if (!r) return;
-    void call('fs:watch', path);
-    set((s) => ({ files: [...s.files, { path, text: r.text, savedText: r.text, mtime: r.mtime, binary: r.binary, version: 1 }] }));
+    if (isImage(path)) {
+      const st = await guard(call<{ size: number; mtime: number }>('fs:stat', path));
+      if (!st) return;
+      void call('fs:watch', path);
+      set((s) => ({ files: [...s.files, { path, text: '', savedText: '', mtime: st.mtime, size: st.size, binary: true, kind: 'image', version: 1 }] }));
+    } else {
+      if (SYSTEM_EXT.test(path)) return openInSystem(path);
+      const r = await call<{ text: string; binary: boolean; mtime: number; size: number }>('fs:read', path).catch(() => null);
+      if (!r || r.binary) return openInSystem(path);
+      void call('fs:watch', path);
+      set((s) => ({ files: [...s.files, { path, text: r.text, savedText: r.text, mtime: r.mtime, size: r.size, binary: false, kind: 'text', version: 1 }] }));
+    }
   }
   const p = existing?.path ?? path;
   set({ activeFile: p, reveal: line ? { path: p, line, nonce: Date.now() } : state.reveal });
@@ -201,6 +241,12 @@ export async function reloadFile(path: string) {
 async function onFileChanged(path: string) {
   const f = state.files.find((x) => x.path.toLowerCase() === path.toLowerCase());
   if (!f) return;
+  if (f.kind === 'image') {
+    // Saved in Paint (or by Claude): bump the version so the viewer reloads the picture.
+    const st = await call<{ size: number; mtime: number }>('fs:stat', f.path).catch(() => null);
+    set((s) => ({ files: s.files.map((x) => (x === f ? { ...x, version: x.version + 1, size: st?.size ?? x.size, mtime: st?.mtime ?? x.mtime } : x)) }));
+    return;
+  }
   const r = await call<{ text: string; mtime: number }>('fs:read', f.path).catch(() => null);
   if (!r || r.text === f.savedText) return;
   if (f.text === f.savedText) await reloadFile(f.path);
@@ -264,8 +310,43 @@ export async function renameChat(id: string, title: string) {
   await guard(call('chat:rename', id, title));
 }
 
-export async function sendPrompt(id: string, text: string, mode?: string) {
-  await guard(call('chat:send', id, text, mode));
+/** Sends a prompt; false (with an error toast) when it could not be sent, so the composer can keep the text. */
+export async function sendPrompt(id: string, text: string, opts: SendOptions) {
+  try {
+    await call('chat:send', id, text, opts);
+    return true;
+  } catch (e: any) {
+    toast(e.message ?? String(e), 'error');
+    return false;
+  }
+}
+
+export function setAutoApprove(id: string, on: boolean) {
+  set((s) => (s.chats[id] ? { chats: { ...s.chats, [id]: { ...s.chats[id], autoApprove: on } } } : {}));
+  void guard(call('chat:autoApprove', id, on));
+}
+
+// --- layout -------------------------------------------------------------------------------
+
+export const LAYOUT_PRESETS: { id: string; label: string; layout: Layout }[] = [
+  { id: 'code', label: 'Код в центре', layout: { left: 'tree', center: 'editor', right: 'chat' } },
+  { id: 'chat', label: 'Чат в центре', layout: { left: 'tree', center: 'chat', right: 'editor' } },
+  { id: 'chat-left', label: 'Чат слева', layout: { left: 'chat', center: 'editor', right: 'tree' } },
+];
+
+/** Puts `block` into `column`; whatever stood there takes the block's old place. */
+export function moveBlock(block: MainBlock, column: ColumnId) {
+  const layout = { ...state.app!.ui.layout };
+  const from = (Object.keys(layout) as ColumnId[]).find((c) => layout[c] === block)!;
+  if (from === column) return;
+  [layout[from], layout[column]] = [layout[column], block];
+  setUi({ layout });
+}
+
+// --- image viewer -------------------------------------------------------------------------
+
+export function openLightbox(items: LightboxItem[], index = 0) {
+  if (items.length) set({ lightbox: { items, index } });
 }
 
 /** A chat counts as "being read" only when its tab is active, the panel is open and the window has focus. */
@@ -305,6 +386,9 @@ function onEvent(e: MainEvent) {
     case 'ping':
       set({ ping: e.results });
       return;
+    case 'usage':
+      set({ usage: e.usage });
+      return;
     case 'appState':
       set((s) => ({ app: { ...e.state, ui: s.app?.ui ?? e.state.ui } }));
       refreshSetup();
@@ -340,7 +424,7 @@ export async function init() {
     call<KeyScanResult | null>('keys:last'),
     call<CacheReport | null>('cache:last'),
   ]);
-  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list') });
+  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list'), usage: await call<UsageInfo | null>('usage:get') });
   for (const id of app.openChats) {
     const snap = await call<ChatSnapshot>('chat:open', id).catch(() => null);
     if (snap) set((s) => ({ chats: { ...s.chats, [id]: snap } }));

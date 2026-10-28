@@ -3,6 +3,7 @@ import type { ChatSnapshot, SessionInfo } from '../../shared/types';
 import { closeChat, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { ChatView } from './ChatView';
+import { BlockHandle } from './Layout';
 
 export function StatusDot({ id, status }: { id: string; status?: ChatSnapshot['status'] }) {
   const unread = useStore((s) => isUnread(id, s));
@@ -110,6 +111,7 @@ export function ChatPanel() {
   return (
     <div className="panel chat-panel">
       <div className="panel-head">
+        <BlockHandle block="chat" />
         <span className="panel-title">ИИ</span>
         <select
           className="project-select"

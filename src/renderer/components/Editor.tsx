@@ -29,6 +29,8 @@ import { useEffect, useRef } from 'react';
 import { closeFile, editFile, reloadFile, saveFile, set, useStore, type OpenFile } from '../store';
 import { basename, dirname } from '../util';
 import { fileIcon } from './icons';
+import { ImageTab } from './ImageViewer';
+import { BlockHandle } from './Layout';
 
 function language(path: string): Extension {
   const name = basename(path).toLowerCase();
@@ -144,6 +146,9 @@ export function EditorArea() {
   return (
     <div className="editor-area">
       <div className="tabs editor-tabs">
+        <span className="tabs-handle">
+          <BlockHandle block="editor" />
+        </span>
         {files.map((f) => {
           const dirty = f.text !== f.savedText;
           return (
@@ -178,8 +183,8 @@ export function EditorArea() {
       {file && <div className="crumbs">{dirname(file.path)}</div>}
       <div className="editor-body">
         {file ? (
-          file.binary ? (
-            <div className="empty">Бинарный файл — не отображается.</div>
+          file.kind === 'image' ? (
+            <ImageTab path={file.path} version={file.version} size={file.size} />
           ) : (
             <CodeView key={file.path} file={file} />
           )

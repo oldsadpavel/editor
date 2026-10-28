@@ -1,21 +1,26 @@
-import { BrowserWindow, Menu, app, dialog, ipcMain, shell } from 'electron';
+import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import type { AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer } from '../shared/types';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import type { AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer, SendOptions } from '../shared/types';
 import { setSink } from './bus';
 import * as cache from './cache';
 import * as claude from './claude';
 import * as deploy from './deploy';
+import * as files from './files';
 import * as keys from './keys';
 import * as ping from './ping';
 import * as problems from './problems';
 import { setupStatus } from './setup';
+import * as usage from './usage';
 import { flushAll, stateFile } from './store';
 import { findTranscript, normalize } from './transcript';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let win: BrowserWindow | null = null;
+
+// `efile:///<encoded absolute path>` serves local files (image previews) without base64 round-trips through IPC.
+protocol.registerSchemesAsPrivileged([{ scheme: 'efile', privileges: { standard: false, secure: true, supportFetchAPI: true, stream: true } }]);
 
 const watchedRoots = new Set<string>();
 function watchRepoOf(p: string) {
@@ -47,12 +52,21 @@ deploy.setPushAttribution((repo, at) => {
 
 const HIDDEN = new Set(['.git', '.DS_Store', 'Thumbs.db']);
 
+/** Folder listing with size and mtime so the tree can sort by them; ordering is done by the renderer. */
 function listDir(dir: string): DirEntry[] {
   return fs
     .readdirSync(dir, { withFileTypes: true })
     .filter((e) => !HIDDEN.has(e.name))
-    .map((e) => ({ name: e.name, path: path.join(dir, e.name), dir: e.isDirectory() }))
-    .sort((a, b) => (a.dir === b.dir ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : a.dir ? -1 : 1));
+    .map((e) => {
+      const p = path.join(dir, e.name);
+      let st: fs.Stats | null = null;
+      try {
+        st = fs.statSync(p);
+      } catch {
+        /* broken link */
+      }
+      return { name: e.name, path: p, dir: e.isDirectory(), size: st?.size, mtime: st?.mtimeMs };
+    });
 }
 
 const fileWatchers = new Map<string, fs.FSWatcher>();
@@ -123,6 +137,20 @@ handle('dialog:folder', async () => {
 });
 handle('shell:reveal', (p: string) => shell.showItemInFolder(p));
 handle('shell:open', (url: string) => shell.openExternal(url));
+handle('shell:openPath', (p: string) => files.openPath(p));
+
+handle('attach:saveBlob', (bytes: Uint8Array, mime: string, name?: string, dir?: string) => files.saveBlob(bytes, mime, name, dir));
+handle('attach:saveDataUrl', (url: string) => files.saveDataUrl(url));
+handle('clipboard:files', (dir?: string) => files.clipboardFiles(dir));
+handle('clipboard:pasteInto', (dir: string) => files.pasteInto(dir));
+handle('fs:copyInto', (dir: string, paths: string[]) => files.copyInto(dir, paths));
+handle('fs:stat', (p: string) => {
+  const st = fs.statSync(p);
+  return { size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() };
+});
+handle('image:edit', (p: string) => files.editImage(p));
+handle('image:copy', (p: string) => files.copyImage(p));
+handle('chat:image', (id: string, uuid: string, index: number) => files.transcriptImage(id, uuid, index));
 
 handle('auth:status', () => claude.authStatus());
 handle('auth:login', () => claude.login());
@@ -130,8 +158,9 @@ handle('auth:login', () => claude.login());
 handle('chat:list', (cwd: string) => claude.listProjectSessions(cwd));
 handle('chat:open', (id: string, cwd?: string) => claude.openChat(id, cwd));
 handle('chat:new', (cwd: string) => claude.newChat(cwd));
-handle('chat:send', (id: string, text: string, mode?: string) => claude.send(id, text, mode));
+handle('chat:send', (id: string, text: string, opts?: SendOptions) => claude.send(id, text, opts ?? {}));
 handle('chat:interrupt', (id: string) => claude.interrupt(id));
+handle('chat:autoApprove', (id: string, on: boolean) => claude.setAutoApprove(id, on));
 handle('chat:rename', (id: string, title: string) => claude.rename(id, title));
 handle('chat:close', (id: string) => claude.closeChat(id));
 handle('chat:permission', (id: string, reqId: string, a: PermissionAnswer) => claude.answerPermission(id, reqId, a));
@@ -161,6 +190,8 @@ handle('tests:list', () => deploy.listTests());
 
 handle('ping:list', () => ping.list());
 handle('ping:now', (project?: string) => ping.pingNow(project));
+handle('usage:get', () => usage.lastUsage());
+handle('usage:refresh', () => usage.refreshUsage());
 handle('setup:status', () => setupStatus());
 handle('cache:scan', () => cache.scanCache());
 handle('cache:last', () => cache.lastCache());
@@ -201,10 +232,15 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  protocol.handle('efile', (req) => {
+    const p = decodeURIComponent(new URL(req.url).pathname.replace(/^\//, ''));
+    return net.fetch(pathToFileURL(p).toString());
+  });
   createWindow();
   for (const p of stateFile.data.projects) void deploy.watchPath(p.path);
   deploy.startDeployWatcher();
   ping.startPing();
+  usage.startUsage();
   setTimeout(() => void keys.scanKeys(), 3000);
   setInterval(() => void keys.scanKeys(), 60 * 60_000);
   setTimeout(() => void cache.scanCache(), 8000);
@@ -215,6 +251,7 @@ app.on('window-all-closed', () => {
   claude.shutdown();
   deploy.stopDeployWatcher();
   ping.stopPing();
+  usage.stopUsage();
   flushAll();
   app.quit();
 });

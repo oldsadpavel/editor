@@ -4,11 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SessionInfo } from '../shared/types';
+import type { ApprovalEntry, AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SendOptions, SessionInfo } from '../shared/types';
+import * as approvals from './approvals';
 import { emit } from './bus';
+import { IMAGE_EXT } from './files';
 import * as problems from './problems';
 import { stateFile } from './store';
-import { TurnBuilder, findTranscript, loadTranscript } from './transcript';
+import { ATTACHMENTS_HEADER, TurnBuilder, findTranscript, loadTranscript } from './transcript';
+import * as usage from './usage';
 import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
 
 /** Prefers the user's installed Claude Code so login, settings and version match the terminal. */
@@ -97,6 +100,12 @@ class ChatSession {
   partial = '';
   title = 'Новый чат';
   permissionMode?: string;
+  model?: string;
+  effort?: string;
+  autoApprove = false;
+  approvals: ApprovalEntry[] = [];
+  /** Cumulative cost reported by the current Claude process (reset when a new process starts). */
+  costSoFar = 0;
   q: Query | null = null;
   input: InputQueue | null = null;
   pending = new Map<string, PendingPermission>();
@@ -114,6 +123,10 @@ class ChatSession {
       turns: this.builder.turns,
       partial: this.partial || undefined,
       permissionMode: this.permissionMode,
+      model: this.model,
+      effort: this.effort,
+      autoApprove: this.autoApprove,
+      approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
     };
   }
@@ -186,12 +199,20 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
       /* title stays default */
     }
   }
+  const saved = stateFile.data.chatModels?.[sessionId];
+  s.model = saved?.model;
+  s.effort = saved?.effort;
+  s.autoApprove = !!saved?.autoApprove;
+  s.approvals = approvals.forChat(sessionId);
   sessions.set(sessionId, s);
   return s.snapshot();
 }
 
 export function newChat(cwd: string): ChatSnapshot {
   const s = new ChatSession(randomUUID(), cwd);
+  s.model = stateFile.data.defaultModel;
+  s.effort = stateFile.data.defaultEffort;
+  s.autoApprove = !!stateFile.data.defaultAutoApprove;
   sessions.set(s.id, s);
   return s.snapshot();
 }
@@ -215,20 +236,63 @@ function markCompleted(s: ChatSession, error?: string) {
   emit({ type: 'sessionsChanged', cwd: s.cwd });
 }
 
-export async function send(sessionId: string, text: string, permissionMode?: string) {
+const IMAGE_MIME: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+const MAX_INLINE_IMAGE = 5 * 1024 * 1024;
+
+/**
+ * Message content for a prompt with attachments: images go inline (Claude sees them), and every attachment path is
+ * listed under ATTACHMENTS_HEADER so Claude can open any file with Read and the transcript keeps the paths.
+ */
+function buildContent(text: string, attachments: string[]) {
+  if (!attachments.length) return text;
+  const blocks: any[] = [];
+  for (const p of attachments) {
+    const mime = IMAGE_MIME[path.extname(p).toLowerCase()];
+    if (!mime) continue;
+    try {
+      if (fs.statSync(p).size > MAX_INLINE_IMAGE) continue;
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: mime, data: fs.readFileSync(p).toString('base64') } });
+    } catch {
+      /* unreadable: still listed by path below */
+    }
+  }
+  blocks.push({ type: 'text', text: `${text}\n\n${ATTACHMENTS_HEADER}\n${attachments.map((p) => `- ${p}`).join('\n')}` });
+  return blocks;
+}
+
+function rememberChatModel(s: ChatSession) {
+  stateFile.data.chatModels = { ...stateFile.data.chatModels, [s.id]: { model: s.model, effort: s.effort, autoApprove: s.autoApprove } };
+  stateFile.save();
+}
+
+export async function send(sessionId: string, text: string, opts: SendOptions) {
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Чат не открыт');
-  if (permissionMode) s.permissionMode = permissionMode;
+  const attachments = opts.attachments ?? [];
+  if (opts.permissionMode) s.permissionMode = opts.permissionMode;
+  const modelChanged = (opts.model || undefined) !== s.model;
+  const effortChanged = (opts.effort || undefined) !== s.effort;
+  s.model = opts.model || undefined;
+  s.effort = opts.effort || undefined;
+  if (modelChanged || effortChanged) rememberChatModel(s);
+
   const turn = s.builder.startTurn(text, Date.now(), randomUUID());
+  turn.attachments = attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? 'image' : 'file', path: p }));
+  turn.images = turn.attachments.filter((a) => a.kind === 'image').length;
   turn.live = true;
-  if (s.title === 'Новый чат') s.title = text.slice(0, 60);
+  if (s.title === 'Новый чат') s.title = (text || path.basename(attachments[0] ?? '')).slice(0, 60);
   s.partial = '';
   s.setStatus('running');
   if (!s.q) start(s);
-  else if (permissionMode) await s.q.setPermissionMode(permissionMode as any).catch(() => {});
+  else {
+    // A running session switches model, effort and permission mode in place; history and context stay.
+    if (opts.permissionMode) await s.q.setPermissionMode(opts.permissionMode as any).catch(() => {});
+    if (modelChanged) await s.q.setModel(s.model).catch(() => {});
+    if (effortChanged) await s.q.applyFlagSettings({ effortLevel: (s.effort as any) ?? null }).catch(() => {});
+  }
   s.input!.push({
     type: 'user',
-    message: { role: 'user', content: text },
+    message: { role: 'user', content: buildContent(text, attachments) },
     parent_tool_use_id: null,
     session_id: s.id,
   } as SDKUserMessage);
@@ -236,6 +300,7 @@ export async function send(sessionId: string, text: string, permissionMode?: str
 
 function start(s: ChatSession) {
   s.input = new InputQueue();
+  s.costSoFar = 0;
   const resume = s.existsOnDisk || !!findTranscript(s.id);
   s.q = query({
     prompt: s.input,
@@ -248,6 +313,8 @@ function start(s: ChatSession) {
       mcpServers: { editor: editorMcp(s.id, s.cwd) },
       allowedTools: ['mcp__editor'],
       ...(s.permissionMode ? { permissionMode: s.permissionMode as any } : {}),
+      ...(s.model ? { model: s.model } : {}),
+      ...(s.effort ? { effort: s.effort } : {}),
       ...(s.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       canUseTool: (toolName: string, input: Record<string, unknown>, opts: any) => askPermission(s, toolName, input, opts),
       stderr: (data: string) => {
@@ -271,17 +338,25 @@ async function pump(s: ChatSession) {
       s.q = null;
       s.input = null;
       s.builder.markInterrupted();
+      finishLiveTurns(s);
       if (s.status === 'running' || s.status === 'waiting') s.setStatus('idle');
+      else s.publish(true);
     }
+  }
+}
+
+function finishLiveTurns(s: ChatSession) {
+  for (const t of s.builder.turns) {
+    if (!t.live) continue;
+    t.live = false;
+    t.answeredAt ??= Date.now();
   }
 }
 
 function failTurn(s: ChatSession, msg: string) {
   const turn = s.builder.turns[s.builder.turns.length - 1];
-  if (turn) {
-    turn.error = msg;
-    turn.live = false;
-  }
+  if (turn) turn.error = msg;
+  finishLiveTurns(s);
   s.partial = '';
   s.setStatus('error');
   markCompleted(s, msg);
@@ -303,7 +378,12 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       if ((m as any).parent_tool_use_id) return; // subagent internals stay out of the main view
       s.partial = '';
       s.builder.ingest({ type: 'assistant', message: m.message, timestamp: now, uuid: m.uuid });
-      s.publish();
+      // Output after a result means Claude picked up a queued prompt: the chat is working again.
+      if (s.status === 'idle') {
+        const last = s.builder.turns[s.builder.turns.length - 1];
+        if (last) last.live = true;
+        s.setStatus('running');
+      } else s.publish();
       return;
     }
     case 'user': {
@@ -319,10 +399,16 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       const r: any = m;
       const turn = s.builder.turns[s.builder.turns.length - 1];
       if (turn) {
-        turn.live = false;
-        turn.costUsd = r.total_cost_usd;
+        // total_cost_usd accumulates over the Claude process, so a turn costs the difference.
+        if (typeof r.total_cost_usd === 'number') {
+          turn.costUsd = Math.max(0, r.total_cost_usd - s.costSoFar);
+          s.costSoFar = r.total_cost_usd;
+        }
         turn.answeredAt ??= Date.now();
       }
+      // Prompts sent while Claude was busy are merged into one turn and get a single result, so every
+      // question still marked live is answered now.
+      finishLiveTurns(s);
       s.partial = '';
       if (r.subtype !== 'success' || r.is_error) {
         const detail = r.errors?.join('\n') || r.result || r.subtype;
@@ -335,7 +421,15 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     }
     case 'system': {
       const sm: any = m;
-      if (sm.subtype === 'session_state_changed' && sm.state === 'requires_action') s.setStatus('waiting');
+      if (sm.subtype === 'session_state_changed') {
+        if (sm.state === 'requires_action') s.setStatus('waiting');
+        // 'idle' is the SDK's authoritative "turn is over" signal.
+        if (sm.state === 'idle' && (s.status === 'running' || s.status === 'waiting') && !s.pending.size) {
+          finishLiveTurns(s);
+          s.partial = '';
+          s.setStatus('idle');
+        }
+      }
       if (sm.subtype === 'api_retry' && sm.attempt >= 3) {
         problems.report({
           source: 'chat',
@@ -355,6 +449,7 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     case 'rate_limit_event' as any: {
       const r: any = m;
       const info = r.rate_limit_info ?? r;
+      usage.onRateLimitEvent(info);
       if (info?.status === 'rejected' || info?.status === 'allowed_warning') {
         problems.report({
           source: 'auth',
@@ -369,7 +464,21 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
   }
 }
 
+/** Questions to the user need an actual answer, so auto-approve never answers them. */
+const NEEDS_USER = new Set(['AskUserQuestion']);
+
+function logDecision(s: ChatSession, toolName: string, input: Record<string, unknown>, decision: ApprovalEntry['decision']) {
+  const e: ApprovalEntry = { at: Date.now(), sessionId: s.id, tool: toolName, summary: approvals.summarize(toolName, input), decision };
+  approvals.record(e);
+  s.approvals.push(e);
+}
+
 function askPermission(s: ChatSession, toolName: string, input: Record<string, unknown>, opts: any): Promise<any> {
+  if (s.autoApprove && !NEEDS_USER.has(toolName)) {
+    logDecision(s, toolName, input, 'auto');
+    s.publish();
+    return Promise.resolve({ behavior: 'allow', updatedInput: input });
+  }
   const id = randomUUID();
   const req: PermissionRequest = {
     id,
@@ -393,6 +502,7 @@ export function answerPermission(sessionId: string, requestId: string, a: Permis
   const p = s?.pending.get(requestId);
   if (!s || !p) return;
   s.pending.delete(requestId);
+  logDecision(s, p.req.toolName, p.req.input, a.behavior === 'deny' ? 'deny' : a.always ? 'always' : 'allow');
   if (a.behavior === 'allow') {
     p.resolve({
       behavior: 'allow',
@@ -405,13 +515,30 @@ export function answerPermission(sessionId: string, requestId: string, a: Permis
   s.setStatus(s.pending.size ? 'waiting' : 'running');
 }
 
+/** Turns auto-approve on/off for a chat; turning it on also approves what is already waiting. */
+export function setAutoApprove(sessionId: string, on: boolean) {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  s.autoApprove = on;
+  rememberChatModel(s);
+  if (on) {
+    for (const [id, p] of s.pending) {
+      if (NEEDS_USER.has(p.req.toolName)) continue;
+      s.pending.delete(id);
+      logDecision(s, p.req.toolName, p.req.input, 'auto');
+      p.resolve({ behavior: 'allow', updatedInput: p.req.input });
+    }
+    if (s.status === 'waiting' && !s.pending.size) s.status = 'running';
+  }
+  s.publish(true);
+}
+
 export async function interrupt(sessionId: string) {
   const s = sessions.get(sessionId);
   if (!s?.q) return;
   for (const [id] of s.pending) answerPermission(sessionId, id, { behavior: 'deny', message: 'Остановлено пользователем' });
   await s.q.interrupt().catch(() => {});
-  const turn = s.builder.turns[s.builder.turns.length - 1];
-  if (turn) turn.live = false;
+  finishLiveTurns(s);
   s.builder.markInterrupted();
   s.partial = '';
   s.setStatus('idle');

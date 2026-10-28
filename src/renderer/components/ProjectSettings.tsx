@@ -22,19 +22,27 @@ function Form({ project }: { project: ProjectRef }) {
   const [draft, setDraft] = useState('');
   const close = () => set({ projectSettings: undefined });
 
+  // A bare domain is most useful as an HTTPS check (status + certificate).
+  const normalize = (raw: string) => {
+    const t = raw.trim();
+    return /^[\w.-]+\.[a-z]{2,}$/i.test(t) ? 'https://' + t : t;
+  };
+  const sameTarget = (a: string, b: string) => a.replace(/\/+$/, '').toLowerCase() === b.replace(/\/+$/, '').toLowerCase();
+
   const add = () => {
-    let t = draft.trim();
+    const t = normalize(draft);
     if (!t) return;
-    // A bare domain is most useful as an HTTPS check (status + certificate).
-    if (/^[\w.-]+\.[a-z]{2,}$/i.test(t)) t = 'https://' + t;
     setDomains([...domains, { id: crypto.randomUUID(), target: t }]);
     setDraft('');
   };
 
   const save = async () => {
-    const projects = get().app!.projects.map((p) =>
-      p.path === project.path ? { ...p, name: name.trim() || p.name, domains: domains.filter((d) => d.target.trim()), pingMinutes: minutes } : p,
-    );
+    // Text left in the "add" field counts as added, and the deploy site is always pinged too.
+    let list = domains.filter((d) => d.target.trim());
+    for (const extra of [normalize(draft), site.trim()]) {
+      if (extra && !list.some((d) => sameTarget(d.target, extra))) list = [...list, { id: crypto.randomUUID(), target: extra }];
+    }
+    const projects = get().app!.projects.map((p) => (p.path === project.path ? { ...p, name: name.trim() || p.name, domains: list, pingMinutes: minutes } : p));
     await saveApp({ projects });
     if (site.trim() !== (existingSite?.url ?? '') || mode !== existingSite?.mode) {
       const t: DeployTarget = { url: site.trim(), mode, tests: existingSite?.tests ?? [] };
@@ -46,7 +54,7 @@ function Form({ project }: { project: ProjectRef }) {
     }
     close();
     toast('Настройки проекта сохранены');
-    if (domains.length) set({ ping: await call('ping:now', project.path) });
+    if (list.length) set({ ping: await call('ping:now', project.path) });
   };
 
   return (

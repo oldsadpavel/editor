@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnItem } from '../../shared/types';
-import { call } from '../api';
-import { markSeen, openFile, sendPrompt, set, useStore } from '../store';
+import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem } from '../../shared/types';
+import { call, fileUrl } from '../api';
+import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
+import { markSeen, openFile, openInSystem, openLightbox, sendPrompt, set, setAutoApprove, toast, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
+import { fileIcon } from './icons';
 
 const MODES = [
   { id: '', label: 'Как в настройках Claude' },
@@ -13,6 +15,72 @@ const MODES = [
   { id: 'plan', label: 'План' },
   { id: 'bypassPermissions', label: 'Без ограничений' },
 ];
+
+export const MODELS = [
+  { id: '', label: 'Модель: по умолчанию' },
+  { id: 'fable', label: 'Fable — самая сильная' },
+  { id: 'opus', label: 'Opus — сложные задачи' },
+  { id: 'sonnet', label: 'Sonnet — быстро и умно' },
+  { id: 'haiku', label: 'Haiku — быстрее всех' },
+];
+
+export const EFFORTS = [
+  { id: '', label: 'Качество: по умолчанию' },
+  { id: 'low', label: 'Быстро (low)' },
+  { id: 'medium', label: 'Средне (medium)' },
+  { id: 'high', label: 'Тщательно (high)' },
+  { id: 'xhigh', label: 'Очень тщательно (xhigh)' },
+  { id: 'max', label: 'Максимум (max)' },
+];
+
+/** Thumbnail/chip of an attachment; images from a transcript are fetched only when shown. */
+function useAttachmentSrc(sessionId: string, a: TurnAttachment): string | undefined {
+  const [src, setSrc] = useState<string | undefined>(a.path ? fileUrl(a.path) : undefined);
+  useEffect(() => {
+    if (a.path || !a.ref) return;
+    let alive = true;
+    void call<string | null>('chat:image', sessionId, a.ref.uuid, a.ref.index).then((u) => alive && u && setSrc(u));
+    return () => {
+      alive = false;
+    };
+  }, [sessionId, a.path, a.ref?.uuid, a.ref?.index]);
+  return src;
+}
+
+function AttachmentThumb({ sessionId, a, onOpen }: { sessionId: string; a: TurnAttachment; onOpen: (src: string) => void }) {
+  const src = useAttachmentSrc(sessionId, a);
+  if (a.kind === 'file')
+    return (
+      <span className="att-chip" title={a.path} onClick={() => a.path && openFile(a.path)}>
+        {fileIcon(a.path ?? '')} {basename(a.path ?? 'файл')}
+      </span>
+    );
+  return (
+    <span className="att-thumb" title={a.path ?? 'Картинка из истории'} onClick={() => src && onOpen(src)}>
+      {src ? <img src={src} alt="" /> : <span className="spinner" />}
+    </span>
+  );
+}
+
+function TurnAttachments({ sessionId, list }: { sessionId: string; list: TurnAttachment[] }) {
+  // Lightbox walks through every image of the turn; transcript-only images are resolved on open.
+  const open = async (clicked: TurnAttachment) => {
+    const images = list.filter((a) => a.kind === 'image');
+    const items: LightboxItem[] = [];
+    for (const a of images) {
+      const src = a.path ? fileUrl(a.path) : await call<string | null>('chat:image', sessionId, a.ref!.uuid, a.ref!.index);
+      if (src) items.push({ src, path: a.path });
+    }
+    openLightbox(items, Math.max(0, images.indexOf(clicked)));
+  };
+  return (
+    <div className="att-row">
+      {list.map((a, i) => (
+        <AttachmentThumb key={i} sessionId={sessionId} a={a} onOpen={() => void open(a)} />
+      ))}
+    </div>
+  );
+}
 
 function editLabel(e: FileEdit) {
   const parts: string[] = [];
@@ -124,7 +192,7 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
   );
 }
 
-function TurnBody({ turn, cwd, partial }: { turn: Turn; cwd: string; partial?: string }) {
+function TurnBody({ turn, cwd, partial, sessionId }: { turn: Turn; cwd: string; partial?: string; sessionId: string }) {
   // Consecutive tool calls are folded into one group so the text answer stays readable.
   const blocks: ({ kind: 'text'; text: string } | { kind: 'tools'; tools: Extract<TurnItem, { kind: 'tool' }>[] })[] = [];
   for (const it of turn.items) {
@@ -137,7 +205,12 @@ function TurnBody({ turn, cwd, partial }: { turn: Turn; cwd: string; partial?: s
     <div className="turn-body">
       <div className="question">
         <div className="q-label">Вопрос · {formatTime(turn.startedAt)}</div>
-        <div className="q-text">{turn.prompt || (turn.images ? `[${turn.images} изображение]` : '')}</div>
+        {turn.prompt && <div className="q-text">{turn.prompt}</div>}
+        {turn.attachments?.length ? (
+          <TurnAttachments sessionId={sessionId} list={turn.attachments} />
+        ) : (
+          !turn.prompt && turn.images > 0 && <div className="q-text">[{turn.images} изображение]</div>
+        )}
       </div>
       {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
       {partial && <Markdown text={partial} cwd={cwd} />}
@@ -162,12 +235,54 @@ function TurnBody({ turn, cwd, partial }: { turn: Turn; cwd: string; partial?: s
   );
 }
 
+const kTokens = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n));
+
+/**
+ * Tokens spent on the answer. The headline is what the model processed (fresh input + cache writes + output);
+ * cache reads are cheap and shown only in the tooltip.
+ */
+function TokensBadge({ turn }: { turn: Turn }) {
+  const t = turn.tokens;
+  if (!t) return null;
+  const main = t.input + t.cacheWrite + t.output;
+  const tip = [
+    'Токены на этот ответ',
+    `Вход: ${t.input.toLocaleString('ru-RU')}`,
+    `Выход: ${t.output.toLocaleString('ru-RU')}`,
+    `Запись в кеш: ${t.cacheWrite.toLocaleString('ru-RU')}`,
+    `Чтение из кеша: ${t.cacheRead.toLocaleString('ru-RU')} (дешевле в 10 раз)`,
+    `Всего с кешем: ${(main + t.cacheRead).toLocaleString('ru-RU')}`,
+    ...(turn.costUsd !== undefined ? [`Стоимость по ценам API: $${turn.costUsd.toFixed(4)}`] : []),
+  ].join('\n');
+  return (
+    <span className="turn-tokens" title={tip}>
+      🪙 {kTokens(main)}
+    </span>
+  );
+}
+
 function firstLine(s: string) {
   const l = s.trim().split('\n')[0];
   return l.length > 140 ? l.slice(0, 140) + '…' : l;
 }
 
-function TurnRow({ turn, cwd, open, onToggle, partial, highlight }: { turn: Turn; cwd: string; open: boolean; onToggle: () => void; partial?: string; highlight?: boolean }) {
+function TurnRow({
+  turn,
+  cwd,
+  open,
+  onToggle,
+  partial,
+  highlight,
+  sessionId,
+}: {
+  turn: Turn;
+  cwd: string;
+  open: boolean;
+  onToggle: () => void;
+  partial?: string;
+  highlight?: boolean;
+  sessionId: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (highlight) ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -177,14 +292,22 @@ function TurnRow({ turn, cwd, open, onToggle, partial, highlight }: { turn: Turn
     <div className={`turn ${open ? 'open' : ''} ${turn.live ? 'live' : ''} ${turn.error ? 'failed' : ''} ${highlight ? 'flash' : ''}`} ref={ref}>
       <div className="turn-head" onClick={onToggle}>
         <span className="twisty">{open ? '▾' : '▸'}</span>
-        <span className="turn-q">{firstLine(turn.prompt) || '(изображение)'}</span>
+        <span className="turn-q">
+          {turn.attachments?.length ? (
+            <span className="att-badge" title="Вложения">
+              📎{turn.attachments.length}
+            </span>
+          ) : null}
+          {firstLine(turn.prompt) || (turn.images ? '(изображение)' : '(вложение)')}
+        </span>
         <EditsButton edits={turn.edits} cwd={cwd} />
+        <TokensBadge turn={turn} />
         <span className="turn-date" title={`Вопрос: ${new Date(turn.startedAt).toLocaleString('ru-RU')}${turn.answeredAt ? `\nОтвет: ${new Date(turn.answeredAt).toLocaleString('ru-RU')}` : ''}`}>
           {turn.live ? <span className="spinner" /> : turn.error ? '⚠' : '✓'} {formatTime(turn.answeredAt ?? turn.startedAt)}
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
         </span>
       </div>
-      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} />}
+      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} sessionId={sessionId} />}
     </div>
   );
 }
@@ -284,13 +407,69 @@ function PermissionCard({ req }: { req: PermissionRequest }) {
   );
 }
 
+function AttachmentChips({ paths, onRemove }: { paths: string[]; onRemove: (p: string) => void }) {
+  if (!paths.length) return null;
+  const images = paths.filter(isImage);
+  return (
+    <div className="att-row composer-atts">
+      {paths.map((p) =>
+        isImage(p) ? (
+          <span key={p} className="att-thumb" title={p} onClick={() => openLightbox(images.map((x) => ({ src: fileUrl(x), path: x })), images.indexOf(p))}>
+            <img src={fileUrl(p)} alt="" />
+            <span className="att-x" onClick={(e) => (e.stopPropagation(), onRemove(p))} title="Убрать">
+              ×
+            </span>
+          </span>
+        ) : (
+          <span key={p} className="att-chip" title={p} onClick={() => openInSystem(p)}>
+            {fileIcon(p)} {basename(p)}
+            <span className="att-x" onClick={(e) => (e.stopPropagation(), onRemove(p))} title="Убрать">
+              ×
+            </span>
+          </span>
+        ),
+      )}
+    </div>
+  );
+}
+
 function Composer({ chat }: { chat: ChatSnapshot }) {
   const [text, setText] = useState('');
+  const [attachments, setAttachments] = useState<string[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const defaultMode = useStore((s) => s.app!.defaultPermissionMode ?? '');
   const [mode, setMode] = useState(chat.permissionMode ?? defaultMode);
+  const [model, setModel] = useState(chat.model ?? '');
+  const [effort, setEffort] = useState(chat.effort ?? '');
   const ref = useRef<HTMLTextAreaElement>(null);
   const busy = chat.status === 'running' || chat.status === 'waiting';
   const activeFile = useStore((s) => s.activeFile);
+
+  const addFiles = (paths: string[]) => {
+    if (!paths.length) return;
+    setAttachments((a) => [...a, ...paths.filter((p) => !a.includes(p))]);
+    ref.current?.focus();
+  };
+
+  const onPaste = async (e: React.ClipboardEvent) => {
+    if (!pasteHasFiles(e)) return; // ordinary text: default paste
+    e.preventDefault();
+    const files = e.clipboardData.files;
+    try {
+      addFiles(await readPastedFiles(files, { fallback: true }));
+    } catch (err: any) {
+      toast(err.message, 'error');
+    }
+  };
+
+  const onDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    // A file dragged from the project tree carries its path as text.
+    const treePath = e.dataTransfer.getData('application/x-editor-path');
+    if (treePath) return addFiles([treePath]);
+    addFiles(await readPastedFiles(e.dataTransfer.files));
+  };
 
   useEffect(() => {
     const onInsert = (e: Event) => {
@@ -308,29 +487,64 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
     el.style.height = Math.min(el.scrollHeight, 260) + 'px';
   }, [text]);
 
-  const submit = () => {
+  const submit = async () => {
     const t = text.trim();
-    if (!t) return;
+    if (!t && !attachments.length) return;
+    const sent = { text, attachments };
     setText('');
-    void sendPrompt(chat.sessionId, t, mode || undefined);
+    setAttachments([]);
+    const ok = await sendPrompt(chat.sessionId, t, { permissionMode: mode || undefined, model, effort, attachments: sent.attachments });
+    if (!ok) {
+      // Keep what the user typed if sending failed.
+      setText(sent.text);
+      setAttachments(sent.attachments);
+    }
   };
 
   return (
-    <div className="composer">
+    <div
+      className={`composer ${dragOver ? 'drag-over' : ''}`}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={onDrop}
+    >
+      <AttachmentChips paths={attachments} onRemove={(p) => setAttachments((a) => a.filter((x) => x !== p))} />
       <textarea
         ref={ref}
         value={text}
-        placeholder={busy ? 'Claude работает… можно дописать — сообщение уйдёт в очередь' : 'Спросите Claude… (Enter — отправить, Shift+Enter — перенос)'}
+        placeholder={
+          busy
+            ? 'Claude работает… можно дописать — сообщение уйдёт в очередь'
+            : 'Спросите Claude… Enter — отправить, Shift+Enter — перенос, Ctrl+V — вставить скриншот или файлы'
+        }
+        onPaste={onPaste}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            submit();
+            void submit();
           }
           if (e.key === 'Escape' && busy) void call('chat:interrupt', chat.sessionId);
         }}
       />
       <div className="composer-bar">
+        <select value={model} onChange={(e) => setModel(e.target.value)} title="Какая модель отвечает (меняется на лету, история чата сохраняется)">
+          {MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+        <select value={effort} onChange={(e) => setEffort(e.target.value)} title="Качество ответа: сколько модель думает перед ответом">
+          {EFFORTS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
         <select value={mode} onChange={(e) => setMode(e.target.value)} title="Режим разрешений">
           {MODES.map((m) => (
             <option key={m.id} value={m.id}>
@@ -338,6 +552,13 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
             </option>
           ))}
         </select>
+        <label className={`auto-approve ${chat.autoApprove ? 'on' : ''}`} title="Одобрять все запросы разрешений автоматически. Каждое решение записывается во вкладку «Разрешения».">
+          <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
+          ⚡ Автоодобрение
+        </label>
+        <button className="btn small" title="Прикрепить файл (или Ctrl+V / перетащите файл сюда)" onClick={() => pickFiles(addFiles)}>
+          📎
+        </button>
         {activeFile && (
           <button className="btn small" title="Вставить путь открытого файла" onClick={() => setText((v) => v + (v ? ' ' : '') + activeFile + ' ')}>
             @ {basename(activeFile)}
@@ -349,7 +570,7 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
             ■ Стоп
           </button>
         )}
-        <button className="btn primary small" disabled={!text.trim()} onClick={submit}>
+        <button className="btn primary small" disabled={!text.trim() && !attachments.length} onClick={() => void submit()}>
           Отправить ↵
         </button>
       </div>
@@ -357,10 +578,48 @@ function Composer({ chat }: { chat: ChatSnapshot }) {
   );
 }
 
+/** System "open file" dialog through a hidden <input type=file>; paths come from the preload bridge. */
+function pickFiles(onPick: (paths: string[]) => void) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.onchange = () => void readPastedFiles(input.files).then(onPick);
+  input.click();
+}
+
+const DECISION_LABEL: Record<ApprovalEntry['decision'], string> = {
+  auto: '⚡ автоодобрено',
+  allow: '✓ разрешено вами',
+  always: '✓✓ разрешено навсегда',
+  deny: '✕ отклонено вами',
+};
+
+function ApprovalsTab({ chat }: { chat: ChatSnapshot }) {
+  const list = [...chat.approvals].reverse();
+  return (
+    <div className="approvals-tab">
+      <div className="muted small approvals-note">
+        Журнал всех решений по разрешениям в этом чате — и ваших кликов, и автоодобрения. Хранится в approvals.jsonl в папке данных редактора.
+      </div>
+      {list.map((a, i) => (
+        <div key={i} className={`approval-row ${a.decision}`}>
+          <span className="adecision">{DECISION_LABEL[a.decision]}</span>
+          <span className="atool">{a.tool.replace(/^mcp__/, '')}</span>
+          <span className="asum" title={a.summary}>
+            {a.summary}
+          </span>
+          <span className="muted small">{formatTime(a.at)}</span>
+        </div>
+      ))}
+      {!list.length && <div className="empty">Решений по разрешениям в этом чате ещё не было.</div>}
+    </div>
+  );
+}
+
 export { MODES };
 
 export function ChatView({ chat }: { chat: ChatSnapshot }) {
-  const [tab, setTab] = useState<'chat' | 'files' | 'deploys'>('chat');
+  const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals'>('chat');
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(chat.turns.slice(-1).map((t) => t.id)));
   const [q, setQ] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
@@ -369,6 +628,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const deploys = useStore((s) => s.deploys.filter((d) => d.sessionId === chat.sessionId));
   const files = useMemo(() => aggregate(chat.turns), [chat.turns]);
   const last = chat.turns[chat.turns.length - 1];
+  const chatBusy = chat.status === 'running' || chat.status === 'waiting';
 
   useEffect(() => markSeen(chat.sessionId), [chat.sessionId, chat.status]);
 
@@ -431,8 +691,10 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
             {turns.map((t) => (
               <TurnRow
                 key={t.id}
-                turn={t}
+                // A question can only be "in progress" while the chat itself is working.
+                turn={t.live && !chatBusy ? { ...t, live: false } : t}
                 cwd={chat.cwd}
+                sessionId={chat.sessionId}
                 open={expanded.has(t.id) || (!!needle && turns.length <= 3)}
                 onToggle={() => toggle(t.id)}
                 partial={t === last ? chat.partial : undefined}
@@ -472,6 +734,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
             {!deploys.length && <div className="empty">Пушей из этого чата пока не было. Как только чат сделает git push — здесь появится статус выкладки.</div>}
           </div>
         )}
+        {tab === 'approvals' && <ApprovalsTab chat={chat} />}
       </div>
       {chat.pending.map((p) => (
         <PermissionCard key={p.id} req={p} />
@@ -486,6 +749,10 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         </div>
         <div className={`tab ${tab === 'deploys' ? 'on' : ''} ${deploys.some((d) => d.state === 'failed' || d.state === 'stuck') ? 'alert' : ''}`} onClick={() => setTab('deploys')}>
           🚀 Деплои {deploys.length > 0 && <span className="count">{deploys.length}</span>}
+        </div>
+        <div className={`tab ${tab === 'approvals' ? 'on' : ''}`} onClick={() => setTab('approvals')} title="Журнал разрешений и автоодобрений">
+          🛡 Разрешения {chat.approvals.length > 0 && <span className="count">{chat.approvals.length}</span>}
+          {chat.autoApprove && <span className="auto-dot" title="Автоодобрение включено" />}
         </div>
         <div className="grow" />
         <span className="muted chat-cwd" title={chat.sessionId}>

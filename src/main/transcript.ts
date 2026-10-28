@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import type { FileEdit, Turn, TurnItemTool } from '../shared/types';
+import type { FileEdit, Turn, TurnAttachment, TurnItemTool } from '../shared/types';
 
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 const READ_TOOLS = new Set(['Read']);
@@ -49,6 +49,36 @@ function isNoisePrompt(text: string): boolean {
   );
 }
 
+/** Marks the list of attached file paths that the editor appends to a prompt (see claude.ts buildContent). */
+export const ATTACHMENTS_HEADER = 'Вложения:';
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i;
+
+/**
+ * Separates the editor's attachment list from the prompt text and pairs it with the inline image blocks.
+ * Images attached in this editor are shown from their file (if it still exists), images pasted elsewhere
+ * (terminal, IDE plugin) only exist in the transcript and are loaded by reference.
+ */
+function splitAttachments(text: string, refs: TurnAttachment[]): { prompt: string; attachments: TurnAttachment[] } {
+  const at = text.lastIndexOf(`\n\n${ATTACHMENTS_HEADER}\n`);
+  if (at < 0) return { prompt: text, attachments: refs };
+  const listed = text
+    .slice(at + ATTACHMENTS_HEADER.length + 3)
+    .split('\n')
+    .map((l) => l.replace(/^- /, '').trim())
+    .filter(Boolean);
+  const attachments: TurnAttachment[] = [];
+  let imageNo = 0;
+  for (const p of listed) {
+    if (!IMAGE_FILE.test(p)) {
+      attachments.push({ kind: 'file', path: p });
+      continue;
+    }
+    const ref = refs[imageNo++];
+    attachments.push(fs.existsSync(p) || !ref ? { kind: 'image', path: p } : ref);
+  }
+  return { prompt: text.slice(0, at).trim(), attachments };
+}
+
 function toolSummary(name: string, input: any): { summary: string; path?: string } {
   const p = input?.file_path ?? input?.notebook_path ?? input?.path;
   switch (name) {
@@ -90,6 +120,20 @@ export class TurnBuilder {
     return t;
   }
 
+  /** API message ids already counted: one API response is written as several entries sharing its usage. */
+  private countedMessages = new Set<string>();
+
+  private countTokens(turn: Turn, message: any) {
+    const u = message?.usage;
+    if (!u || (message.id && this.countedMessages.has(message.id))) return;
+    if (message.id) this.countedMessages.add(message.id);
+    const t = (turn.tokens ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
+    t.input += u.input_tokens ?? 0;
+    t.output += u.output_tokens ?? 0;
+    t.cacheRead += u.cache_read_input_tokens ?? 0;
+    t.cacheWrite += u.cache_creation_input_tokens ?? 0;
+  }
+
   private current(at: number): Turn {
     return this.turns[this.turns.length - 1] ?? this.startTurn('(без вопроса)', at, 'start');
   }
@@ -111,20 +155,24 @@ export class TurnBuilder {
     }
     if (!Array.isArray(content)) return;
     let text = '';
-    let images = 0;
-    for (const block of content) {
+    const refs: TurnAttachment[] = [];
+    content.forEach((block: any, index: number) => {
       if (block.type === 'tool_result') this.finishTool(block, at, entry.toolUseResult);
       else if (block.type === 'text') text += (text ? '\n' : '') + block.text;
-      else if (block.type === 'image') images++;
+      else if (block.type === 'image' && entry.uuid) refs.push({ kind: 'image', ref: { uuid: entry.uuid, index }, mediaType: block.source?.media_type });
+    });
+    const { prompt, attachments } = splitAttachments(cleanPrompt(text), refs);
+    if ((prompt && !isNoisePrompt(prompt)) || attachments.length) {
+      const t = this.startTurn(prompt, at, entry.uuid ?? String(at), attachments.filter((a) => a.kind === 'image').length);
+      if (attachments.length) t.attachments = attachments;
     }
-    text = cleanPrompt(text);
-    if ((text && !isNoisePrompt(text)) || images) this.startTurn(text, at, entry.uuid ?? String(at), images);
   }
 
   private ingestAssistant(entry: any, at: number) {
     const content = entry.message?.content;
     if (!Array.isArray(content)) return;
     const turn = this.current(at);
+    this.countTokens(turn, entry.message);
     for (const block of content) {
       if (block.type === 'text' && block.text?.trim()) {
         const last = turn.items[turn.items.length - 1];

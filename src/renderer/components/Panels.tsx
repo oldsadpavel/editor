@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DeployEvent, DeployTarget, PanelId, Problem, ProblemSource, SmokeTest } from '../../shared/types';
 import { call } from '../api';
-import { get, openChat, openFile, saveApp, toast, togglePanel, useStore, type Store } from '../store';
+import { get, openChat, openFile, saveApp, setUi, toast, togglePanel, useStore, type Store } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { CachePanel } from './CachePanel';
 import { SetupPanel } from './SetupPanel';
@@ -31,9 +31,11 @@ function ackPanel(panel: PanelId) {
 
 export function PanelFrame({ id, title, children, actions }: { id: PanelId; title: string; children: React.ReactNode; actions?: React.ReactNode }) {
   const alerts = useStore((s) => panelAlerts(s, id));
+  const max = useStore((s) => !!s.app!.ui.bottomMax);
+  const toggleMax = () => setUi({ bottomMax: !max });
   return (
     <div className={`panel bottom-panel ${alerts ? 'alerting' : ''}`}>
-      <div className="panel-head">
+      <div className="panel-head" onDoubleClick={(e) => (e.target as HTMLElement).closest('button, input, select') || toggleMax()} title="Двойной клик — развернуть / вернуть">
         <span className="panel-title">{title}</span>
         {alerts > 0 && (
           <button className="alert-chip" title="Отметить прочитанным" onClick={() => ackPanel(id)}>
@@ -43,6 +45,9 @@ export function PanelFrame({ id, title, children, actions }: { id: PanelId; titl
         <div className="grow" />
         {actions}
         <Help id={id} />
+        <button className="icon-btn" title={max ? 'Вернуть обычный размер' : 'Развернуть на всю центральную часть'} onClick={toggleMax}>
+          {max ? '⤡' : '⤢'}
+        </button>
         <button className="icon-btn" title="Скрыть" onClick={() => togglePanel(id, false)}>
           ×
         </button>
