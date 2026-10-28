@@ -5,6 +5,7 @@ import { ChatPanel } from './components/ChatPanel';
 import { EditorArea } from './components/Editor';
 import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
+import { ProjectSettings } from './components/ProjectSettings';
 import { HELP } from './help';
 import { init, isUnread, set, setUi, togglePanel, useStore } from './store';
 import { Markdown } from './util';
@@ -14,6 +15,7 @@ const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
   { id: 'tree', label: 'Проекты', icon: '🗂' },
   { id: 'chat', label: 'ИИ-чат', icon: '✳' },
   { id: 'problems', label: 'Ошибки', icon: '⛔' },
+  { id: 'ping', label: 'Пинг', icon: '📡' },
   { id: 'deploys', label: 'Деплои', icon: '🚀' },
   { id: 'tests', label: 'Тесты', icon: '🧪' },
   { id: 'keys', label: 'Ключи', icon: '🔑' },
@@ -212,6 +214,7 @@ export function App() {
         )}
       </div>
       <HelpModal />
+      <ProjectSettings />
       <Toast />
     </div>
   );

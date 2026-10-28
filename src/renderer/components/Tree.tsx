@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DirEntry } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, get, openFile, saveApp, setUi, toggleFavorite, toast, useStore } from '../store';
+import { addProjects, get, openFile, saveApp, set, setUi, toggleFavorite, toast, useStore } from '../store';
 import { Help, basename } from '../util';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { fileIcon } from './icons';
@@ -48,6 +48,18 @@ function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; 
         <span className="tname">{entry.name}</span>
         {favorite && !root && <span className="fav-star">★</span>}
         {root && <span className="troot-path">{entry.path}</span>}
+        {root && get().app!.projects.some((p) => p.path === entry.path) && (
+          <span
+            className="troot-gear"
+            title="Настройки проекта: домены, пинг, сайт деплоя"
+            onClick={(e) => {
+              e.stopPropagation();
+              set({ projectSettings: entry.path });
+            }}
+          >
+            ⚙
+          </span>
+        )}
       </div>
       {open && kids?.map((k) => <Node key={k.path} entry={k} depth={depth + 1} onMenu={onMenu} />)}
     </>
@@ -82,6 +94,7 @@ export function TreePanel() {
         : []),
       ...(root && tab === 'projects'
         ? [
+            { label: 'Настройки проекта… (домены, пинг, деплой)', action: () => set({ projectSettings: entry.path }) },
             { label: 'Чаты этого проекта', action: () => saveApp({ chatProject: entry.path, ui: { ...get().app!.ui, visible: { ...get().app!.ui.visible, chat: true } } }) },
             { label: 'Убрать проект из списка', danger: true, action: () => saveApp({ projects: get().app!.projects.filter((p) => p.path !== entry.path) }) },
           ]

@@ -71,6 +71,22 @@ export async function setupStatus(): Promise<SetupItem[]> {
     items.push({ id: 'projects', level: 'todo', group: 'Проекты', title: 'Добавьте папку проекта', action: { kind: 'addProject' } });
   } else {
     items.push({ id: 'projects', level: 'ok', group: 'Проекты', title: `Открыто проектов: ${st.projects.length}`, detail: st.projects.map((p) => p.name).join(', ') });
+    for (const p of st.projects) {
+      const n = p.domains?.length ?? 0;
+      items.push(
+        n
+          ? { id: `domains:${p.path}`, level: 'ok', group: `Пинг: ${p.name}`, title: `Продакшен-адресов: ${n}, проверка раз в ${p.pingMinutes ?? 5} мин`, action: { kind: 'projectSettings', project: p.path } }
+          : {
+              id: `domains:${p.path}`,
+              level: 'todo',
+              group: `Пинг: ${p.name}`,
+              title: 'Укажите продакшен-домены и серверы',
+              detail: 'Они будут пинговаться по расписанию; если сервер упал — кнопка «Пинг» загорится красным.',
+              action: { kind: 'projectSettings', project: p.path },
+              dismissable: true,
+            },
+      );
+    }
   }
 
   for (const r of await deploy.repoInfo()) {

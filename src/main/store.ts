@@ -30,7 +30,7 @@ const DEFAULT_STATE: AppState = {
     rightWidth: 520,
     bottomHeight: 220,
     leftTab: 'projects',
-    visible: { setup: true, tree: true, chat: true, problems: false, keys: false, deploys: false, tests: false, cache: false },
+    visible: { setup: true, tree: true, chat: true, problems: false, keys: false, deploys: false, tests: false, cache: false, ping: false },
   },
 };
 

@@ -93,6 +93,12 @@ function ActionControl({ a }: { a: SetupAction }) {
           </select>
         </div>
       );
+    case 'projectSettings':
+      return (
+        <button className="btn primary small" onClick={() => set({ projectSettings: a.project })}>
+          Настройки проекта…
+        </button>
+      );
     case 'openPanel':
       return (
         <button className="btn small" onClick={() => togglePanel(a.panel, true)}>
@@ -116,7 +122,7 @@ function Row({ item, showGroup }: { item: SetupItem; showGroup?: boolean }) {
           {showGroup && <span className="src">{item.group}</span>} {item.title}
         </div>
         {item.detail && <div className="setup-detail">{item.detail}</div>}
-        {item.action && (item.level === 'todo' || item.action.kind === 'permissionMode' || item.action.kind === 'openPanel') && <ActionControl a={item.action} />}
+        {item.action && (item.level === 'todo' || item.action.kind === 'permissionMode' || item.action.kind === 'openPanel' || item.action.kind === 'projectSettings') && <ActionControl a={item.action} />}
       </div>
       {item.dismissable && (item.level === 'todo' || dismissed) && (
         <button className="btn small" onClick={toggleDismiss} title={dismissed ? 'Вернуть в список дел' : 'Скрыть из списка дел'}>

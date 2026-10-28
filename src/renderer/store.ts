@@ -12,6 +12,7 @@ import type {
   Problem,
   SessionInfo,
   SetupItem,
+  PingResult,
   TestResult,
 } from '../shared/types';
 import { bridge, call } from './api';
@@ -41,6 +42,9 @@ export interface Store {
   keys: KeyScanResult | null;
   cache: CacheReport | null;
   setup: SetupItem[];
+  ping: PingResult[];
+  /** Project whose settings dialog is open. */
+  projectSettings?: string;
   /** Turn to scroll to inside a chat (from the Files tab or a problem link). */
   focusTurn?: { sessionId: string; turnId: string; nonce: number };
   help?: string;
@@ -59,6 +63,7 @@ let state: Store = {
   keys: null,
   cache: null,
   setup: [],
+  ping: [],
 };
 
 const listeners = new Set<() => void>();
@@ -297,6 +302,13 @@ function onEvent(e: MainEvent) {
       set({ keys: e.result });
       refreshSetup();
       return;
+    case 'ping':
+      set({ ping: e.results });
+      return;
+    case 'appState':
+      set((s) => ({ app: { ...e.state, ui: s.app?.ui ?? e.state.ui } }));
+      refreshSetup();
+      return;
     case 'cache':
       set({ cache: e.report });
       refreshSetup();
@@ -328,7 +340,7 @@ export async function init() {
     call<KeyScanResult | null>('keys:last'),
     call<CacheReport | null>('cache:last'),
   ]);
-  set({ problems, deploys, tests, keys, cache });
+  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list') });
   for (const id of app.openChats) {
     const snap = await call<ChatSnapshot>('chat:open', id).catch(() => null);
     if (snap) set((s) => ({ chats: { ...s.chats, [id]: snap } }));

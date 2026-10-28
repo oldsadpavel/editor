@@ -84,7 +84,39 @@ export interface ChatMeta {
   lastError?: string;
 }
 
-export interface ProjectRef { path: string; name: string }
+export interface ProjectRef {
+  path: string;
+  name: string;
+  /** Production domains/servers pinged by the Ping panel. */
+  domains?: ProdTarget[];
+  /** Ping interval in minutes (default 5). */
+  pingMinutes?: number;
+}
+
+export interface ProdTarget {
+  id: string;
+  /** https://site.ru (HTTP check + SSL expiry), host:port (TCP) or bare host/IP (ICMP ping). */
+  target: string;
+  name?: string;
+}
+
+export interface PingResult {
+  targetId: string;
+  project: string;
+  target: string;
+  name?: string;
+  kind: 'http' | 'tcp' | 'icmp';
+  ok: boolean;
+  ms?: number;
+  status?: number;
+  detail?: string;
+  at: number;
+  /** Days until the HTTPS certificate expires. */
+  certDays?: number;
+  /** Recent results, oldest first (true = ok). */
+  history: { ok: boolean; at: number; ms?: number }[];
+  failStreak: number;
+}
 
 export interface DeployTarget {
   /** Site URL that should change after a push. */
@@ -137,7 +169,7 @@ export interface DeployEvent {
   updatedAt: number;
 }
 
-export type ProblemSource = 'chat' | 'deploy' | 'keys' | 'auth' | 'fs' | 'app' | 'tests' | 'cache';
+export type ProblemSource = 'chat' | 'deploy' | 'keys' | 'auth' | 'fs' | 'app' | 'tests' | 'cache' | 'ping';
 
 export interface Problem {
   id: string;
@@ -210,7 +242,7 @@ export interface AppState {
   };
 }
 
-export type PanelId = 'setup' | 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests' | 'cache';
+export type PanelId = 'setup' | 'tree' | 'chat' | 'problems' | 'keys' | 'deploys' | 'tests' | 'cache' | 'ping';
 
 export interface DirEntry{ name: string; path: string; dir: boolean }
 
@@ -222,6 +254,8 @@ export type MainEvent =
   | { type: 'keys'; result: KeyScanResult }
   | { type: 'tests'; results: TestResult[] }
   | { type: 'cache'; report: CacheReport }
+  | { type: 'ping'; results: PingResult[] }
+  | { type: 'appState'; state: AppState }
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'sessionsChanged'; cwd: string };
@@ -263,7 +297,8 @@ export type SetupAction =
   | { kind: 'deployTarget'; repo: string }
   | { kind: 'addTest'; repo: string }
   | { kind: 'permissionMode'; current?: string; fromClaude?: string }
-  | { kind: 'openPanel'; panel: PanelId; label: string };
+  | { kind: 'openPanel'; panel: PanelId; label: string }
+  | { kind: 'projectSettings'; project: string };
 
 export interface SetupItem {
   id: string;

@@ -8,6 +8,7 @@ import * as cache from './cache';
 import * as claude from './claude';
 import * as deploy from './deploy';
 import * as keys from './keys';
+import * as ping from './ping';
 import * as problems from './problems';
 import { setupStatus } from './setup';
 import { flushAll, stateFile } from './store';
@@ -148,10 +149,18 @@ handle('problems:remove', (id?: string) => problems.remove(id));
 
 handle('deploys:list', () => deploy.listDeploys());
 handle('deploys:repos', () => deploy.watchedRepos());
-handle('deploys:setTarget', (repo: string, t: DeployTarget | null) => deploy.setTarget(repo, t));
+handle('deploys:setTarget', async (repo: string, t: DeployTarget | null) => {
+  // A project folder may be a subfolder of the repository; targets are keyed by the git root.
+  const root = (await deploy.gitRoot(repo)) ?? repo;
+  deploy.setTarget(root, t);
+  await deploy.watchPath(root);
+  return root;
+});
 handle('tests:run', (repo: string) => deploy.runTests(repo));
 handle('tests:list', () => deploy.listTests());
 
+handle('ping:list', () => ping.list());
+handle('ping:now', (project?: string) => ping.pingNow(project));
 handle('setup:status', () => setupStatus());
 handle('cache:scan', () => cache.scanCache());
 handle('cache:last', () => cache.lastCache());
@@ -195,6 +204,7 @@ app.whenReady().then(() => {
   createWindow();
   for (const p of stateFile.data.projects) void deploy.watchPath(p.path);
   deploy.startDeployWatcher();
+  ping.startPing();
   setTimeout(() => void keys.scanKeys(), 3000);
   setInterval(() => void keys.scanKeys(), 60 * 60_000);
   setTimeout(() => void cache.scanCache(), 8000);
@@ -204,6 +214,7 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   claude.shutdown();
   deploy.stopDeployWatcher();
+  ping.stopPing();
   flushAll();
   app.quit();
 });

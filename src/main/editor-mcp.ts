@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { emit } from './bus';
 import * as deploy from './deploy';
 import * as keys from './keys';
+import * as ping from './ping';
 import * as problems from './problems';
 import { stateFile } from './store';
 
@@ -28,6 +29,8 @@ export const EDITOR_INSTRUCTIONS = `
   Запуск вручную — \`mcp__editor__run_tests\`. Падение теста попадает в «Ошибки».
 - **Ключи** — редактор ищет ключи по шаблонам путей. Если хранишь ключ в новом месте, добавь шаблон
   \`mcp__editor__add_key_pattern\`. Записывая ключ с ограниченным сроком, ставь рядом строку «expires YYYY-MM-DD».
+- **Пинг** — продакшен-домены и серверы проекта проверяются по расписанию. Узнал новый прод-адрес — добавь
+  \`mcp__editor__add_prod_domain\`.
 - **Открыть файл** у пользователя в редакторе — \`mcp__editor__open_file\`.
 
 Каждый чат в этом проекте ведёт свою историю, но память (memory, CLAUDE.md) общая для всех чатов проекта —
@@ -121,6 +124,24 @@ export function editorMcp(sessionId: string, cwd: string) {
           if (!stateFile.data.keyPatterns.includes(a.pattern)) keys.setPatterns([...stateFile.data.keyPatterns, a.pattern]);
           const r = await keys.scanKeys();
           return ok(`Шаблон добавлен. Найдено ключей: ${r.keys.length}, проблемных: ${r.keys.filter((k) => k.status !== 'valid' && k.status !== 'unknown').length}`);
+        },
+      ),
+      tool(
+        'add_prod_domain',
+        'Добавить продакшен-домен или сервер проекта в блок «Пинг» (проверяется по расписанию, при падении подсвечивается). target: https://site.ru, host:port или IP.',
+        { target: z.string(), name: z.string().optional(), project: z.string().optional().describe('Путь проекта; по умолчанию текущий') },
+        async (a) => {
+          const dir = (a.project ?? cwd).toLowerCase();
+          const p =
+            stateFile.data.projects.find((x) => x.path.toLowerCase() === dir) ??
+            stateFile.data.projects.find((x) => dir.startsWith(x.path.toLowerCase()));
+          if (!p) return ok('Проект не открыт в редакторе — пользователь должен сначала добавить его.');
+          if (!(p.domains ?? []).some((d) => d.target === a.target)) p.domains = [...(p.domains ?? []), { id: randomUUID(), target: a.target, name: a.name }];
+          stateFile.save();
+          emit({ type: 'appState', state: stateFile.data });
+          const res = await ping.pingNow(p.path);
+          const r = res.find((x) => x.target === a.target);
+          return ok(`Добавлено в «Пинг» проекта ${p.name}. Сейчас: ${r?.ok ? 'OK' : 'НЕ ОТВЕЧАЕТ'} ${r?.ms ?? ''} мс ${r?.detail ?? ''}`);
         },
       ),
       tool(

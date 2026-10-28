@@ -5,6 +5,7 @@ import { get, openChat, openFile, saveApp, toast, togglePanel, useStore, type St
 import { Help, basename, formatTime } from '../util';
 import { CachePanel } from './CachePanel';
 import { SetupPanel } from './SetupPanel';
+import { PingPanel } from './PingPanel';
 
 const PANEL_SOURCES: Record<string, ProblemSource[] | null> = {
   problems: null,
@@ -12,6 +13,7 @@ const PANEL_SOURCES: Record<string, ProblemSource[] | null> = {
   deploys: ['deploy'],
   tests: ['tests'],
   cache: ['cache'],
+  ping: ['ping'],
 };
 
 /** Unread problems that belong to a panel; drives header/toolbar highlighting. */
@@ -61,6 +63,7 @@ const SOURCE_LABEL: Record<ProblemSource, string> = {
   app: 'Редактор',
   tests: 'Тесты',
   cache: 'Кеш',
+  ping: 'Пинг',
 };
 
 function ProblemRow({ p }: { p: Problem }) {
@@ -515,6 +518,7 @@ export function TestsPanel() {
 
 export const BOTTOM_PANELS: { id: PanelId; C: () => React.ReactElement }[] = [
   { id: 'setup', C: SetupPanel },
+  { id: 'ping', C: PingPanel },
   { id: 'problems', C: ProblemsPanel },
   { id: 'deploys', C: DeploysPanel },
   { id: 'tests', C: TestsPanel },

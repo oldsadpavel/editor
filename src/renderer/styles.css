@@ -416,3 +416,28 @@ tr.caution .cat-title { color: #ffd98a; }
 .setup-detail { font-size: 12px; color: var(--fg2); white-space: pre-wrap; margin-top: 2px; }
 .setup-form { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
 .setup-form input { flex: 1; min-width: 200px; }
+
+/* ---------- ping & project settings ---------- */
+.ping-project { margin-bottom: 10px; }
+.ping-row { display: flex; gap: 8px; align-items: center; padding: 5px 4px; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
+.ping-row.down { background: rgba(247, 84, 100, 0.08); }
+.ping-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bg3); flex: none; }
+.ping-dot.up { background: var(--ok); box-shadow: 0 0 0 3px rgba(95, 184, 101, 0.2); }
+.ping-dot.down { background: var(--err); animation: pulse 1.4s infinite; }
+.ping-name { font-weight: 600; }
+.ping-target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.ping-hist { display: flex; gap: 2px; align-items: flex-end; }
+.ping-hist span { width: 4px; height: 12px; border-radius: 1px; }
+.ping-hist .up { background: #3c8a44; }
+.ping-hist .down { background: var(--err); }
+.troot-gear { margin-left: auto; opacity: 0; padding: 0 4px; border-radius: 3px; color: var(--fg2); }
+.tree-row:hover .troot-gear { opacity: 1; }
+.troot-gear:hover { background: var(--bg3); color: var(--fg); }
+.project-settings { display: flex; flex-direction: column; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field > span:first-child { font-weight: 600; font-size: 12px; }
+.field.inline { flex-direction: row; align-items: center; gap: 8px; }
+.domain-row { display: flex; gap: 6px; align-items: center; }
+.domain-row input { flex: 1; }
+.domain-row input.dname { flex: 0 0 200px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
