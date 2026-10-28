@@ -861,8 +861,8 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           📎
         </button>
         {activeFile && (
-          <button className="btn small" title="Вставить путь открытого файла" onClick={() => setText((v) => v + (v ? ' ' : '') + activeFile + ' ')}>
-            @ {basename(activeFile)}
+          <button className="btn small" title={`Вставить путь открытого файла: ${basename(activeFile)}\n${activeFile}`} onClick={() => setText((v) => v + (v ? ' ' : '') + activeFile + ' ')}>
+            @F
           </button>
         )}
         <div className="grow" />
