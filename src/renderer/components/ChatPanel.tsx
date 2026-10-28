@@ -97,6 +97,7 @@ function History({ cwd, onClose }: { cwd: string; onClose: () => void }) {
 
 export function ChatPanel() {
   const app = useStore((s) => s.app!);
+  const unread = useStore((s) => s.app!.openChats.filter((id) => isUnread(id, s)));
   const chats = useStore((s) => s.chats);
   const [showHistory, setShowHistory] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
@@ -149,9 +150,10 @@ export function ChatPanel() {
             <div
               key={id}
               data-tab-key={id}
-              data-tab-label={`${mark}${c.title}`}
-              className={`tab ${id === active ? 'on' : ''}`}
-              title={`${c.title}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
+              data-tab-label={`${mark}${unread.includes(id) ? '🔵 ' : ''}${c.title}`}
+              data-tab-sort={app.chatMeta[id]?.completedAt ?? 0}
+              className={`tab ${id === active ? 'on' : ''} ${unread.includes(id) ? 'unread unseen' : ''}`}
+              title={`${c.title}${unread.includes(id) ? '\nЕсть новый ответ — вы ещё не смотрели' : ''}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
               onClick={() => openChat(id)}
               onDoubleClick={() => setEditing(id)}
               onContextMenu={(e) => {

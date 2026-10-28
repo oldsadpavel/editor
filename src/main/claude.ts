@@ -239,10 +239,20 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
   s.model = saved?.model;
   s.effort = saved?.effort;
   s.autoApprove = !!saved?.autoApprove;
-  // The hidden remote process does not survive a restart; the switch starts fresh.
   s.remote = false;
   s.approvals = approvals.forChat(sessionId);
   sessions.set(sessionId, s);
+  // /RC stays on across restarts: the hidden remote process is started again, otherwise the phone would keep
+  // writing into a bridge nobody listens to.
+  if (saved?.remote && file) {
+    try {
+      setRemote(sessionId, true);
+    } catch (e) {
+      console.error('remote restore failed', e);
+    }
+  }
+  // Changes made elsewhere (phone, terminal, IDE plugin) show up here and mark the tab unread.
+  if (!s.remote) watchTranscript(s);
   return s.snapshot();
 }
 
@@ -707,7 +717,6 @@ export function setRemote(sessionId: string, on: boolean) {
     s.remote = false;
     if (s.remoteProc) remote.stop(s.remoteProc);
     s.remoteProc = null;
-    unwatchTranscript(s);
     const file = findTranscript(s.id);
     if (file)
       void loadTranscript(file).then(({ builder }) => {
@@ -728,15 +737,25 @@ export function remoteStatus(sessionId: string) {
   return s?.remote ? remote.status(s.remoteProc) : { state: 'off' as const };
 }
 
-/** While a terminal owns the session, the editor re-reads the transcript whenever it changes. */
+/**
+ * Re-reads the transcript whenever it changes outside the editor's own SDK process: the hidden /RC process, the phone,
+ * a terminal or an IDE plugin working on the same session. New answers mark the chat unread.
+ */
 function watchTranscript(s: ChatSession) {
   unwatchTranscript(s);
   const file = findTranscript(s.id);
   if (!file) return;
   let timer: NodeJS.Timeout | null = null;
+  const shape = (b: TurnBuilder) => {
+    const t = b.turns[b.turns.length - 1];
+    return `${b.turns.length}:${t?.items.length ?? 0}:${t?.more?.length ?? 0}`;
+  };
   const reload = async () => {
+    // Our own SDK process writes this file too; its messages already arrive live.
+    if (!s.remote && s.q) return;
     try {
       const { builder } = await loadTranscript(file);
+      const changed = shape(builder) !== shape(s.builder);
       s.builder = builder;
       const last = builder.turns[builder.turns.length - 1];
       // A question (from here or the phone) without a finished answer keeps the chat "working".
@@ -746,6 +765,8 @@ function watchTranscript(s: ChatSession) {
         if (s.status !== 'running') s.setStatus('running');
       } else if (s.status === 'running') {
         s.setStatus('idle');
+        markCompleted(s);
+      } else if (changed) {
         markCompleted(s);
       }
       s.publish(true);
