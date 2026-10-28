@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { ApprovalEntry, AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SendOptions, SessionInfo } from '../shared/types';
+import type { ApprovalEntry, AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SendOptions, SessionInfo, TurnAttachment } from '../shared/types';
 import * as approvals from './approvals';
 import { emit } from './bus';
 import { IMAGE_EXT } from './files';
@@ -151,15 +151,19 @@ class ChatSession {
   autoApprove = false;
   /** Remote Control: the session can also be continued from claude.ai/code and the Claude app. */
   remote = false;
+  chrome = true;
   /** Restart the Claude process after the current turn (a startup-only option changed while busy). */
   restartPending = false;
   /** After a result, waiting to see whether Claude answers queued questions separately (see settleTurn). */
   awaitingQueued: NodeJS.Timeout | null = null;
+  /** Stop was pressed: the error result of the dropped answer is expected and not shown as an error. */
+  interrupting = false;
   /** Transcript watcher while the hidden Remote Control process owns the session. */
   transcriptWatch: fs.FSWatcher | null = null;
   remoteProc: remote.RemoteProc | null = null;
-  /** Last question typed into the /RC process, until the transcript shows it. */
-  remoteSent: { text: string; at: number } | null = null;
+  /** Questions typed into the /RC process that the transcript doesn't show yet (Claude writes a queued one only
+   * when it takes it). They stay on screen — grey while queued — across transcript reloads. */
+  remoteQueue: { text: string; at: number; id: string; attachments: TurnAttachment[] }[] = [];
   transcriptTick: NodeJS.Timeout | null = null;
   /** Transcript watcher while queued questions wait to be taken by Claude. */
   queueWatch: fs.FSWatcher | null = null;
@@ -189,6 +193,7 @@ class ChatSession {
       effort: this.effort,
       autoApprove: this.autoApprove,
       remote: this.remote,
+      chrome: this.chrome,
       approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
     };
@@ -281,6 +286,7 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
   s.model = saved?.model;
   s.effort = saved?.effort;
   s.autoApprove = !!saved?.autoApprove;
+  s.chrome = saved?.chrome ?? stateFile.data.defaultChrome ?? true;
   s.remote = false;
   s.approvals = approvals.forChat(sessionId);
   sessions.set(sessionId, s);
@@ -303,6 +309,7 @@ export function newChat(cwd: string): ChatSnapshot {
   s.model = stateFile.data.defaultModel;
   s.effort = stateFile.data.defaultEffort;
   s.autoApprove = !!stateFile.data.defaultAutoApprove;
+  s.chrome = stateFile.data.defaultChrome ?? true;
   sessions.set(s.id, s);
   return s.snapshot();
 }
@@ -351,7 +358,7 @@ function buildContent(text: string, attachments: string[]) {
 }
 
 function rememberChatModel(s: ChatSession) {
-  stateFile.data.chatModels = { ...stateFile.data.chatModels, [s.id]: { model: s.model, effort: s.effort, autoApprove: s.autoApprove, remote: s.remote } };
+  stateFile.data.chatModels = { ...stateFile.data.chatModels, [s.id]: { model: s.model, effort: s.effort, autoApprove: s.autoApprove, remote: s.remote, chrome: s.chrome } };
   stateFile.save();
 }
 
@@ -364,9 +371,9 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     // Interactive Claude has no image blocks over stdin: it gets the paths and opens them with Read (images too).
     const body = attachments.length ? [text, '', ATTACHMENTS_HEADER, ...attachments.map((p) => `- ${p}`)].join('\n') : text;
     remote.send(s.remoteProc, body);
-    s.remoteSent = { text: text.trim(), at: Date.now() };
-    const turn = s.builder.startTurn(text, Date.now(), randomUUID(), attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? ('image' as const) : ('file' as const), path: p })));
-    turn.live = true;
+    const q = { text: text.trim(), at: Date.now(), id: randomUUID(), attachments: attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? ('image' as const) : ('file' as const), path: p })) };
+    s.remoteQueue.push(q);
+    addRemoteQueued(s, q);
     s.setStatus('running');
     return;
   }
@@ -427,6 +434,8 @@ function start(s: ChatSession) {
       ...(s.model ? { model: modelArg(s.model) } : {}),
       ...(s.effort ? { effort: s.effort } : {}),
       ...(s.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
+      // Claude in Chrome (the browser extension), like `claude --chrome`
+      ...(s.chrome ? { extraArgs: { chrome: null } } : {}),
       canUseTool: (toolName: string, input: Record<string, unknown>, opts: any) => askPermission(s, toolName, input, opts),
       stderr: (data: string) => {
         if (/error|fatal/i.test(data)) console.error('[claude]', data.trim());
@@ -599,6 +608,16 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     }
     case 'result': {
       const r: any = m;
+      if (s.interrupting && r.subtype !== 'success') {
+        // The answer that Stop dropped. Its cost belongs to the stopped turn — the one before a turn started from the
+        // queue (see interrupt) — and its error isn't shown: the user asked for it.
+        s.interrupting = false;
+        const turns = s.builder.turns;
+        const stopped = turns[turns.length - (turns[turns.length - 1]?.live && s.status === 'running' ? 2 : 1)];
+        if (stopped && typeof r.total_cost_usd === 'number') stopped.costUsd = Math.max(0, r.total_cost_usd - s.costSoFar);
+        if (typeof r.total_cost_usd === 'number') s.costSoFar = r.total_cost_usd;
+        return;
+      }
       const turn = s.builder.turns[s.builder.turns.length - 1];
       if (turn) {
         // total_cost_usd accumulates over the Claude process, so a turn costs the difference.
@@ -609,6 +628,7 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
         turn.answeredAt ??= Date.now();
       }
       s.partial = '';
+      s.interrupting = false;
       if (r.subtype !== 'success' || r.is_error) {
         finishLiveTurns(s);
         const detail = r.errors?.join('\n') || r.result || r.subtype;
@@ -753,6 +773,7 @@ export function setRemote(sessionId: string, on: boolean) {
       model: modelArg(s.model),
       // pasted screenshots live in the editor's attachments folder, outside the project: readable without asking
       addDirs: [path.join(dataDir(), 'attachments')],
+      chrome: s.chrome,
       transcript: findTranscript(s.id),
     });
     s.remote = true;
@@ -800,20 +821,12 @@ function watchTranscript(s: ChatSession) {
     if (!s.remote && s.q) return;
     try {
       const { builder } = await loadTranscript(file);
-      const last0 = builder.turns[builder.turns.length - 1];
-      // Typed here a moment ago but Claude hasn't written it yet: keep showing our question as running.
-      if (s.remoteSent) {
-        const seen = !!last0 && (last0.prompt.trim() === s.remoteSent.text || !!last0.more?.some((m) => m.prompt.trim() === s.remoteSent!.text));
-        if (!seen && Date.now() - s.remoteSent.at < 60_000) {
-          // look again shortly even if the file stays quiet
-          if (timer) clearTimeout(timer);
-          timer = setTimeout(() => void reload(), 3000);
-          return;
-        }
-        s.remoteSent = null;
-      }
       const changed = shape(builder) !== shape(s.builder);
       s.builder = builder;
+      // Questions typed here that Claude hasn't written yet stay on screen (grey while queued behind an answer).
+      const recent = builder.turns.slice(-4).flatMap((t) => [t.prompt, ...(t.more?.map((m) => m.prompt) ?? [])]).map((p) => p.trim());
+      s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(q.text) && Date.now() - q.at < 5 * 60_000);
+      for (const q of s.remoteQueue) addRemoteQueued(s, q);
       const last = builder.turns[builder.turns.length - 1];
       // A question (from here or the phone) without a finished answer keeps the chat "working".
       const open = !!last && builder.isTurnOpen();
@@ -862,6 +875,14 @@ function unwatchTranscript(s: ChatSession) {
   s.transcriptWatch = null;
 }
 
+/** Shows a question typed into /RC: its own running turn, or grey ("not taken yet") inside the running answer. */
+function addRemoteQueued(s: ChatSession, q: ChatSession['remoteQueue'][number]) {
+  const turn = s.builder.startTurn(q.text, q.at, q.id, q.attachments);
+  turn.live = true;
+  const more = turn.more?.find((m) => m.prompt === q.text && m.at === q.at);
+  if (more) more.pending = true;
+}
+
 /** Everything `/status` shows; live details only when the chat has a running process. */
 export async function chatStatus(sessionId: string) {
   const s = sessions.get(sessionId);
@@ -906,6 +927,28 @@ export async function chatCommands(sessionId: string): Promise<{ name: string; d
   return (s?.init?.slash_commands ?? []).map((n: string) => ({ name: n, description: '' }));
 }
 
+/**
+ * Claude in Chrome on/off for a chat. The flag is given when Claude starts, so the process restarts: right away when
+ * idle (history and context stay — it resumes the session), after the current answer otherwise.
+ */
+export function setChrome(sessionId: string, on: boolean) {
+  const s = sessions.get(sessionId);
+  if (!s || s.chrome === on) return;
+  s.chrome = on;
+  rememberChatModel(s);
+  const busy = s.status === 'running' || s.status === 'waiting';
+  if (s.remote) {
+    if (!busy) {
+      setRemote(sessionId, false);
+      setRemote(sessionId, true);
+    }
+  } else if (s.q) {
+    if (busy) s.restartPending = true;
+    else stopProcess(s);
+  }
+  s.publish(true);
+}
+
 export function setAutoApprove(sessionId: string, on: boolean) {
   const s = sessions.get(sessionId);
   if (!s) return;
@@ -928,15 +971,32 @@ export async function interrupt(sessionId: string) {
   if (s?.remote && s.remoteProc) {
     remote.interrupt(s.remoteProc);
     finishLiveTurns(s);
+    s.builder.markInterrupted();
+    const next = s.builder.splitPending(Date.now());
+    if (next) {
+      next.live = true;
+      s.setStatus('running');
+      return;
+    }
     s.setStatus('idle');
     return;
   }
   if (!s?.q) return;
   for (const [id] of s.pending) answerPermission(sessionId, id, { behavior: 'deny', message: 'Остановлено пользователем' });
+  s.interrupting = true;
   await s.q.interrupt().catch(() => {});
   finishLiveTurns(s);
   s.builder.markInterrupted();
   s.partial = '';
+  // Questions still queued (grey): Claude Code runs them right after the stop — show them as the new running turn.
+  const next = s.builder.splitPending(Date.now());
+  if (next) {
+    if (s.awaitingQueued) clearTimeout(s.awaitingQueued);
+    s.awaitingQueued = null;
+    next.live = true;
+    s.setStatus('running');
+    return;
+  }
   s.setStatus('idle');
 }
 

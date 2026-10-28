@@ -147,6 +147,27 @@ export class TurnBuilder {
    * Questions queued into a turn that Claude finished without them: Claude now answers them on their own,
    * so they move out into a new turn (the transcript records them that way too).
    */
+  /**
+   * Stop pressed while questions were still queued (not yet taken): Claude Code drops the current answer and runs
+   * them next, so they move out into a new turn right away. Questions Claude already took stay where they are.
+   */
+  splitPending(at: number): Turn | null {
+    const last = this.turns[this.turns.length - 1];
+    const pending = last?.more?.filter((m) => m.pending) ?? [];
+    if (!last || !pending.length) return null;
+    last.more = last.more!.filter((m) => !m.pending);
+    if (!last.more.length) delete last.more;
+    last.images -= pending.reduce((n, m) => n + (m.attachments?.filter((a) => a.kind === 'image').length ?? 0), 0);
+    this.closeTurn();
+    const [first, ...rest] = pending;
+    const turn = this.startTurn(first.prompt, at, `${last.id}-q${this.turns.length}`, first.attachments);
+    if (rest.length) {
+      turn.more = rest.map((m) => ({ ...m, pending: false }));
+      turn.images += rest.reduce((n, m) => n + (m.attachments?.filter((a) => a.kind === 'image').length ?? 0), 0);
+    }
+    return turn;
+  }
+
   splitQueued(): Turn | null {
     const last = this.turns[this.turns.length - 1];
     if (!last?.more?.length || this.turnOpen) return null;

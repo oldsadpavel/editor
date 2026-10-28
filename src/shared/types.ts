@@ -81,6 +81,8 @@ export interface ChatSnapshot {
   autoApprove?: boolean;
   /** Remote Control on: the session is reachable from claude.ai/code and the Claude app. */
   remote?: boolean;
+  /** Claude in Chrome: the browser extension's tools (open pages, click, read, fill forms) — `claude --chrome`. */
+  chrome?: boolean;
   /** Permission decisions in this chat, oldest first. */
   approvals: ApprovalEntry[];
   pending: PermissionRequest[];
@@ -317,7 +319,9 @@ export interface AppState {
   /** Per-chat model/effort chosen in the composer (remembered across restarts). */
   /** Cloud settings storage; the tokens themselves live encrypted in cloud-auth.bin, not here. */
   cloud?: { server: string; auto: boolean; email?: string; name?: string; lastSyncAt?: number; hash?: string; choiceMade?: boolean };
-  chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean }>;
+  chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean; chrome?: boolean }>;
+  /** Claude in Chrome for new chats (default on). */
+  defaultChrome?: boolean;
   /** Unsent text and attachments per chat. */
   drafts?: Record<string, { text: string; attachments: string[] }>;
   /** Files open in the editor and the active one, restored on start. */

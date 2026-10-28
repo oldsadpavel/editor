@@ -168,6 +168,7 @@ handle('chat:send', (id: string, text: string, opts?: SendOptions) => claude.sen
 handle('chat:interrupt', (id: string) => claude.interrupt(id));
 handle('chat:autoApprove', (id: string, on: boolean) => claude.setAutoApprove(id, on));
 handle('chat:remote', (id: string, on: boolean) => claude.setRemote(id, on));
+handle('chat:chrome', (id: string, on: boolean) => claude.setChrome(id, on));
 handle('chat:status', (id: string) => claude.chatStatus(id));
 handle('chat:commands', (id: string) => claude.chatCommands(id));
 handle('chat:rename', (id: string, title: string) => claude.rename(id, title));

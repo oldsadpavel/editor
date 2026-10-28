@@ -86,8 +86,9 @@ export function ptyCommand(cmd: string, args: string[]): { file: string; args: s
   return { file: 'script', args: ['-q', '-e', '-c', `/bin/sh -c ${shQuote(inner)}`, '/dev/null'] };
 }
 
-export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; addDirs?: string[]; transcript: string | null }): RemoteProc {
+export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; addDirs?: string[]; chrome?: boolean; transcript: string | null }): RemoteProc {
   const args = ['--resume', opts.sessionId, '--remote-control', opts.name];
+  if (opts.chrome) args.push('--chrome');
   for (const d of opts.addDirs ?? []) args.push('--add-dir', d);
   if (opts.permissionMode) args.push('--permission-mode', opts.permissionMode);
   if (opts.model) args.push('--model', opts.model);

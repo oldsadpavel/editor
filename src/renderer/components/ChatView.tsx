@@ -603,6 +603,12 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
       toast(`Чат переименован: ${rename[1].trim()}`);
       return;
     }
+    if (t === '/chrome') {
+      setText('');
+      void call('chat:chrome', chat.sessionId, !chat.chrome);
+      toast(chat.chrome ? 'Claude in Chrome выключен для этого чата' : 'Claude in Chrome включён: Claude может открывать страницы, кликать и читать их в вашем Chrome');
+      return;
+    }
     if (t === '/rc' || t === '/remote-control') {
       setText('');
       void setRemote(chat.sessionId, !chat.remote);
@@ -733,6 +739,13 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           <input type="checkbox" checked={!!chat.remote} onChange={(e) => setRemote(chat.sessionId, e.target.checked)} />
           /RC
         </label>
+        <label
+          className={`auto-approve chrome ${chat.chrome ? 'on' : ''}`}
+          title="Claude in Chrome (/chrome): Claude управляет вашим Chrome через расширение — открывает страницы, кликает, читает, заполняет формы. Нужно расширение Claude in Chrome. Переключение перезапускает процесс Claude (история сохраняется)."
+        >
+          <input type="checkbox" checked={!!chat.chrome} onChange={(e) => void call('chat:chrome', chat.sessionId, e.target.checked)} />
+          🌐 Chrome
+        </label>
         {chat.remote && (
           <a className="small" href="https://claude.ai/code" target="_blank" title="Открыть список сессий на claude.ai/code">
             claude.ai/code ↗
@@ -748,9 +761,19 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         )}
         <div className="grow" />
         {busy && (
-          <button className="btn danger small" onClick={() => call('chat:interrupt', chat.sessionId)} title="Esc">
-            ⛔ Стоп
-          </button>
+          chat.turns[chat.turns.length - 1]?.more?.some((m) => m.pending) ? (
+            <button
+              className="btn danger small"
+              onClick={() => call('chat:interrupt', chat.sessionId)}
+              title="Esc — бросить текущий ответ и сразу взяться за вопросы из очереди (серые)"
+            >
+              ⏭ Стоп и к новому
+            </button>
+          ) : (
+            <button className="btn danger small" onClick={() => call('chat:interrupt', chat.sessionId)} title="Esc">
+              ⛔ Стоп
+            </button>
+          )
         )}
         <button className="btn primary small" disabled={!text.trim() && !attachments.length} onClick={() => void submit()}>
           Отправить ↵
@@ -772,6 +795,7 @@ const LOCAL_COMMANDS: SlashItem[] = [
   { name: 'status', description: 'Состояние чата: модель, режим, MCP-серверы, контекст, лимиты', local: true },
   { name: 'context', description: 'Сколько занято окно контекста и чем', local: true },
   { name: 'rename', description: 'Переименовать этот чат: /rename новое имя', argumentHint: '<имя>', local: true },
+  { name: 'chrome', description: 'Claude in Chrome: включить/выключить управление браузером через расширение', local: true },
   { name: 'rc', description: 'Remote Control: включить/выключить — чат на claude.ai/code и в приложении Claude', local: true },
 ];
 
