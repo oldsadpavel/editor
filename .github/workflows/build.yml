@@ -52,4 +52,4 @@ jobs:
             Windows: ClaudeEditor-*-portable.exe — запустить, установка не нужна.
             macOS: *-arm64-mac.zip (Apple Silicon) или *-mac.zip (Intel) — распаковать, перенести в Программы.
             Сборка не подписана: при первом запуске правый клик → Открыть, либо в Терминале xattr -cr "/Applications/Claude Editor.app".
-            Claude Code редактор предложит установить сам (кнопка «Установить Claude Code»). /RC работает на Windows (нужен Git for Windows) и macOS.
+            Claude Code редактор предложит установить сам (кнопка «Установить Claude Code»). /RC работает на Windows (нужен Git for Windows) и macOS (ничего ставить не нужно).
