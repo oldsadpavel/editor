@@ -1,6 +1,6 @@
 {
   "name": "claude-editor",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Code editor built around Claude Code chats",
   "main": "dist/main/main.mjs",
