@@ -7,6 +7,9 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     strategy:
@@ -42,3 +45,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.artifact }}
+          generate_release_notes: true
+          body: |
+            Windows: ClaudeEditor-*-portable.exe — запустить, установка не нужна.
+            macOS: *-arm64-mac.zip (Apple Silicon) или *-mac.zip (Intel) — распаковать, перенести в Программы.
+            Сборка не подписана: при первом запуске правый клик → Открыть, либо в Терминале xattr -cr "/Applications/Claude Editor.app".
+            Нужен установленный Claude Code (claude). Удалённый режим /RC пока только на Windows.
