@@ -14,8 +14,11 @@ import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
 /** Prefers the user's installed Claude Code so login, settings and version match the terminal. */
 export function claudeExecutable(): string | undefined {
   const exe = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  // Apps started from Finder/Dock don't get the shell PATH, so the usual install locations are checked explicitly.
   const candidates = [
     path.join(os.homedir(), '.local', 'bin', exe),
+    path.join(os.homedir(), '.claude', 'local', exe),
+    ...(process.platform === 'win32' ? [] : ['/opt/homebrew/bin/claude', '/usr/local/bin/claude']),
     ...(process.env.PATH ?? '').split(path.delimiter).map((d) => path.join(d, exe)),
   ];
   return candidates.find((c) => {
