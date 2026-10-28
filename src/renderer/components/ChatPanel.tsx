@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatSnapshot, SessionInfo } from '../../shared/types';
 import { closeChat, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
@@ -142,9 +142,10 @@ export function ChatPanel() {
         <Help id="chat" />
       </div>
       <TabStrip className="chat-tabs" activeKey={active} onPick={(id) => openChat(id)}>
-        {app.openChats.map((id) => {
+        {groupByProject(app.openChats.filter((id) => chats[id]), (id) => chats[id].cwd).map((g) => (
+          <ProjectGroup key={g.cwd} cwd={g.cwd}>
+            {g.ids.map((id) => {
           const c = chats[id];
-          if (!c) return null;
           const mark = c.status === 'running' ? '  — работает' : c.status === 'waiting' ? '  — ждёт ответа' : c.status === 'error' ? '  — ошибка' : '';
           return (
             <div
@@ -187,20 +188,14 @@ export function ChatPanel() {
                   ✎
                 </span>
               )}
-              {/* the project chip only when it adds something: not when the chat is named after its project;
-                  first letter only, the full name slides out while the tab is hovered */}
-              {app.projects.length > 1 && !c.title.toLowerCase().includes(basename(c.cwd).toLowerCase()) && (
-                <span className="tproj" title={c.cwd}>
-                  {basename(c.cwd).slice(0, 1)}
-                  <span className="tproj-rest">{basename(c.cwd).slice(1)}</span>
-                </span>
-              )}
               <span className="x" onClick={(e) => (e.stopPropagation(), closeChat(id))}>
                 ×
               </span>
             </div>
           );
-        })}
+            })}
+          </ProjectGroup>
+        ))}
       </TabStrip>
       {tabMenu && <ContextMenu {...tabMenu} onClose={() => setTabMenu(null)} />}
       {active ? (
@@ -216,6 +211,66 @@ export function ChatPanel() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Open chats grouped by project, groups in the order their first chat was opened. */
+function groupByProject(ids: string[], cwdOf: (id: string) => string) {
+  const groups: { cwd: string; ids: string[] }[] = [];
+  for (const id of ids) {
+    const cwd = cwdOf(id);
+    const key = cwd.toLowerCase();
+    const g = groups.find((x) => x.cwd.toLowerCase() === key);
+    if (g) g.ids.push(id);
+    else groups.push({ cwd, ids: [id] });
+  }
+  return groups;
+}
+
+/**
+ * A project's chat tabs with a small project label above them; thin lines run from the label down to the middle of
+ * every tab, so it's clear which chats belong to which project.
+ */
+function ProjectGroup({ cwd, children }: { cwd: string; children: React.ReactNode }) {
+  const tabs = useRef<HTMLDivElement>(null);
+  const [centers, setCenters] = useState<number[]>([]);
+  useLayoutEffect(() => {
+    const el = tabs.current;
+    if (!el) return;
+    const measure = () => {
+      const box = el.getBoundingClientRect();
+      const next = Array.from(el.querySelectorAll<HTMLElement>('[data-tab-key]')).map((t) => {
+        const r = t.getBoundingClientRect();
+        return Math.round(r.left - box.left + r.width / 2);
+      });
+      setCenters((prev) => (prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const t of Array.from(el.children)) ro.observe(t);
+    return () => ro.disconnect();
+  });
+  const name = basename(cwd);
+  const first = centers[0] ?? 0;
+  const last = centers[centers.length - 1] ?? 0;
+  return (
+    <div className="chat-group" title={cwd}>
+      <div className="cg-head">
+        <svg className="cg-lines" aria-hidden="true">
+          {centers.length > 1 && <line x1={first} x2={last} y1={6.5} y2={6.5} />}
+          {centers.map((x, i) => (
+            <line key={i} x1={x + 0.5} x2={x + 0.5} y1={6.5} y2={14} />
+          ))}
+        </svg>
+        <span className="cg-label" style={{ left: (first + last) / 2 }}>
+          {name}
+        </span>
+      </div>
+      <div className="cg-tabs" ref={tabs}>
+        {children}
+      </div>
     </div>
   );
 }

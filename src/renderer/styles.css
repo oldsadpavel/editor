@@ -164,9 +164,6 @@ code.path-link { background: rgba(84, 138, 247, 0.12); }
 .tab .x:hover { background: #55585e; opacity: 1; }
 .tab .dirty { color: var(--claude); font-size: 10px; }
 .tab .ttitle { overflow: hidden; text-overflow: ellipsis; }
-.tab .tproj { flex: none; font-size: 10px; line-height: 16px; height: 16px; color: var(--muted); background: var(--bg3); border-radius: 3px; padding: 0 5px; }
-.tab .tproj-rest { display: inline-block; vertical-align: top; max-width: 0; overflow: hidden; white-space: nowrap; transition: max-width 0.25s ease; }
-.tab:hover .tproj-rest { max-width: 160px; }
 .tab.alert { color: var(--err); }
 
 /* ---------- tree ---------- */
@@ -665,3 +662,14 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .task-note b { color: var(--fg); font-weight: 500; }
 .task-note.failed .tn-text { color: var(--err); }
 .task-note .path-link { font-size: 12px; }
+
+/* ---------- chat tabs grouped by project ---------- */
+.chat-tabs .tab-strip-row { align-items: flex-end; }
+.chat-group { display: flex; flex-direction: column; flex: none; }
+.chat-group + .chat-group { margin-left: 6px; }
+.cg-head { position: relative; height: 14px; }
+.cg-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.cg-lines line { stroke: #4e5157; stroke-width: 1; }
+.cg-label { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; line-height: 12px; padding: 0 5px; border-radius: 3px; background: var(--bg3); color: var(--fg2); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.chat-group:hover .cg-label { color: var(--fg); }
+.cg-tabs { display: flex; }
