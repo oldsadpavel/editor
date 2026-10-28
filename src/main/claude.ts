@@ -1017,3 +1017,10 @@ export function shutdown() {
     if (s.remoteProc) remote.stop(s.remoteProc);
   }
 }
+
+/** What the given answers of a chat changed in a file (for the diff window). */
+export function fileChanges(sessionId: string, turnIds: string[], file: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  return s.builder.changesFor(turnIds, file);
+}

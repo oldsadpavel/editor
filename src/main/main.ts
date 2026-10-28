@@ -8,6 +8,7 @@ import * as cache from './cache';
 import * as claude from './claude';
 import * as cloud from './cloud';
 import * as deploy from './deploy';
+import { openDiffWindow } from './diff';
 import * as files from './files';
 import * as keys from './keys';
 import * as ping from './ping';
@@ -168,6 +169,11 @@ handle('chat:send', (id: string, text: string, opts?: SendOptions) => claude.sen
 handle('chat:interrupt', (id: string) => claude.interrupt(id));
 handle('chat:autoApprove', (id: string, on: boolean) => claude.setAutoApprove(id, on));
 handle('chat:remote', (id: string, on: boolean) => claude.setRemote(id, on));
+handle('chat:diff', (id: string, turnIds: string[], file: string) => {
+  const items = claude.fileChanges(id, turnIds, file);
+  if (!items.length) throw new Error('Нет данных об изменениях этого файла (возможно, правка была в другом процессе)');
+  openDiffWindow(file, items);
+});
 handle('chat:chrome', (id: string, on: boolean) => claude.setChrome(id, on));
 handle('chat:status', (id: string) => claude.chatStatus(id));
 handle('chat:commands', (id: string) => claude.chatCommands(id));

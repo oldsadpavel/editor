@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ApprovalEntry, ChatSnapshot, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem, TurnItemTool } from '../../shared/types';
+import type { ApprovalEntry, ChatSnapshot, FavoriteAnswer, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem, TurnItemTool } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
+import { isFavorite, openFavorite, removeFavorite, toggleFavorite } from '../favorites';
 import { loadDraft, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
@@ -107,6 +108,11 @@ function aggregate(turns: Turn[]) {
   return [...map.values()].sort((a, b) => b.lastAt - a.lastAt);
 }
 
+/** Opens a separate window with what these answers changed in the file. */
+function openDiff(sessionId: string, turnIds: string[], file: string) {
+  call('chat:diff', sessionId, turnIds, file).catch((e) => toast(e.message, 'error'));
+}
+
 function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[]; cwd: string }) {
   const [open, setOpen] = useState(false);
   const errors = tools.filter((t) => t.error).length;
@@ -118,12 +124,27 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
         <span className="twisty">{open ? '▾' : '▸'}</span>
         {running ? <span className="spinner" /> : '⚙'} {tools.length} {plural(tools.length, 'действие', 'действия', 'действий')}
         <span className="muted"> · {names}</span>
-        {errors > 0 && <span className="err-count">{errors} с ошибкой</span>}
+        {errors > 0 && (
+          <span
+            className="err-count"
+            title={tools
+              .filter((t) => t.error)
+              .map((t) => `${t.name}${t.path ? ' ' + basename(t.path) : ''}: ${t.errorText ?? 'ошибка'}`)
+              .join('\n\n')}
+          >
+            ! {errors} с ошибкой
+          </span>
+        )}
       </div>
       {open && (
         <div className="tool-list">
           {tools.map((t) => (
-            <div key={t.id} className={`tool-row ${t.error ? 'err' : ''}`}>
+            <div key={t.id} className={`tool-row ${t.error ? 'err' : ''}`} title={t.error ? t.errorText : undefined}>
+              {t.error && (
+                <span className="err-mark" title={t.errorText ?? 'Ошибка'}>
+                  !
+                </span>
+              )}
               <span className="tname">{t.name.replace(/^mcp__/, '')}</span>
               {t.path ? (
                 <span className="path-link" onClick={() => openFile(t.path!)}>
@@ -226,6 +247,13 @@ function TurnBody({
               <span className="dd-path">{relPath(e.path, cwd).replace(/[^\\/]*$/, '')}</span>
               <span className="dd-meta">{editLabel(e)}</span>
               <span className="dd-time">{formatTime(e.lastAt)}</span>
+              <button
+                className="btn small diff-btn"
+                title="Что изменилось в этом файле в этом ответе — в отдельном окне"
+                onClick={(ev) => (ev.stopPropagation(), openDiff(sessionId, [turn.id], e.path))}
+              >
+                Δ изменения
+              </button>
             </div>
           ))}
           {!edits.length && <div className="muted small">В этом ответе файлы не менялись.</div>}
@@ -309,6 +337,19 @@ function firstLine(s: string) {
   return l.length > 140 ? l.slice(0, 140) + '…' : l;
 }
 
+function FavStar({ sessionId, turn }: { sessionId: string; turn: Turn }) {
+  const fav = useStore((s) => isFavorite(s.app?.favoriteAnswers, sessionId, turn));
+  return (
+    <span
+      className={`fav-star ${fav ? 'on' : ''}`}
+      title={fav ? 'В избранном — нажмите, чтобы убрать' : 'Сохранить ответ в избранное'}
+      onClick={(e) => (e.stopPropagation(), toggleFavorite(sessionId, turn))}
+    >
+      {fav ? '★' : '☆'}
+    </span>
+  );
+}
+
 function TurnRow({
   turn,
   cwd,
@@ -380,6 +421,7 @@ function TurnRow({
           </span>
         )}
         <TokensBadge turn={turn} />
+        {!turn.live && <FavStar sessionId={sessionId} turn={turn} />}
         <span className="turn-date" title={`Вопрос: ${new Date(turn.startedAt).toLocaleString('ru-RU')}${turn.answeredAt ? `\nОтвет: ${new Date(turn.answeredAt).toLocaleString('ru-RU')}` : ''}`}>
           {turn.live ? <span className="spinner" /> : turn.error ? '⚠' : '✓'} {formatTime(turn.answeredAt ?? turn.startedAt)}
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
@@ -851,7 +893,8 @@ function ApprovalsTab({ chat }: { chat: ChatSnapshot }) {
 export { MODES };
 
 export function ChatView({ chat }: { chat: ChatSnapshot }) {
-  const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals'>('chat');
+  const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals' | 'favorites'>('chat');
+  const favCount = useStore((s) => (s.app?.favoriteAnswers ?? []).filter((f) => f.sessionId === chat.sessionId).length);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(chat.turns.slice(-1).map((t) => t.id)));
   const [q, setQ] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
@@ -1014,6 +1057,9 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
                 >
                   в {f.turns.length} {plural(f.turns.length, 'ответе', 'ответах', 'ответах')} →
                 </button>
+                <button className="btn small diff-btn" title="Все изменения этого файла в чате — в отдельном окне" onClick={() => openDiff(chat.sessionId, f.turns, f.path)}>
+                  Δ
+                </button>
                 <span className="ftime">{formatTime(f.lastAt)}</span>
               </div>
             ))}
@@ -1029,6 +1075,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           </div>
         )}
         {tab === 'approvals' && <ApprovalsTab chat={chat} />}
+        {tab === 'favorites' && <FavoritesTab chat={chat} onOpen={() => setTab('chat')} />}
       </div>
       {chat.pending.map((p) => (
         <PermissionCard key={p.id} req={p} />
@@ -1059,6 +1106,9 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           🛡 Разрешения {chat.approvals.length > 0 && <span className="count">{chat.approvals.length}</span>}
           {chat.autoApprove && <span className="auto-dot" title="Автоодобрение включено" />}
         </div>
+        <div className={`tab ${tab === 'favorites' ? 'on' : ''}`} onClick={() => setTab('favorites')} title="Ответы, сохранённые в избранное (☆ у ответа)">
+          ★ Избранное {favCount > 0 && <span className="count">{favCount}</span>}
+        </div>
         <div className="grow" />
         <span className="muted chat-cwd" title={chat.sessionId}>
           {chat.cwd}
@@ -1068,3 +1118,48 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   );
 }
 
+
+/** Saved answers: this chat's first, other chats on request. Click — jump to the answer (opens its chat). */
+function FavoritesTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void }) {
+  const all = useStore((s) => s.app?.favoriteAnswers ?? NO_FAVS);
+  const [everywhere, setEverywhere] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
+  const list = [...all].filter((f) => everywhere || f.sessionId === chat.sessionId).sort((a, b) => b.savedAt - a.savedAt);
+  return (
+    <div className="favorites-tab">
+      <div className="fav-bar">
+        <label>
+          <input type="checkbox" checked={everywhere} onChange={(e) => setEverywhere(e.target.checked)} /> из всех чатов ({all.length})
+        </label>
+      </div>
+      {list.map((f: FavoriteAnswer) => (
+        <div key={f.id} className="fav-item">
+          <div className="fav-head" onClick={() => setOpen(open === f.id ? null : f.id)}>
+            <span className="twisty">{open === f.id ? '▾' : '▸'}</span>
+            <span className="fav-q">{f.prompt.split('\n')[0].slice(0, 140) || '(без текста)'}</span>
+            {f.sessionId !== chat.sessionId && (
+              <span className="tproj" title={f.cwd}>
+                {f.chatTitle}
+              </span>
+            )}
+            <span className="muted small">{formatTime(f.startedAt)}</span>
+            <button className="btn small" title="Показать в чате" onClick={(e) => (e.stopPropagation(), onOpen(), void openFavorite(f))}>
+              → в чат
+            </button>
+            <button className="btn small" title="Убрать из избранного" onClick={(e) => (e.stopPropagation(), removeFavorite(f.id))}>
+              ✕
+            </button>
+          </div>
+          {open === f.id && (
+            <div className="fav-body">
+              <Markdown text={f.answer || '(ответ без текста)'} cwd={f.cwd} />
+            </div>
+          )}
+        </div>
+      ))}
+      {!list.length && <div className="empty">Здесь будут ответы, отмеченные ☆ в заголовке ответа.</div>}
+    </div>
+  );
+}
+
+const NO_FAVS: FavoriteAnswer[] = [];

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
-import type { FileEdit, Turn, TurnAttachment, TurnItemTool } from '../shared/types';
+import type { FileChange, FileEdit, Turn, TurnAttachment, TurnItemTool } from '../shared/types';
 
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit']);
 const READ_TOOLS = new Set(['Read']);
@@ -111,6 +111,19 @@ function toolSummary(name: string, input: any): { summary: string; path?: string
 export class TurnBuilder {
   turns: Turn[] = [];
   private pendingTools = new Map<string, { turn: Turn; tool: TurnItemTool; input: any; at: number }>();
+  /** What each answer changed in each file (for the diff window); kept here, not sent with every snapshot. */
+  private changes = new Map<Turn, { path: string; change: FileChange }[]>();
+
+  /** Changes to a file made in the given turns, oldest first. */
+  changesFor(turnIds: string[], file: string): { turn: Turn; change: FileChange }[] {
+    const key = normalize(file);
+    const out: { turn: Turn; change: FileChange }[] = [];
+    for (const turn of this.turns) {
+      if (!turnIds.includes(turn.id)) continue;
+      for (const c of this.changes.get(turn) ?? []) if (normalize(c.path) === key) out.push({ turn, change: c.change });
+    }
+    return out.sort((a, b) => a.change.at - b.change.at);
+  }
   /** Every `git push` command seen, so deploy tracking can attribute pushes to this chat. */
   pushCommands: { at: number; command: string }[] = [];
 
@@ -277,13 +290,27 @@ export class TurnBuilder {
     tool.done = true;
     tool.error = !!block.is_error;
     turn.answeredAt = Math.max(turn.answeredAt ?? 0, at);
-    if (tool.error) return;
+    if (tool.error) {
+      const c = block.content;
+      const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((b: any) => b.text ?? '').join('\n') : '';
+      tool.errorText = text.replace(/<\/?tool_use_error>/g, '').trim().slice(0, 2000) || 'Инструмент вернул ошибку';
+      return;
+    }
     const file = input?.file_path ?? input?.notebook_path;
     if (typeof file !== 'string') return;
     if (EDIT_TOOLS.has(tool.name)) {
       const isWrite = tool.name === 'Write';
       const count = tool.name === 'MultiEdit' ? (input.edits?.length ?? 1) : isWrite ? 0 : 1;
       addEdit(turn.edits, file, count, isWrite ? 1 : 0, pending.at);
+      const change: FileChange =
+        tool.name === 'Write'
+          ? { tool: tool.name, at: pending.at, content: String(input.content ?? '') }
+          : tool.name === 'MultiEdit'
+            ? { tool: tool.name, at: pending.at, edits: (input.edits ?? []).map((e: any) => ({ old: String(e.old_string ?? ''), new: String(e.new_string ?? ''), all: !!e.replace_all })) }
+            : tool.name === 'Edit'
+              ? { tool: tool.name, at: pending.at, edits: [{ old: String(input.old_string ?? ''), new: String(input.new_string ?? ''), all: !!input.replace_all }] }
+              : { tool: tool.name, at: pending.at, content: String(input.new_source ?? '') };
+      (this.changes.get(turn) ?? this.changes.set(turn, []).get(turn)!).push({ path: file, change });
     } else if (READ_TOOLS.has(tool.name) && !turn.reads.includes(file)) {
       turn.reads.push(file);
     }

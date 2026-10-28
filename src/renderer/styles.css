@@ -640,3 +640,18 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .cloud-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cloud-choice { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--warn); border-radius: var(--radius); background: rgba(224, 168, 74, 0.08); }
 .cloud-version { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line-soft); }
+
+/* ---------- diff / tool errors / favorites ---------- */
+.diff-btn { margin-left: 6px; padding: 0 6px; height: 20px; font-size: 11px; }
+.err-count { cursor: help; }
+.err-mark { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; background: var(--err); color: #fff; font-size: 10px; font-weight: 700; cursor: help; flex: none; }
+.fav-star { cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 3px; line-height: 1; }
+.fav-star:hover { color: var(--warn); }
+.fav-star.on { color: var(--warn); }
+.favorites-tab { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; }
+.fav-bar { display: flex; justify-content: flex-end; font-size: 12px; color: var(--fg2); }
+.fav-bar label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.fav-item { border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--bg2); }
+.fav-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; cursor: pointer; }
+.fav-q { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fav-body { padding: 4px 14px 10px; border-top: 1px solid var(--line-soft); }

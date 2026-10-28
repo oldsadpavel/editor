@@ -20,7 +20,30 @@ export interface TurnItemTool {
   summary: string;
   path?: string;
   error?: boolean;
+  /** What the tool answered when it failed (e.g. why a file couldn't be written). */
+  errorText?: string;
   done?: boolean;
+}
+
+/** One change Claude made to a file: replacements (Edit/MultiEdit) or the whole new content (Write). */
+export interface FileChange {
+  tool: string;
+  at: number;
+  edits?: { old: string; new: string; all?: boolean }[];
+  content?: string;
+}
+
+/** An answer saved to favorites; its text is kept, so it stays readable when the chat is closed. */
+export interface FavoriteAnswer {
+  id: string;
+  sessionId: string;
+  cwd: string;
+  chatTitle: string;
+  /** Identifies the turn: question time + text (turn ids change between a live run and a transcript reload). */
+  startedAt: number;
+  prompt: string;
+  answer: string;
+  savedAt: number;
 }
 export type TurnItem = TurnItemText | TurnItemTool;
 
@@ -320,6 +343,7 @@ export interface AppState {
   /** Cloud settings storage; the tokens themselves live encrypted in cloud-auth.bin, not here. */
   cloud?: { server: string; auto: boolean; email?: string; name?: string; lastSyncAt?: number; hash?: string; choiceMade?: boolean };
   chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean; chrome?: boolean }>;
+  favoriteAnswers?: FavoriteAnswer[];
   /** Claude in Chrome for new chats (default on). */
   defaultChrome?: boolean;
   /** Unsent text and attachments per chat. */
