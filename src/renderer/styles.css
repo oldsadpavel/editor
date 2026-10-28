@@ -602,3 +602,10 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .turn-body.turn-split { padding-right: 6px; }
 .q-more.pending { opacity: 0.45; }
 .q-more.pending .q-text { font-style: italic; }
+
+/* ---------- tab strips with overflow button ---------- */
+.tab-strip { display: flex; align-items: stretch; overflow: hidden; }
+.tab-strip-row { display: flex; flex: 1; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tab-strip-row::-webkit-scrollbar { display: none; }
+.tab-more { flex: none; width: 26px; border: 0; border-left: 1px solid var(--line-soft); background: var(--bg2); color: var(--fg2); cursor: pointer; font-size: 11px; padding: 0; }
+.tab-more:hover { background: var(--bg3); color: var(--fg); }

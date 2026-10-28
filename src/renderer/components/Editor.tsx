@@ -31,6 +31,7 @@ import { basename, dirname } from '../util';
 import { fileIcon } from './icons';
 import { ImageTab } from './ImageViewer';
 import { BlockHandle } from './Layout';
+import { TabStrip, middleClose } from './Tabs';
 
 function language(path: string): Extension {
   const name = basename(path).toLowerCase();
@@ -145,19 +146,27 @@ export function EditorArea() {
 
   return (
     <div className="editor-area">
-      <div className="tabs editor-tabs">
-        <span className="tabs-handle">
-          <BlockHandle block="editor" />
-        </span>
+      <TabStrip
+        className="editor-tabs"
+        activeKey={active}
+        onPick={(p) => set({ activeFile: p })}
+        lead={
+          <span className="tabs-handle">
+            <BlockHandle block="editor" />
+          </span>
+        }
+      >
         {files.map((f) => {
           const dirty = f.text !== f.savedText;
           return (
             <div
               key={f.path}
+              data-tab-key={f.path}
+              data-tab-label={`${fileIcon(f.path)} ${basename(f.path)}${dirty ? ' ●' : ''}`}
               className={`tab ${f.path === active ? 'on' : ''}`}
-              title={f.path}
+              title={`${f.path}\nСредняя кнопка мыши — закрыть`}
               onClick={() => set({ activeFile: f.path })}
-              onAuxClick={(e) => e.button === 1 && closeFile(f.path)}
+              {...middleClose(() => closeFile(f.path))}
             >
               <span className="ficon">{fileIcon(f.path)}</span>
               {basename(f.path)}
@@ -168,7 +177,7 @@ export function EditorArea() {
             </div>
           );
         })}
-      </div>
+      </TabStrip>
       {file?.changedOnDisk && (
         <div className="banner warn">
           Файл изменён на диске (возможно, ИИ). У вас есть несохранённые правки.

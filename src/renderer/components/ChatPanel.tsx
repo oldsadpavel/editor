@@ -4,6 +4,7 @@ import { closeChat, isUnread, loadSessions, newChat, openChat, renameChat, saveA
 import { Help, basename, formatTime } from '../util';
 import { ChatView } from './ChatView';
 import { BlockHandle } from './Layout';
+import { TabStrip, middleClose } from './Tabs';
 
 export function StatusDot({ id, status }: { id: string; status?: ChatSnapshot['status'] }) {
   const unread = useStore((s) => isUnread(id, s));
@@ -137,18 +138,21 @@ export function ChatPanel() {
         <div className="grow" />
         <Help id="chat" />
       </div>
-      <div className="tabs chat-tabs">
+      <TabStrip className="chat-tabs" activeKey={active} onPick={(id) => openChat(id)}>
         {app.openChats.map((id) => {
           const c = chats[id];
           if (!c) return null;
+          const mark = c.status === 'running' ? '⏳ ' : c.status === 'waiting' ? '❗ ' : c.status === 'error' ? '⚠ ' : '';
           return (
             <div
               key={id}
+              data-tab-key={id}
+              data-tab-label={`${mark}${c.title}`}
               className={`tab ${id === active ? 'on' : ''}`}
-              title={`${c.title}\n${c.cwd}\nДвойной клик — переименовать`}
+              title={`${c.title}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
               onClick={() => openChat(id)}
               onDoubleClick={() => setEditing(id)}
-              onAuxClick={(e) => e.button === 1 && closeChat(id)}
+              {...middleClose(() => closeChat(id))}
             >
               <StatusDot id={id} status={c.status} />
               {editing === id ? (
@@ -169,7 +173,7 @@ export function ChatPanel() {
             </div>
           );
         })}
-      </div>
+      </TabStrip>
       {active ? (
         <ChatView key={active} chat={chats[active]} />
       ) : (
