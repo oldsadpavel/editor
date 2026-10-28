@@ -107,57 +107,6 @@ function aggregate(turns: Turn[]) {
   return [...map.values()].sort((a, b) => b.lastAt - a.lastAt);
 }
 
-function EditsButton({ edits, cwd }: { edits: FileEdit[]; cwd: string }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
-  const ref = useRef<HTMLDivElement>(null);
-  const toggleOpen = () => {
-    const r = ref.current!.getBoundingClientRect();
-    setPos({ top: Math.min(r.bottom + 4, window.innerHeight - 200), right: Math.max(8, window.innerWidth - r.right) });
-    setOpen(!open);
-  };
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
-    window.addEventListener('mousedown', close);
-    return () => window.removeEventListener('mousedown', close);
-  }, [open]);
-  if (!edits.length) return null;
-  const total = edits.reduce((n, e) => n + e.count + e.writes, 0);
-  return (
-    <div className="edits-wrap" ref={ref} onClick={(e) => e.stopPropagation()}>
-      <button className={`edits-btn ${open ? 'on' : ''}`} title="Файлы, изменённые в этом ответе" onClick={toggleOpen}>
-        ✎ {edits.length} {plural(edits.length, 'файл', 'файла', 'файлов')} ▾
-      </button>
-      {open && (
-        <div className="dropdown edits-dd" style={{ top: pos.top, right: pos.right }}>
-          <div className="dd-head">
-            {edits.length} {plural(edits.length, 'файл', 'файла', 'файлов')} · {total} {plural(total, 'изменение', 'изменения', 'изменений')}
-          </div>
-          {[...edits]
-            .sort((a, b) => b.lastAt - a.lastAt)
-            .map((e) => (
-              <div
-                key={e.path}
-                className="dd-row"
-                onClick={() => {
-                  setOpen(false);
-                  void openFile(e.path);
-                }}
-                title={e.path}
-              >
-                <span className="dd-name">{basename(e.path)}</span>
-                <span className="dd-path">{relPath(e.path, cwd).replace(/[^\\/]*$/, '')}</span>
-                <span className="dd-meta">{editLabel(e)}</span>
-                <span className="dd-time">{formatTime(e.lastAt)}</span>
-              </div>
-            ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[]; cwd: string }) {
   const [open, setOpen] = useState(false);
   const errors = tools.filter((t) => t.error).length;
@@ -192,42 +141,25 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
   );
 }
 
-function TurnApprovals({ list }: { list: ApprovalEntry[] }) {
-  const [open, setOpen] = useState(false);
-  if (!list.length) return null;
-  const auto = list.filter((a) => a.decision === 'auto').length;
-  const denied = list.filter((a) => a.decision === 'deny').length;
-  return (
-    <div className="turn-approvals">
-      <div className="tool-head" onClick={() => setOpen(!open)}>
-        <span className="twisty">{open ? '▾' : '▸'}</span>🛡 {list.length} {plural(list.length, 'разрешение', 'разрешения', 'разрешений')}
-        <span className="muted">
-          {' '}
-          · {auto ? `⚡ авто ${auto}` : ''}
-          {auto && list.length - auto - denied ? ' · ' : ''}
-          {list.length - auto - denied ? `✓ вы ${list.length - auto - denied}` : ''}
-          {denied ? ` · ✕ отклонено ${denied}` : ''}
-        </span>
-      </div>
-      {open && (
-        <div className="tool-list">
-          {list.map((a, i) => (
-            <div key={i} className={`approval-row inline ${a.decision}`}>
-              <span className="adecision">{DECISION_LABEL[a.decision]}</span>
-              <span className="atool">{a.tool.replace(/^mcp__/, '')}</span>
-              <span className="asum" title={a.summary}>
-                {a.summary}
-              </span>
-              <span className="muted small">{formatTime(a.at)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+type BodyTab = 'answer' | 'files' | 'approvals';
 
-function TurnBody({ turn, cwd, partial, sessionId, approvals }: { turn: Turn; cwd: string; partial?: string; sessionId: string; approvals: ApprovalEntry[] }) {
+function TurnBody({
+  turn,
+  cwd,
+  partial,
+  sessionId,
+  approvals,
+  tab,
+  setTab,
+}: {
+  turn: Turn;
+  cwd: string;
+  partial?: string;
+  sessionId: string;
+  approvals: ApprovalEntry[];
+  tab: BodyTab;
+  setTab: (t: BodyTab) => void;
+}) {
   // Consecutive tool calls are folded into one group so the text answer stays readable.
   const blocks: ({ kind: 'text'; text: string } | { kind: 'tools'; tools: Extract<TurnItem, { kind: 'tool' }>[] })[] = [];
   for (const it of turn.items) {
@@ -236,6 +168,9 @@ function TurnBody({ turn, cwd, partial, sessionId, approvals }: { turn: Turn; cw
     else if (last?.kind === 'tools') last.tools.push(it);
     else blocks.push({ kind: 'tools', tools: [it] });
   }
+  const edits = [...turn.edits].sort((a, b) => b.lastAt - a.lastAt);
+  const autoN = approvals.filter((a) => a.decision === 'auto').length;
+  const denyN = approvals.filter((a) => a.decision === 'deny').length;
   return (
     <div className="turn-body">
       <div className="question">
@@ -258,24 +193,72 @@ function TurnBody({ turn, cwd, partial, sessionId, approvals }: { turn: Turn; cw
           </div>
         ))}
       </div>
-      {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
-      {partial && <Markdown text={partial} cwd={cwd} />}
-      {turn.live && !partial && (
-        <div className="thinking">
-          <span className="spinner" /> Claude работает…
+      <div className="turn-tabs">
+        <span className={`turn-tab ${tab === 'answer' ? 'on' : ''}`} onClick={() => setTab('answer')}>
+          Ответ
+        </span>
+        <span className={`turn-tab ${tab === 'files' ? 'on' : ''} ${!edits.length ? 'empty' : ''}`} onClick={() => setTab('files')} title="Файлы, изменённые в этом ответе">
+          ✎ Файлы {edits.length > 0 && <span className="count">{edits.length}</span>}
+        </span>
+        <span
+          className={`turn-tab ${tab === 'approvals' ? 'on' : ''} ${!approvals.length ? 'empty' : ''}`}
+          onClick={() => setTab('approvals')}
+          title="Что Claude спрашивал в этом ответе и как решено"
+        >
+          🛡 Разрешения {approvals.length > 0 && <span className="count">{approvals.length}</span>}
+          {autoN > 0 && <span className="muted"> ⚡{autoN}</span>}
+          {denyN > 0 && <span className="bad"> ✕{denyN}</span>}
+        </span>
+      </div>
+      {tab === 'answer' && (
+        <>
+          {blocks.map((b, i) => (b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />))}
+          {partial && <Markdown text={partial} cwd={cwd} />}
+          {turn.live && !partial && (
+            <div className="thinking">
+              <span className="spinner" /> Claude работает…
+            </div>
+          )}
+          {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
+          {turn.reads.length > 0 && (
+            <div className="reads">
+              Прочитаны:{' '}
+              {turn.reads.slice(0, 12).map((r) => (
+                <span key={r} className="path-link" onClick={() => openFile(r)} title={r}>
+                  {basename(r)}
+                </span>
+              ))}
+              {turn.reads.length > 12 && <span className="muted"> и ещё {turn.reads.length - 12}</span>}
+            </div>
+          )}
+        </>
+      )}
+      {tab === 'files' && (
+        <div className="turn-files">
+          {edits.map((e) => (
+            <div key={e.path} className="dd-row" onClick={() => openFile(e.path)} title={e.path}>
+              <span className="dd-name">{basename(e.path)}</span>
+              <span className="dd-path">{relPath(e.path, cwd).replace(/[^\\/]*$/, '')}</span>
+              <span className="dd-meta">{editLabel(e)}</span>
+              <span className="dd-time">{formatTime(e.lastAt)}</span>
+            </div>
+          ))}
+          {!edits.length && <div className="muted small">В этом ответе файлы не менялись.</div>}
         </div>
       )}
-      {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
-      <TurnApprovals list={approvals} />
-      {turn.reads.length > 0 && (
-        <div className="reads">
-          Прочитаны:{' '}
-          {turn.reads.slice(0, 12).map((r) => (
-            <span key={r} className="path-link" onClick={() => openFile(r)} title={r}>
-              {basename(r)}
-            </span>
+      {tab === 'approvals' && (
+        <div className="turn-files">
+          {approvals.map((a, i) => (
+            <div key={i} className={`approval-row inline ${a.decision}`}>
+              <span className="adecision">{DECISION_LABEL[a.decision]}</span>
+              <span className="atool">{a.tool.replace(/^mcp__/, '')}</span>
+              <span className="asum" title={a.summary}>
+                {a.summary}
+              </span>
+              <span className="muted small">{formatTime(a.at)}</span>
+            </div>
           ))}
-          {turn.reads.length > 12 && <span className="muted"> и ещё {turn.reads.length - 12}</span>}
+          {!approvals.length && <div className="muted small">В этом ответе Claude ничего не спрашивал.</div>}
         </div>
       )}
     </div>
@@ -333,10 +316,15 @@ function TurnRow({
   approvals: ApprovalEntry[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [bodyTab, setBodyTab] = useState<BodyTab>('answer');
   useEffect(() => {
     if (highlight) ref.current?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, [highlight]);
   const dur = turn.answeredAt ? turn.answeredAt - turn.startedAt : 0;
+  const showTab = (t: BodyTab) => {
+    setBodyTab(t);
+    if (!open) onToggle();
+  };
   return (
     <div className={`turn ${open ? 'open' : ''} ${turn.live ? 'live' : ''} ${turn.error ? 'failed' : ''} ${highlight ? 'flash' : ''}`} ref={ref}>
       <div className="turn-head" onClick={onToggle}>
@@ -354,14 +342,37 @@ function TurnRow({
             +{turn.more.length} {plural(turn.more.length, 'вопрос', 'вопроса', 'вопросов')}
           </span>
         ) : null}
-        <EditsButton edits={turn.edits} cwd={cwd} />
+        {turn.edits.length > 0 && (
+          <span
+            className="edits-btn"
+            title="Файлы, изменённые в этом ответе"
+            onClick={(e) => {
+              e.stopPropagation();
+              showTab('files');
+            }}
+          >
+            ✎ {turn.edits.length} {plural(turn.edits.length, 'файл', 'файла', 'файлов')}
+          </span>
+        )}
+        {approvals.length > 0 && (
+          <span
+            className={`perm-badge ${approvals.some((a) => a.decision === 'deny') ? 'deny' : approvals.every((a) => a.decision === 'auto') ? 'auto' : ''}`}
+            title="Разрешения в этом ответе"
+            onClick={(e) => {
+              e.stopPropagation();
+              showTab('approvals');
+            }}
+          >
+            🛡 {approvals.length}
+          </span>
+        )}
         <TokensBadge turn={turn} />
         <span className="turn-date" title={`Вопрос: ${new Date(turn.startedAt).toLocaleString('ru-RU')}${turn.answeredAt ? `\nОтвет: ${new Date(turn.answeredAt).toLocaleString('ru-RU')}` : ''}`}>
           {turn.live ? <span className="spinner" /> : turn.error ? '⚠' : '✓'} {formatTime(turn.answeredAt ?? turn.startedAt)}
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
         </span>
       </div>
-      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} sessionId={sessionId} approvals={approvals} />}
+      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} sessionId={sessionId} approvals={approvals} tab={bodyTab} setTab={setBodyTab} />}
     </div>
   );
 }
@@ -792,11 +803,19 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const files = useMemo(() => aggregate(chat.turns), [chat.turns]);
   const last = chat.turns[chat.turns.length - 1];
   const chatBusy = chat.status === 'running' || chat.status === 'waiting';
+  // A decision belongs to the turn that was running when it was made. Matched by time, because a turn's id
+  // differs between the live run (random) and the transcript reload (message uuid).
   const approvalsByTurn = useMemo(() => {
     const m = new Map<string, ApprovalEntry[]>();
-    for (const a of chat.approvals) if (a.turnId) (m.get(a.turnId) ?? m.set(a.turnId, []).get(a.turnId)!).push(a);
+    const starts = chat.turns.map((t) => t.startedAt);
+    for (const a of chat.approvals) {
+      let i = starts.findIndex((s) => s > a.at) - 1;
+      if (i === -2) i = starts.length - 1;
+      const id = chat.turns[i]?.id;
+      if (id) (m.get(id) ?? m.set(id, []).get(id)!).push(a);
+    }
     return m;
-  }, [chat.approvals]);
+  }, [chat.approvals, chat.turns]);
 
   useEffect(() => markSeen(chat.sessionId), [chat.sessionId, chat.status]);
 
