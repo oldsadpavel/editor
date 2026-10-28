@@ -59,10 +59,12 @@ const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i;
  * (terminal, IDE plugin) only exist in the transcript and are loaded by reference.
  */
 function splitAttachments(text: string, refs: TurnAttachment[]): { prompt: string; attachments: TurnAttachment[] } {
-  const at = text.lastIndexOf(`\n\n${ATTACHMENTS_HEADER}\n`);
+  // attachments without text: cleanPrompt trimmed the blank lines, the prompt starts right with the header
+  const only = text.startsWith(`${ATTACHMENTS_HEADER}\n`);
+  const at = only ? 0 : text.lastIndexOf(`\n\n${ATTACHMENTS_HEADER}\n`);
   if (at < 0) return { prompt: text, attachments: refs };
   const listed = text
-    .slice(at + ATTACHMENTS_HEADER.length + 3)
+    .slice(at + ATTACHMENTS_HEADER.length + (only ? 1 : 3))
     .split('\n')
     .map((l) => l.replace(/^- /, '').trim())
     .filter(Boolean);
@@ -76,7 +78,7 @@ function splitAttachments(text: string, refs: TurnAttachment[]): { prompt: strin
     const ref = refs[imageNo++];
     attachments.push(fs.existsSync(p) || !ref ? { kind: 'image', path: p } : ref);
   }
-  return { prompt: text.slice(0, at).trim(), attachments };
+  return { prompt: only ? '' : text.slice(0, at).trim(), attachments };
 }
 
 function toolSummary(name: string, input: any): { summary: string; path?: string } {

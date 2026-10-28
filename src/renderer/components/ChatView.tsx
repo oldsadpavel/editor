@@ -384,6 +384,13 @@ function TokensBadge({ turn }: { turn: Turn }) {
   );
 }
 
+/** Turn head for a question without text: what was attached (file names, or that it is a picture). */
+function attachmentsHeadline(attachments: Turn['attachments'], images?: unknown): string {
+  const files = (attachments ?? []).filter((a) => a.kind === 'file' && a.path).map((a) => a.path!.split(/[\\/]/).pop());
+  if (files.length) return files.join(', ');
+  return attachments?.length || images ? '(изображение)' : '(вложение)';
+}
+
 function firstLine(s: string) {
   const l = s.trim().split('\n')[0];
   return l.length > 140 ? l.slice(0, 140) + '…' : l;
@@ -441,7 +448,7 @@ function TurnRow({
               📎{turn.attachments.length}
             </span>
           ) : null}
-          {promptHeadline(turn.prompt) || (turn.images ? '(изображение)' : '(вложение)')}
+          {promptHeadline(turn.prompt) || attachmentsHeadline(turn.attachments, turn.images)}
         </span>
         {turn.more?.length ? (
           <span className="more-badge" title={turn.more.map((m) => promptHeadline(m.prompt)).join('\n')}>
