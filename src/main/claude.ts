@@ -279,6 +279,7 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
     s.builder = builder;
     if (cwd) s.cwd = cwd;
     s.existsOnDisk = true;
+    if (builder.lastContext) s.contextTokens = builder.lastContext;
     // An answer still being written elsewhere (terminal, phone, IDE plugin): show it as working; the transcript
     // watcher ends it when that answer is done.
     if (builder.isTurnOpen()) {
@@ -731,6 +732,10 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
           s.compacting = undefined;
           s.publish(true);
         }
+      }
+      if (sm.subtype === 'model_refusal_fallback') {
+        s.builder.addFallback(sm, Date.now());
+        s.publish(true);
       }
       if (sm.subtype === 'compact_boundary') {
         const info = compactInfo(sm.compact_metadata);

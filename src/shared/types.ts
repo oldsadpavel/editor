@@ -104,6 +104,8 @@ export interface Turn {
   items: TurnItem[];
   /** History compactions that happened during this answer. */
   compacts?: CompactMark[];
+  /** The model's safeguards stopped the answer and Claude Code switched models (the new model re-reads the whole context). */
+  fallbacks?: { from?: string; to?: string; category?: string; at: number }[];
   /** Claude's latest task checklist in this answer. */
   todos?: TodoItem[];
   /** Bash-mode command (`!…`) — this turn is a local command, not a question. */

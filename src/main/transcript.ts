@@ -239,6 +239,7 @@ export class TurnBuilder {
     const u = message?.usage;
     if (!u || (message.id && this.countedMessages.has(message.id))) return;
     if (message.id) this.countedMessages.add(message.id);
+    this.lastContext = (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
     const t = (turn.tokens ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
     t.input += u.input_tokens ?? 0;
     t.output += u.output_tokens ?? 0;
@@ -256,8 +257,20 @@ export class TurnBuilder {
     if (entry.type === 'user') this.ingestUser(entry, at);
     else if (entry.type === 'assistant') this.ingestAssistant(entry, at);
     else if (entry.type === 'attachment' && entry.attachment?.type === 'queued_command') this.ingestQueued(entry.attachment, at);
+    else if (entry.type === 'system' && entry.subtype === 'model_refusal_fallback') this.addFallback(entry, at);
     else if (entry.type === 'system' && entry.subtype === 'compact_boundary') this.addCompact({ at, ...compactInfo(entry.compactMetadata ?? entry.compact_metadata) });
   }
+
+  /** Safeguards stopped the answer and Claude Code went on with another model. */
+  addFallback(e: any, at: number) {
+    const turn = this.turns[this.turns.length - 1];
+    if (!turn) return;
+    const category = e.apiRefusalCategory ?? String(e.content ?? '').match(/\[(\w+)\]/)?.[1];
+    (turn.fallbacks ??= []).push({ from: e.originalModel, to: e.fallbackModel, category, at });
+  }
+
+  /** Context size of the latest request (fresh input + cache reads + cache writes). */
+  lastContext = 0;
 
   /** A history compaction: marked in the answer during which it happened (or the last one). */
   addCompact(mark: CompactMark) {
@@ -469,7 +482,7 @@ export async function loadTranscript(file: string): Promise<{ builder: TurnBuild
   let cwd: string | undefined;
   const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
   for await (const line of rl) {
-    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"') && !line.includes('"compact_boundary"')) continue;
+    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"') && !line.includes('"compact_boundary"') && !line.includes('"model_refusal_fallback"')) continue;
     let entry: any;
     try {
       entry = JSON.parse(line);

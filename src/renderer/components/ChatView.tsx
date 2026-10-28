@@ -338,6 +338,11 @@ function TurnBody({
             b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : b.kind === 'thinking' ? <ThinkingBlock key={i} text={b.text} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />,
           )}
           {turn.compacts?.length ? <CompactMarks marks={turn.compacts} /> : null}
+          {turn.fallbacks?.map((f, i) => (
+            <div key={i} className="fallback-mark" title="Защитный фильтр модели остановил ответ, Claude Code продолжил другой моделью. Новая модель заново читает всю историю чата — отсюда большая запись в кеш (токены).">
+              🛡 {f.from ? modelName(f.from) : 'Модель'}: защитный фильтр остановил ответ{f.category ? ` [${f.category}]` : ''} → продолжил {f.to ? modelName(f.to) : 'другой моделью'} · история чата перечитана заново
+            </div>
+          ))}
           {partial && <Markdown text={partial} cwd={cwd} />}
           {turn.live && !partial && (
             <div className="thinking">
@@ -443,6 +448,14 @@ function TokensBadge({ turn }: { turn: Turn }) {
     `Чтение из кеша: ${t.cacheRead.toLocaleString('ru-RU')} (дешевле в 10 раз)`,
     `Всего с кешем: ${(main + t.cacheRead).toLocaleString('ru-RU')}`,
     ...(turn.costUsd !== undefined ? [`Стоимость по ценам API: $${turn.costUsd.toFixed(4)}`] : []),
+    ...(t.cacheWrite > 50_000
+      ? [
+          '',
+          `⚠ Почти всё здесь — запись в кеш (${kTokens(t.cacheWrite)}): модель заново прочитала всю историю чата.`,
+          'Так бывает при смене модели (в т.ч. автоматической после защитного фильтра), /model, перезапуске процесса',
+          'или если чат не трогали больше часа. Чем длиннее чат, тем дороже: /compact или новый чат уменьшат это.',
+        ]
+      : []),
   ].join('\n');
   return (
     <span className="turn-tokens" title={tip}>
@@ -897,6 +910,14 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
       <div className="composer-target" title={`${chat.title}\n${chat.cwd}`}>
         <span className="muted">Пишете в:</span> <b>{chat.title}</b>
         <span className="ct-project">{basename(chat.cwd)}</span>
+        {chat.contextTokens ? (
+          <span
+            className={`ct-context ${chat.contextTokens > 150_000 ? 'big' : ''}`}
+            title={`История чата сейчас занимает ~${Math.round(chat.contextTokens / 1000)}k токенов. Каждый раз, когда модель меняется (вручную или после защитного фильтра) или чат простоял больше часа, вся история заново пишется в кеш — это и есть большие цифры токенов. /compact сожмёт историю, новый чат начнёт с нуля.`}
+          >
+            контекст {Math.round(chat.contextTokens / 1000)}k{chat.contextTokens > 150_000 ? ' — дорого, /compact' : ''}
+          </span>
+        ) : null}
       </div>
       {mention && (
         <div className="slash-menu mention-menu">
