@@ -378,14 +378,31 @@ export function listDeploys() {
   return deploysFile.data;
 }
 
+/**
+ * A deploy that was still in progress when the editor was closed and is too old to keep watching: one look at CI
+ * decides how it ended, so it doesn't stay "building" (and spinning on the toolbar) forever.
+ */
+async function settleOld(ev: DeployEvent, r: RepoState) {
+  await checkCi(ev, r).catch(() => {});
+  if (ev.ci?.state === 'success') ev.state = 'live';
+  else if (ev.ci?.state === 'failure') ev.state = 'failed';
+  else if (ev.ci?.state === 'none') ev.state = 'pushed'; // no CI ran for it: the push was all there was
+  else {
+    ev.state = 'stuck';
+    ev.ci = { ...(ev.ci ?? { state: 'none' }), detail: 'Редактор был закрыт, пока шёл деплой — итог неизвестен' };
+  }
+  ev.updatedAt = Date.now();
+  publish();
+}
+
 let timer: NodeJS.Timeout | null = null;
 export function startDeployWatcher() {
   // Deploys interrupted by an app restart continue to be tracked.
   for (const ev of deploysFile.data) {
-    if (['pushed', 'building', 'deploying'].includes(ev.state) && Date.now() - ev.pushedAt < STUCK_AFTER_MS) {
-      const r: RepoState = repos.get(ev.repo.toLowerCase()) ?? { root: ev.repo, refs: null };
-      void trackDeploy(ev, r);
-    }
+    if (!['building', 'deploying'].includes(ev.state) && !(ev.state === 'pushed' && Date.now() - ev.pushedAt < STUCK_AFTER_MS)) continue;
+    const r: RepoState = repos.get(ev.repo.toLowerCase()) ?? { root: ev.repo, refs: null };
+    if (Date.now() - ev.pushedAt < STUCK_AFTER_MS) void trackDeploy(ev, r);
+    else void settleOld(ev, r);
   }
   timer = setInterval(() => {
     for (const r of repos.values()) void pollRepo(r);
