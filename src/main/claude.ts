@@ -955,7 +955,9 @@ function watchTranscript(s: ChatSession) {
       if (s.compacting && builder.turns.some((t) => t.compacts?.some((m) => m.at >= s.compacting!.since - 5000))) s.compacting = undefined;
       // Questions typed here that Claude hasn't written yet stay on screen (grey while queued behind an answer).
       const recent = builder.turns.slice(-4).flatMap((t) => [t.prompt, ...(t.more?.map((m) => m.prompt) ?? [])]).map((p) => p.trim());
-      s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(q.text) && Date.now() - q.at < 5 * 60_000);
+      // a /command typed here shows up as a <command-name> entry, not as a prompt
+      const ranCommand = (q: { text: string; at: number }) => q.text.startsWith('/') && builder.commands.some((c) => c.name === q.text.split(/\s/)[0] && c.at >= q.at - 10_000);
+      s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(q.text) && !ranCommand(q) && Date.now() - q.at < 5 * 60_000);
       for (const q of s.remoteQueue) addRemoteQueued(s, q);
       const last = builder.turns[builder.turns.length - 1];
       // A question (from here or the phone) without a finished answer keeps the chat "working".

@@ -272,6 +272,9 @@ export class TurnBuilder {
   /** Context size of the latest request (fresh input + cache reads + cache writes). */
   lastContext = 0;
 
+  /** Slash commands run in an interactive Claude (/compact, /clear…): recorded as <command-name> entries, not as prompts. */
+  commands: { name: string; at: number }[] = [];
+
   /** A history compaction: marked in the answer during which it happened (or the last one). */
   addCompact(mark: CompactMark) {
     const turn = this.turns[this.turns.length - 1];
@@ -281,6 +284,8 @@ export class TurnBuilder {
   private ingestUser(entry: any, at: number) {
     const content = entry.message?.content;
     if (entry.isMeta || entry.isCompactSummary) return;
+    const cmd = typeof content === 'string' ? content.match(/<command-name>\/?([^<]+)<\/command-name>/)?.[1] : undefined;
+    if (cmd) this.commands.push({ name: '/' + cmd.trim(), at });
     if (typeof content === 'string' && this.ingestBash(content, at, entry.uuid)) return;
     if (typeof content === 'string') {
       // A plain string too can carry the attachment list (prompts typed into an interactive Claude, e.g. /RC).
