@@ -777,3 +777,7 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .wrap-toggle { flex: none; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 10.5px; border-radius: 4px; padding: 0 6px; height: 17px; cursor: pointer; }
 .wrap-toggle:hover { color: var(--fg); }
 .wrap-toggle.on { color: #fff; background: var(--accent-soft); border-color: var(--accent); }
+
+/* compaction progress on the chat tab */
+.chat-tabs .tab.compacting { background-image: linear-gradient(90deg, rgba(255, 196, 160, 0.42) var(--compact-pct, 0%), transparent var(--compact-pct, 0%)); }
+.chat-tabs .tab.compacting .ttitle::before { content: "🗜 "; }

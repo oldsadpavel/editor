@@ -188,7 +188,7 @@ function PromptText({ prompt, cwd }: { prompt: string; cwd: string }) {
 }
 
 /** How long a compaction usually takes for this much context (rough, from observed runs). */
-const compactEstimateMs = (tokens?: number) => Math.min(240_000, Math.max(10_000, 5_000 + (tokens ?? 120_000) / 4)); // 34k ≈ 13 s (measured 7 s), 200k ≈ 55 s
+export const compactEstimateMs = (tokens?: number) => Math.min(240_000, Math.max(10_000, 5_000 + (tokens ?? 120_000) / 4)); // 34k ≈ 13 s (measured 7 s), 200k ≈ 55 s
 
 const kTok = (n?: number) => (n === undefined ? '?' : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 

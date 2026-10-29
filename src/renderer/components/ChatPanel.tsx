@@ -3,7 +3,7 @@ import type { ChatSnapshot, SessionInfo } from '../../shared/types';
 import { call } from '../api';
 import { closeChat, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
-import { ChatView } from './ChatView';
+import { ChatView, compactEstimateMs } from './ChatView';
 import { BlockHandle } from './Layout';
 import { TabStrip, middleClose } from './Tabs';
 import { ContextMenu, type MenuItem } from './ContextMenu';
@@ -96,10 +96,24 @@ function History({ cwd, onClose }: { cwd: string; onClose: () => void }) {
   );
 }
 
+/** History compaction on the tab itself: the background fills like a progress bar (elapsed vs the usual duration). */
+function compactFill(st: NonNullable<ChatSnapshot['compacting']>): React.CSSProperties {
+  const pct = Math.min(95, ((Date.now() - st.since) / compactEstimateMs(st.preTokens)) * 100);
+  return { ['--compact-pct' as string]: `${pct.toFixed(1)}%` };
+}
+
 export function ChatPanel() {
   const app = useStore((s) => s.app!);
   const unread = useStore((s) => s.app!.openChats.filter((id) => isUnread(id, s)));
   const chats = useStore((s) => s.chats);
+  // while some chat compacts, re-render twice a second so its tab fill moves
+  const anyCompacting = Object.values(chats).some((c) => c.compacting);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!anyCompacting) return;
+    const t = setInterval(() => tick((x) => x + 1), 500);
+    return () => clearInterval(t);
+  }, [anyCompacting]);
   const [showHistory, setShowHistory] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
@@ -154,7 +168,8 @@ export function ChatPanel() {
               data-tab-key={id}
               data-tab-label={`${c.title}${mark}${unread.includes(id) ? '  — новый ответ' : ''}`}
               data-tab-sort={app.chatMeta[id]?.completedAt ?? 0}
-              className={`tab ${id === active ? 'on' : ''} ${unread.includes(id) ? 'unread unseen' : ''}`}
+              className={`tab ${id === active ? 'on' : ''} ${unread.includes(id) ? 'unread unseen' : ''} ${c.compacting ? 'compacting' : ''}`}
+              style={c.compacting ? compactFill(c.compacting) : undefined}
               title={`${c.title}${unread.includes(id) ? '\nЕсть новый ответ — вы ещё не смотрели' : ''}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
               onClick={() => openChat(id)}
               onDoubleClick={() => setEditing(id)}
