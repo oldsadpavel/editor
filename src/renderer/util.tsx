@@ -45,7 +45,17 @@ export const plural = (n: number, one: string, few: string, many: string) => {
 
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-const PATH_RE = /^(?:[A-Za-z]:)?[\w.\-\\/@]+\.[A-Za-z0-9]{1,8}(?::\d+)?$/;
+/**
+ * A file path in `code`: any letters (Cyrillic file names too), an extension, optional :line. Spaces only in
+ * absolute paths (E:\\…, /…), so ordinary code with spaces isn't taken for a path.
+ */
+const PATH_RE = /^(?:[A-Za-z]:)?[\p{L}\p{N}_.\-\\/@()+]+\.[\p{L}\p{N}]{1,8}(?::\d+)?$/u;
+const ABS_PATH_RE = /^(?:[A-Za-z]:[\\/]|\/|~\/)[^<>"|?*\n]+\.[\p{L}\p{N}]{1,8}(?::\d+)?$/u;
+const isPath = (raw: string) => (PATH_RE.test(raw) && /[\\/.]/.test(raw)) || ABS_PATH_RE.test(raw);
+
+/** Absolute paths in plain text (E:\\dir\\file.ext, /home/…/file.ext) become links too. */
+const TEXT_PATH_RE = /(?<![\p{L}\p{N}])((?:[A-Za-z]:[\\/]|(?<=\s|^)\/)[^\s<>"'`|?*,;]*[\\/][^\s<>"'`|?*,;]*\.[\p{L}\p{N}]{1,8})(?=[\s,.;:)!?»]*(?:\s|$|<))/gu;
+const linkPaths = (html: string) => html.replace(TEXT_PATH_RE, (m) => `<span class="path-link" data-path="${m}">${m}</span>`);
 
 marked.use({
   gfm: true,
@@ -55,10 +65,15 @@ marked.use({
     html: ({ text }) => escapeHtml(text),
     codespan: ({ text }) => {
       const raw = text.replace(/&amp;/g, '&');
-      if (PATH_RE.test(raw) && /[\\/.]/.test(raw)) return `<code class="path-link" data-path="${escapeHtml(raw)}">${text}</code>`;
+      if (isPath(raw)) return `<code class="path-link" data-path="${escapeHtml(raw)}">${text}</code>`;
       return `<code>${text}</code>`;
     },
     link: ({ href, text }) => `<a href="${escapeHtml(href)}" target="_blank">${text}</a>`,
+    // like marked's own text renderer (nested tokens, escaping) plus clickable absolute paths
+    text(this: any, t: any) {
+      if (t.tokens) return this.parser.parseInline(t.tokens);
+      return linkPaths(t.escaped ? t.text : escapeHtml(t.text));
+    },
   },
 });
 
