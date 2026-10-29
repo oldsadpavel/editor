@@ -220,7 +220,10 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
   const toggleRow = (id: string) => setShown((s) => (s.has(id) ? (s.delete(id), new Set(s)) : new Set(s).add(id)));
   const errors = tools.filter((t) => t.error).length;
   const running = tools.some((t) => !t.done);
-  const names = [...new Set(tools.map((t) => t.name))].slice(0, 4).join(', ');
+  // «Bash ×9, Edit ×2»
+  const counts = new Map<string, number>();
+  for (const t of tools) counts.set(t.name.replace(/^mcp__/, ''), (counts.get(t.name.replace(/^mcp__/, '')) ?? 0) + 1);
+  const names = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([n, c]) => (c > 1 ? `${n} ×${c}` : n)).join(', ');
   return (
     <div className="tool-group">
       <div className="tool-head" onClick={() => setOpen(!open)}>
@@ -293,16 +296,31 @@ function TurnBody({
 }) {
   // Consecutive tool calls are folded into one group so the text answer stays readable.
   const blocks: ({ kind: 'text'; text: string } | { kind: 'thinking'; text: string } | { kind: 'tools'; tools: Extract<TurnItem, { kind: 'tool' }>[] })[] = [];
-  for (const it of turn.items) {
+  // Only the latest thinking is shown in the answer (all are on the 💭 tab), so earlier thinking doesn't split
+  // consecutive tool calls into separate groups.
+  const lastThinkingItem = turn.items.map((i) => i.kind).lastIndexOf('thinking');
+  // The latest thinking that falls among tool calls is shown right after their group.
+  let deferred: string | null = null;
+  const flush = () => {
+    if (deferred !== null) blocks.push({ kind: 'thinking', text: deferred });
+    deferred = null;
+  };
+  turn.items.forEach((it, idx) => {
     const last = blocks[blocks.length - 1];
-    if (it.kind === 'text') blocks.push({ kind: 'text', text: it.text });
-    else if (it.kind === 'thinking') blocks.push({ kind: 'thinking', text: it.text });
-    else if (last?.kind === 'tools') last.tools.push(it);
+    if (it.kind === 'text') {
+      flush();
+      blocks.push({ kind: 'text', text: it.text });
+    } else if (it.kind === 'thinking') {
+      if (idx !== lastThinkingItem) return;
+      if (last?.kind === 'tools') deferred = it.text;
+      else blocks.push({ kind: 'thinking', text: it.text });
+    } else if (last?.kind === 'tools') last.tools.push(it);
     else blocks.push({ kind: 'tools', tools: [it] });
-  }
+  });
+  flush();
   const edits = [...turn.edits].sort((a, b) => b.lastAt - a.lastAt);
   // In the answer only the latest thinking block is kept; all of them are on the 💭 side tab.
-  const thoughts = blocks.filter((b) => b.kind === 'thinking');
+  const thoughts = turn.items.filter((b) => b.kind === 'thinking') as { kind: 'thinking'; text: string }[];
   const lastThinking = blocks.map((b) => b.kind).lastIndexOf('thinking');
   const autoN = approvals.filter((a) => a.decision === 'auto').length;
   const denyN = approvals.filter((a) => a.decision === 'deny').length;
