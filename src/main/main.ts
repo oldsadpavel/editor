@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, app, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { BrowserWindow, Menu, clipboard, app, dialog, ipcMain, net, protocol, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -148,6 +148,7 @@ handle('shell:openPath', (p: string) => files.openPath(p));
 
 handle('attach:saveBlob', (bytes: Uint8Array, mime: string, name?: string, dir?: string) => files.saveBlob(bytes, mime, name, dir));
 handle('attach:saveDataUrl', (url: string) => files.saveDataUrl(url));
+handle('clipboard:text', () => clipboard.readText());
 handle('clipboard:files', (dir?: string) => files.clipboardFiles(dir));
 handle('clipboard:pasteInto', (dir: string) => files.pasteInto(dir));
 handle('fs:copyInto', (dir: string, paths: string[]) => files.copyInto(dir, paths));

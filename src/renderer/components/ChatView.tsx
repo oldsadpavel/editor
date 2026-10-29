@@ -775,8 +775,35 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
     ref.current?.focus();
   };
 
+  // Big text goes to a file and the question gets a link to it: the chat history (and every re-read of it) stays small.
+  const BIG_TEXT = 4000;
+  const rawPaste = useRef(false);
+  const textToFile = async (t: string) => {
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const bytes = new TextEncoder().encode(t);
+    const p = await call<string>('attach:saveBlob', bytes, 'text/plain', `text-${stamp}.txt`);
+    const lines = t.split('\n').length;
+    setText((v) => `${v}${v && !v.endsWith('\n') ? '\n' : ''}[текст в файле: ${p} — ${lines} строк, ${(bytes.length / 1024).toFixed(1)} КБ]\n`);
+    toast(`Текст сохранён в файл (${lines} строк) — в вопросе только ссылка, Claude прочитает файл сам`);
+    ref.current?.focus();
+  };
+  const pasteTextAsFile = async () => {
+    const t = await call<string>('clipboard:text').catch(() => '');
+    if (!t.trim()) return toast('В буфере обмена нет текста — скопируйте текст и нажмите ещё раз', 'error');
+    await textToFile(t);
+  };
+
   const onPaste = async (e: React.ClipboardEvent) => {
-    if (!pasteHasFiles(e)) return; // ordinary text: default paste
+    if (!pasteHasFiles(e)) {
+      // ordinary text: default paste, but a very long one goes to a file (Ctrl+Shift+V pastes as is)
+      const t = e.clipboardData.getData('text/plain');
+      if (t.length > BIG_TEXT && !rawPaste.current) {
+        e.preventDefault();
+        await textToFile(t);
+      }
+      rawPaste.current = false;
+      return;
+    }
     e.preventDefault();
     const files = e.clipboardData.files;
     try {
@@ -991,6 +1018,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           updateMention(e.target.value, e.target.selectionStart ?? e.target.value.length);
         }}
         onKeyDown={(e) => {
+          if (e.key.toLowerCase() === 'v' && e.ctrlKey && e.shiftKey) rawPaste.current = true;
           if (mention) {
             if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
               e.preventDefault();
@@ -1099,6 +1127,13 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         )}
         <button className="btn small" title="Прикрепить файл (или Ctrl+V / перетащите файл сюда)" onClick={() => pickFiles(addFiles)}>
           📎
+        </button>
+        <button
+          className="btn small"
+          title={`Вставить большой текст файлом: текст из буфера обмена сохраняется во временный файл, в вопрос попадает только ссылка — история чата не раздувается.\nДлинный текст (> ${BIG_TEXT} символов), вставленный Ctrl+V, уходит в файл сам; Ctrl+Shift+V — вставить как есть.`}
+          onClick={() => void pasteTextAsFile()}
+        >
+          📄 текст
         </button>
         {activeFile && (
           <button className="btn small" title={`Вставить путь открытого файла: ${basename(activeFile)}\n${activeFile}`} onClick={() => setText((v) => v + (v ? ' ' : '') + activeFile + ' ')}>
