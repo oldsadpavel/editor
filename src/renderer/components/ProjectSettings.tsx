@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { DeployTarget, ProdTarget, ProjectRef } from '../../shared/types';
 import { call } from '../api';
-import { get, saveApp, set, toast, useStore } from '../store';
+import { get, saveApp, set, startTestsReportSetup, toast, useStore } from '../store';
+import { formatTime } from '../util';
 
 /** Modal with per-project settings: name, production domains for Ping, ping interval, deploy site. */
 export function ProjectSettings() {
@@ -20,6 +21,17 @@ function Form({ project }: { project: ProjectRef }) {
   const [site, setSite] = useState(existingSite?.url ?? '');
   const [mode, setMode] = useState<DeployTarget['mode']>(existingSite?.mode ?? 'change');
   const [draft, setDraft] = useState('');
+  // The server's own tests after a deploy: Insider's backend report is known when signed in to its cloud.
+  const cloudServer = useStore((s) => s.cloud?.server);
+  const report = useStore((s) => s.serverTests[project.path.toLowerCase()]);
+  const suggested = (() => {
+    try {
+      return cloudServer && site && new URL(site).origin === new URL(cloudServer).origin ? `${new URL(cloudServer).origin}/api/editor/config/tests/latest` : '';
+    } catch {
+      return '';
+    }
+  })();
+  const [testsReport, setTestsReport] = useState(existingSite?.testsReport ?? '');
   const close = () => set({ projectSettings: undefined });
 
   // A bare domain is most useful as an HTTPS check (status + certificate).
@@ -44,13 +56,16 @@ function Form({ project }: { project: ProjectRef }) {
     }
     const projects = get().app!.projects.map((p) => (p.path === project.path ? { ...p, name: name.trim() || p.name, domains: list, pingMinutes: minutes } : p));
     await saveApp({ projects });
-    if (site.trim() !== (existingSite?.url ?? '') || mode !== existingSite?.mode) {
-      const t: DeployTarget = { url: site.trim(), mode, tests: existingSite?.tests ?? [] };
-      const root = await call<string>('deploys:setTarget', project.path, site.trim() ? t : null);
+    const report = testsReport.trim() || undefined;
+    if (site.trim() !== (existingSite?.url ?? '') || mode !== existingSite?.mode || report !== existingSite?.testsReport) {
+      const t: DeployTarget = { url: site.trim(), mode, tests: existingSite?.tests ?? [], ...(report ? { testsReport: report } : {}) };
+      const keep = site.trim() || report;
+      const root = await call<string>('deploys:setTarget', project.path, keep ? t : null);
       const next = { ...get().app!.deployTargets };
-      if (site.trim()) next[root.toLowerCase()] = t;
+      if (keep) next[root.toLowerCase()] = t;
       else delete next[root.toLowerCase()];
       await saveApp({ deployTargets: next });
+      if (report) void call('serverTests:refresh', root);
     }
     close();
     toast('Настройки проекта сохранены');
@@ -135,6 +150,42 @@ function Form({ project }: { project: ProjectRef }) {
               <option value="change">изменение страницы</option>
               <option value="sha">хэш коммита на странице</option>
             </select>
+          </div>
+        </div>
+
+        <div className="field">
+          <span>Тесты после деплоя (блок «Тесты»)</span>
+          <div className="muted small">
+            Отчёт тестов, которые сам деплой прогоняет на сервере: после каждого push редактор ждёт прогон нового коммита и показывает итог (JSON:
+            commit, status, tests, failures, failed[]).
+          </div>
+          <div className="domain-row">
+            <input value={testsReport} onChange={(e) => setTestsReport(e.target.value)} placeholder={suggested || 'https://site.ru/tests.json'} />
+            {suggested && testsReport !== suggested && (
+              <button className="btn small primary" title="Бэкенд Insider отдаёт итог прогона тестов при деплое (нужен вход в облако Insider, роль super-admin)" onClick={() => setTestsReport(suggested)}>
+                Отчёт Insider
+              </button>
+            )}
+            <button
+              className="btn small"
+              title="Claude разберётся, как деплой гоняет тесты, сделает отчёт в нужном формате и привяжет его"
+              onClick={() => {
+                close();
+                void startTestsReportSetup(project.path, site.trim() || undefined);
+              }}
+            >
+              🤖 Автонастроить
+            </button>
+          </div>
+          {report && (
+            <div className={`muted small ${report.status === 'failed' || report.status === 'error' ? 'bad' : ''}`}>
+              Последний прогон: {report.fetchError ? `не читается — ${report.fetchError}` : `${report.status}, ${report.tests} тестов, упало ${report.failures + report.errors}`}
+              {report.commit ? ` · коммит ${report.commit.slice(0, 8)}` : ''}
+              {report.finishedAt ? ` · ${formatTime(report.finishedAt)}` : ''}
+            </div>
+          )}
+          <div className="muted small">
+            Проверки страниц после деплоя: {existingSite?.tests?.length ?? 0} — добавляются в блоке «Тесты» (＋ Тест).
           </div>
         </div>
 

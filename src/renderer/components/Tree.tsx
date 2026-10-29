@@ -140,7 +140,7 @@ function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; 
         {root && get().app!.projects.some((p) => p.path === entry.path) && (
           <span
             className="troot-gear"
-            title="Настройки проекта: домены, пинг, сайт деплоя"
+            title="Настройки проекта: домены, пинг, сайт деплоя, тесты после деплоя"
             onClick={(e) => {
               e.stopPropagation();
               set({ projectSettings: entry.path });
@@ -269,7 +269,7 @@ export function TreePanel() {
       ...(entry.dir ? [...sortMenu(entry.path), { label: 'Обновить', action: () => refreshDir(entry.path) }] : []),
       ...(root && tab === 'projects'
         ? [
-            { label: 'Настройки проекта… (домены, пинг, деплой)', action: () => set({ projectSettings: entry.path }) },
+            { label: 'Настройки проекта… (домены, пинг, деплой, тесты)', action: () => set({ projectSettings: entry.path }) },
             { label: 'Чаты этого проекта', action: () => saveApp({ chatProject: entry.path, ui: { ...get().app!.ui, visible: { ...get().app!.ui.visible, chat: true } } }) },
             { label: 'Убрать проект из списка', danger: true, action: () => saveApp({ projects: get().app!.projects.filter((p) => p.path !== entry.path) }) },
           ]

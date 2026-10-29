@@ -167,7 +167,7 @@ export async function setupStatus(): Promise<SetupItem[]> {
       const suggested = cloudServer && new URL(target.url).origin === cloudServer ? `${cloudServer}/api/editor/config/tests/latest` : undefined;
       items.push({
         id: `srvtests:${r.root}`,
-        level: 'info',
+        level: suggested ? 'todo' : 'info',
         group,
         title: 'Тесты на сервере после деплоя не подключены',
         detail: suggested
