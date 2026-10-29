@@ -465,6 +465,8 @@ export interface AppState {
     /** Sort order of the project tree: per folder, with a default for the rest. */
     treeSort?: Record<string, TreeSort>;
     treeSortDefault?: TreeSort;
+    /** Code editor: long lines wrap to the window width instead of scrolling sideways. */
+    wordWrap?: boolean;
     /** Expanded tree folders (lower-case paths), restored on start. */
     treeOpen?: string[];
     leftWidth: number;

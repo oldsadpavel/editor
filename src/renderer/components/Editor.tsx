@@ -12,7 +12,7 @@ import { xml } from '@codemirror/lang-xml';
 import { yaml } from '@codemirror/lang-yaml';
 import { bracketMatching, foldGutter, foldKeymap, indentOnInput, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { oneDark } from '@codemirror/theme-one-dark';
 import {
   EditorView,
@@ -27,7 +27,7 @@ import {
 } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
 import { call } from '../api';
-import { closeFile, editFile, get, reloadFile, saveFile, set, useStore, type OpenFile } from '../store';
+import { closeFile, editFile, get, reloadFile, saveFile, set, setUi, useStore, type OpenFile } from '../store';
 import { basename, dirname } from '../util';
 import { fileIcon } from './icons';
 import { ImageTab } from './ImageViewer';
@@ -103,13 +103,20 @@ function reportContext(path: string, st: EditorState) {
   }, 400);
 }
 
+const toggleWrap = () => setUi({ wordWrap: !get().app!.ui.wordWrap });
+
 function CodeView({ file }: { file: OpenFile }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const wrap = useStore((s) => !!s.app?.ui.wordWrap);
+  const wrapping = useRef(new Compartment());
   const reveal = useStore((s) => (s.reveal?.path === file.path ? s.reveal : undefined));
 
   useEffect(() => {
-    const save = keymap.of([{ key: 'Mod-s', preventDefault: true, run: () => (void saveFile(file.path), true) }]);
+    const save = keymap.of([
+      { key: 'Mod-s', preventDefault: true, run: () => (void saveFile(file.path), true) },
+      { key: 'Alt-z', preventDefault: true, run: () => (toggleWrap(), true) },
+    ]);
     view.current = new EditorView({
       parent: host.current!,
       state: EditorState.create({
@@ -132,6 +139,7 @@ function CodeView({ file }: { file: OpenFile }) {
           highlightActiveLine(),
           highlightSelectionMatches(),
           save,
+          wrapping.current.of(get().app?.ui.wordWrap ? EditorView.lineWrapping : []),
           keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, ...foldKeymap, ...completionKeymap]),
           oneDark,
           theme,
@@ -148,6 +156,10 @@ function CodeView({ file }: { file: OpenFile }) {
   }, [file.path, file.version]);
 
   useEffect(() => {
+    view.current?.dispatch({ effects: wrapping.current.reconfigure(wrap ? EditorView.lineWrapping : []) });
+  }, [wrap]);
+
+  useEffect(() => {
     const v = view.current;
     if (!v || !reveal?.line) return;
     const line = v.state.doc.line(Math.min(Math.max(1, reveal.line), v.state.doc.lines));
@@ -156,6 +168,15 @@ function CodeView({ file }: { file: OpenFile }) {
   }, [reveal?.nonce]);
 
   return <div className="cm-host" ref={host} />;
+}
+
+function WrapToggle() {
+  const on = useStore((s) => !!s.app?.ui.wordWrap);
+  return (
+    <button className={`wrap-toggle ${on ? 'on' : ''}`} title={`Перенос длинных строк по ширине окна (Alt+Z) — сейчас ${on ? 'включён' : 'выключен'}`} onClick={toggleWrap}>
+      ↩ Перенос
+    </button>
+  );
 }
 
 export function EditorArea() {
@@ -209,7 +230,12 @@ export function EditorArea() {
           </button>
         </div>
       )}
-      {file && <div className="crumbs">{dirname(file.path)}</div>}
+      {file && (
+        <div className="crumbs">
+          <span className="crumbs-path">{dirname(file.path)}</span>
+          {file.kind !== 'image' && <WrapToggle />}
+        </div>
+      )}
       <div className="editor-body">
         {file ? (
           file.kind === 'image' ? (

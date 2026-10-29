@@ -771,3 +771,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 @keyframes boot-shadow { from { transform: scaleX(1); opacity: .9; } to { transform: scaleX(.6); opacity: .4; } }
 @keyframes boot-line { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes boot-dot { 0%, 20% { opacity: 0; } 40%, 100% { opacity: 1; } }
+
+.crumbs { display: flex; align-items: center; gap: 8px; }
+.crumbs-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wrap-toggle { flex: none; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 10.5px; border-radius: 4px; padding: 0 6px; height: 17px; cursor: pointer; }
+.wrap-toggle:hover { color: var(--fg); }
+.wrap-toggle.on { color: #fff; background: var(--accent-soft); border-color: var(--accent); }
