@@ -30,7 +30,17 @@ interface Auth {
 }
 
 const authFile = () => path.join(dataDir(), 'cloud-auth.bin');
-let auth: Auth | null = loadAuth();
+/**
+ * The sign-in is read on first use, not at module load: on Windows safeStorage can decrypt only once the app is
+ * ready, and reading it earlier lost the sign-in on every start of the editor (and every update restart).
+ */
+let auth: Auth | null = null;
+let authLoaded = false;
+function ensureAuth() {
+  if (authLoaded || !app.isReady()) return;
+  auth = loadAuth();
+  authLoaded = true;
+}
 let busy: string | undefined;
 let lastError: string | undefined;
 let needsChoice = false;
@@ -39,7 +49,8 @@ let remote: CloudVersion | null | undefined;
 function loadAuth(): Auth | null {
   try {
     const raw = fs.readFileSync(authFile());
-    const text = safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(raw) : raw.toString('utf8');
+    // a file written without OS encryption is plain JSON
+    const text = raw[0] === 0x7b ? raw.toString('utf8') : safeStorage.decryptString(raw);
     return JSON.parse(text);
   } catch {
     return null;
@@ -48,6 +59,7 @@ function loadAuth(): Auth | null {
 
 function saveAuth(a: Auth | null) {
   auth = a;
+  authLoaded = true;
   if (!a) return void fs.rmSync(authFile(), { force: true });
   const text = JSON.stringify(a);
   fs.writeFileSync(authFile(), safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(text) : Buffer.from(text));
@@ -57,6 +69,7 @@ const cfg = () => (stateFile.data.cloud ??= { server: INSIDER, auto: true });
 const base = (server: string) => server.replace(/\/+$/, '');
 
 export function status(): CloudStatus {
+  ensureAuth();
   const c = cfg();
   return {
     server: c.server,
@@ -233,22 +246,38 @@ export function logout() {
 
 // --- API ----------------------------------------------------------------------------------------
 
-async function refresh() {
+/**
+ * One refresh at a time: refresh tokens rotate, so two parallel refreshes (settings sync + test report) made the
+ * second one fail with the already used token — and that used to sign the user out.
+ */
+let refreshing: Promise<void> | null = null;
+function refresh(): Promise<void> {
+  return (refreshing ??= doRefresh().finally(() => (refreshing = null)));
+}
+
+async function doRefresh() {
+  ensureAuth();
   if (!auth?.refresh) throw new Error('Сессия облака истекла — войдите снова');
-  const tok = await json(
-    await fetch(auth.tokenEndpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: auth.refresh, client_id: auth.clientId }),
-    }),
-  ).catch((e) => {
-    saveAuth(null);
-    throw new Error(`Сессия облака истекла — войдите снова (${e.message})`);
+  const res = await fetch(auth.tokenEndpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: auth.refresh, client_id: auth.clientId }),
+  }).catch((e: Error) => {
+    throw new Error(`Облако настроек недоступно: ${e.message}`); // network: keep the sign-in, try again later
+  });
+  const tok = await json(res).catch((e: Error) => {
+    // Only the server rejecting the token ends the session; 5xx or a broken answer is retried next time.
+    if (res.status === 400 || res.status === 401) {
+      saveAuth(null);
+      throw new Error(`Сессия облака истекла — войдите снова (${e.message})`);
+    }
+    throw e;
   });
   saveAuth({ ...auth, access: tok.access_token, refresh: tok.refresh_token ?? auth.refresh, expiresAt: tok.expires_in ? Date.now() + tok.expires_in * 1000 : undefined });
 }
 
 async function api(route: string, init: RequestInit = {}, retry = true): Promise<any> {
+  ensureAuth();
   if (!auth) throw new Error('Не выполнен вход в облако настроек');
   if (auth.expiresAt && auth.expiresAt < Date.now() + 60_000) await refresh();
   const res = await fetch(`${base(auth.server)}/api/editor/config${route}`, {
@@ -344,6 +373,7 @@ export function setOptions(o: { server?: string; auto?: boolean }) {
 
 /** Uploads on its own a little while after settings stop changing. */
 export function startAutoSync() {
+  ensureAuth();
   let seen = '';
   let changedAt = 0;
   setInterval(() => {
@@ -365,6 +395,7 @@ export function startAutoSync() {
  * null for other origins or when not signed in.
  */
 export async function authorizedFetch(url: string, retry = true): Promise<Response | null> {
+  ensureAuth();
   if (!auth) return null;
   let origin: string;
   try {
