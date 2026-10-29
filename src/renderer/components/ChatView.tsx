@@ -850,6 +850,33 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
     return () => window.removeEventListener('chat-insert', onInsert);
   }, []);
 
+  // Typing anywhere that isn't a text field (code editor, inputs, open dialogs) goes straight into the question box;
+  // Tab there takes Claude Code's suggested next question, like in the terminal.
+  const suggestionRef = useRef(chat.suggestion);
+  suggestionRef.current = chat.suggestion;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest('.cm-editor'))) return;
+      if (document.querySelector('.modal-bg, .ctx-menu')) return;
+      const box = ref.current;
+      if (!box) return;
+      if (e.key === 'Tab' && !e.shiftKey && suggestionRef.current && !box.value) {
+        e.preventDefault();
+        box.focus();
+        setText(suggestionRef.current);
+        return;
+      }
+      if (e.key.length !== 1) return;
+      // focusing during keydown lets the browser type this very key into the box
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+
   useLayoutEffect(() => {
     const el = ref.current!;
     el.style.height = 'auto';
