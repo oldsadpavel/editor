@@ -109,6 +109,27 @@ function aggregate(turns: Turn[]) {
   return [...map.values()].sort((a, b) => b.lastAt - a.lastAt);
 }
 
+/**
+ * Commands Claude asked the user to run themselves in an answer: `! cmd` in inline code or as lines of a code
+ * block (Claude Code's bash mode). Returned as "!cmd", newest last answer only, without duplicates.
+ */
+function userCommands(turn: Turn): string[] {
+  const out: string[] = [];
+  const add = (raw: string) => {
+    const cmd = raw.trim().replace(/^!\s*/, '');
+    if (cmd && cmd.length < 2000 && !out.includes('!' + cmd)) out.push('!' + cmd);
+  };
+  for (const it of turn.items) {
+    if (it.kind !== 'text') continue;
+    // in the order they appear: lines of code blocks that start with !, and inline `! cmd`
+    for (const m of it.text.matchAll(/```[^\n]*\n([\s\S]*?)```|`(!\s*[^`\n]+)`/g)) {
+      if (m[2]) add(m[2]);
+      else for (const line of m[1].split('\n')) if (/^\s*!\s*\S/.test(line)) add(line);
+    }
+  }
+  return out;
+}
+
 /** Opens a separate window with what these answers changed in the file. */
 function openDiff(sessionId: string, turnIds: string[], file: string) {
   call('chat:diff', sessionId, turnIds, file).catch((e) => toast(e.message, 'error'));
@@ -852,8 +873,23 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
 
   // Typing anywhere that isn't a text field (code editor, inputs, open dialogs) goes straight into the question box;
   // Tab there takes Claude Code's suggested next question, like in the terminal.
-  const suggestionRef = useRef(chat.suggestion);
-  suggestionRef.current = chat.suggestion;
+  // What Tab offers: commands Claude asked to run by hand (`! …`, e.g. when it isn't allowed to run them itself)
+  // in its last answer, then Claude Code's suggested next question. Repeated Tab walks through them.
+  const tabOffers = useMemo(() => {
+    const last = chat.turns[chat.turns.length - 1];
+    const cmds = last && !last.live ? userCommands(last) : [];
+    return [...cmds, ...(chat.suggestion ? [chat.suggestion] : [])];
+  }, [chat.turns, chat.suggestion]);
+  const suggestionRef = useRef(tabOffers);
+  suggestionRef.current = tabOffers;
+  /** Next Tab offer after what the field holds now (the first one when it's empty). */
+  const nextOffer = (current: string) => {
+    const list = suggestionRef.current;
+    if (!list.length) return null;
+    const i = list.indexOf(current);
+    if (current && i < 0) return null; // the user typed something of their own: Tab doesn't replace it
+    return list[(i + 1) % list.length];
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
@@ -862,10 +898,12 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
       if (document.querySelector('.modal-bg, .ctx-menu')) return;
       const box = ref.current;
       if (!box) return;
-      if (e.key === 'Tab' && !e.shiftKey && suggestionRef.current && !box.value) {
+      if (e.key === 'Tab' && !e.shiftKey && !box.value) {
+        const offer = nextOffer('');
+        if (!offer) return;
         e.preventDefault();
         box.focus();
-        setText(suggestionRef.current);
+        setText(offer);
         return;
       }
       if (e.key.length !== 1) return;
@@ -1053,8 +1091,8 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
             ? `«${chat.title}» · удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне`
             : busy
             ? `«${chat.title}» · Claude работает… можно дописать — сообщение уйдёт в очередь`
-            : chat.suggestion
-            ? `↹ Tab: ${chat.suggestion}`
+            : tabOffers.length
+            ? `↹ Tab: ${tabOffers[0]}${tabOffers.length > 1 ? `   (ещё ${tabOffers.length - 1} — Tab ещё раз)` : ''}`
             : `Вопрос в «${chat.title}» (${basename(chat.cwd)})… Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы`
         }
         onPaste={onPaste}
@@ -1081,10 +1119,13 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
               return;
             }
           }
-          if (e.key === 'Tab' && !text && chat.suggestion && !menu.length) {
-            e.preventDefault();
-            setText(chat.suggestion);
-            return;
+          if (e.key === 'Tab' && !e.shiftKey && !menu.length && !mention) {
+            const offer = nextOffer(text);
+            if (offer) {
+              e.preventDefault();
+              setText(offer);
+              return;
+            }
           }
           if (!menu.length && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && history.length && (!text || histPos.current >= 0) && !e.shiftKey) {
             const next = histPos.current + (e.key === 'ArrowUp' ? 1 : -1);
