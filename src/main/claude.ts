@@ -952,6 +952,8 @@ function watchTranscript(s: ChatSession) {
       const { builder } = await loadTranscript(file);
       const changed = shape(builder) !== shape(s.builder);
       s.builder = builder;
+      // context size follows the transcript (compactions, the latest request) in /RC and other external runs
+      if (builder.lastContext) s.contextTokens = builder.lastContext;
       if (s.compacting && builder.turns.some((t) => t.compacts?.some((m) => m.at >= s.compacting!.since - 5000))) s.compacting = undefined;
       // Questions typed here that Claude hasn't written yet stay on screen (grey while queued behind an answer).
       const recent = builder.turns.slice(-4).flatMap((t) => [t.prompt, ...(t.more?.map((m) => m.prompt) ?? [])]).map((p) => p.trim());

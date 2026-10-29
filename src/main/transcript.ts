@@ -279,6 +279,8 @@ export class TurnBuilder {
   addCompact(mark: CompactMark) {
     const turn = this.turns[this.turns.length - 1];
     if (turn) (turn.compacts ??= []).push(mark);
+    // the history is now this small (until the next request reports its real size)
+    if (mark.postTokens) this.lastContext = mark.postTokens;
   }
 
   private ingestUser(entry: any, at: number) {
