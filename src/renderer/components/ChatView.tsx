@@ -270,7 +270,7 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
   );
 }
 
-type BodyTab = 'answer' | 'files' | 'approvals';
+type BodyTab = 'answer' | 'thinking' | 'files' | 'approvals';
 
 function TurnBody({
   turn,
@@ -301,6 +301,9 @@ function TurnBody({
     else blocks.push({ kind: 'tools', tools: [it] });
   }
   const edits = [...turn.edits].sort((a, b) => b.lastAt - a.lastAt);
+  // In the answer only the latest thinking block is kept; all of them are on the 💭 side tab.
+  const thoughts = blocks.filter((b) => b.kind === 'thinking');
+  const lastThinking = blocks.map((b) => b.kind).lastIndexOf('thinking');
   const autoN = approvals.filter((a) => a.decision === 'auto').length;
   const denyN = approvals.filter((a) => a.decision === 'deny').length;
   return (
@@ -337,7 +340,7 @@ function TurnBody({
           {turn.shell && <ShellCard run={turn.shell} />}
           {turn.todos?.length ? <TodoCard todos={turn.todos} /> : null}
           {blocks.map((b, i) =>
-            b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : b.kind === 'thinking' ? <ThinkingBlock key={i} text={b.text} live={!!turn.live && i === blocks.length - 1 && !partial && !partialThinking} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />,
+            b.kind === 'thinking' && i !== lastThinking ? null : b.kind === 'text' ? <Markdown key={i} text={b.text} cwd={cwd} /> : b.kind === 'thinking' ? <ThinkingBlock key={i} text={b.text} live={!!turn.live && i === blocks.length - 1 && !partial && !partialThinking} /> : <ToolGroup key={i} tools={b.tools} cwd={cwd} />,
           )}
           {turn.compacts?.length ? <CompactMarks marks={turn.compacts} /> : null}
           {turn.fallbacks?.map((f, i) => (
@@ -365,6 +368,23 @@ function TurnBody({
             </div>
           )}
         </>
+      )}
+      {tab === 'thinking' && (
+        <div className="turn-thoughts">
+          {thoughts.map((b, i) => (
+            <div key={i} className="thought">
+              <div className="thought-n">💭 {i + 1} из {thoughts.length}</div>
+              <div className="thought-text">{b.text}</div>
+            </div>
+          ))}
+          {partialThinking?.replace(/\u200b/g, '').trim() ? (
+            <div className="thought live">
+              <div className="thought-n">💭 сейчас</div>
+              <div className="thought-text">{partialThinking}</div>
+            </div>
+          ) : null}
+          {!thoughts.length && !partialThinking && <div className="muted small">В этом ответе размышлений нет (или модель их не показывает).</div>}
+        </div>
       )}
       {tab === 'files' && (
         <div className="turn-files">
@@ -406,6 +426,10 @@ function TurnBody({
       <div className="turn-side">
         <span className={`side-tab ${tab === 'answer' ? 'on' : ''}`} onClick={() => setTab('answer')} title="Ответ">
           <span className="side-ico">💬</span>
+        </span>
+        <span className={`side-tab ${tab === 'thinking' ? 'on' : ''} ${!thoughts.length ? 'empty' : ''}`} onClick={() => setTab('thinking')} title={`Все размышления модели в этом ответе: ${thoughts.length}`}>
+          <span className="side-ico">💭</span>
+          {thoughts.length > 1 && <span className="count">{thoughts.length}</span>}
         </span>
         <span className={`side-tab ${tab === 'files' ? 'on' : ''} ${!edits.length ? 'empty' : ''}`} onClick={() => setTab('files')} title={`Файлы, изменённые в этом ответе: ${edits.length}`}>
           <span className="side-ico">✎</span>{edits.length > 0 && <span className="count">{edits.length}</span>}
