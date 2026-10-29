@@ -110,6 +110,9 @@ if (!stateFile.data.repairs?.includes('empty-domains')) {
   stateFile.save();
 }
 
+/** A JSON file in the data folder with defaults (`.data`, `.save()`). */
+export const JsonStore = <T>(name: string, fallback: T) => JsonFile.load<T>(name, fallback, (l) => l ?? fallback);
+
 export const deploysFile = JsonFile.load<DeployEvent[]>('deploys.json', [], (l) => (Array.isArray(l) ? l : []));
 export const problemsFile = JsonFile.load<Problem[]>('problems.json', [], (l) => (Array.isArray(l) ? l : []));
 

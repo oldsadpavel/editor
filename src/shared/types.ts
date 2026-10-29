@@ -281,6 +281,31 @@ export interface DeployTarget {
   mode: 'sha' | 'change';
   /** Smoke tests that run after the deploy is live. */
   tests: SmokeTest[];
+  /** URL of the server's own test report (its suite, run by the deploy); polled after every deploy. */
+  testsReport?: string;
+}
+
+/** Latest test run reported by the server (see server-tests.ts for the JSON protocol). */
+export interface ServerTestReport {
+  repo: string;
+  url: string;
+  commit?: string;
+  status: 'running' | 'passed' | 'failed' | 'error';
+  startedAt?: number;
+  finishedAt?: number;
+  durationMs?: number;
+  tests: number;
+  failures: number;
+  errors: number;
+  skipped: number;
+  summary?: string;
+  failed: { name: string; kind?: string; message?: string }[];
+  detailsUrl?: string;
+  fetchedAt?: number;
+  /** The deploy (commit) this report is awaited for. */
+  forSha?: string;
+  /** The report couldn't be fetched (shown instead of the last known run). */
+  fetchError?: string;
 }
 
 export interface SmokeTest {
@@ -481,7 +506,8 @@ export type MainEvent =
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'sessionsChanged'; cwd: string }
-  | { type: 'cloud'; status: CloudStatus };
+  | { type: 'cloud'; status: CloudStatus }
+  | { type: 'serverTests'; reports: Record<string, ServerTestReport> };
 
 /** One saved copy of the settings in the cloud. */
 export interface CloudVersion {
@@ -542,6 +568,7 @@ export interface CacheReport {
 export type SetupAction =
   | { kind: 'login' }
   | { kind: 'installClaude' }
+  | { kind: 'testsReport'; repo: string; suggested?: string; project: string; site?: string }
   | { kind: 'cloneProject'; name: string; remote: string; root: string; branch?: string }
   | { kind: 'addProject' }
   | { kind: 'githubAccess'; repo: string; github: string }

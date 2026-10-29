@@ -159,6 +159,24 @@ export async function setupStatus(): Promise<SetupItem[]> {
         dismissable: true,
       });
     else if (target?.tests?.length) items.push({ id: `tests:${r.root}`, level: 'ok', group, title: `Тестов после деплоя: ${target.tests.length}` });
+
+    // The server's own test suite run by the deploy: its report shows up in «Тесты» after every deploy.
+    if (target?.url && !target.testsReport) {
+      // Insider's backend serves the report next to the cloud settings API (sign-in of the cloud storage).
+      const cloudServer = st.cloud?.server ? new URL(st.cloud.server).origin : null;
+      const suggested = cloudServer && new URL(target.url).origin === cloudServer ? `${cloudServer}/api/editor/config/tests/latest` : undefined;
+      items.push({
+        id: `srvtests:${r.root}`,
+        level: 'info',
+        group,
+        title: 'Тесты на сервере после деплоя не подключены',
+        detail: suggested
+          ? 'Бэкенд отдаёт итог прогона тестов при деплое — подключите, и результат будет приходить сюда сам.'
+          : 'Если деплой сам прогоняет тесты — Claude может настроить отчёт о них, и после каждого деплоя результат будет здесь.',
+        action: { kind: 'testsReport', repo: r.root, suggested, project: project?.path ?? r.root, site },
+        dismissable: true,
+      });
+    } else if (target?.testsReport) items.push({ id: `srvtests:${r.root}`, level: 'ok', group, title: 'Тесты на сервере подключены', detail: target.testsReport });
   }
 
   const keys = lastScan();

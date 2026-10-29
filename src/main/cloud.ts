@@ -359,3 +359,25 @@ export function startAutoSync() {
   // Signed in earlier: check whether this machine still has to choose (e.g. the first sign-in was cancelled).
   if (auth && !cfg().choiceMade) void afterSignIn().catch(() => {}).finally(publish);
 }
+
+/**
+ * fetch() with the cloud sign-in when the URL is on the signed-in storage's origin (e.g. Insider's test report);
+ * null for other origins or when not signed in.
+ */
+export async function authorizedFetch(url: string, retry = true): Promise<Response | null> {
+  if (!auth) return null;
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    return null;
+  }
+  if (origin !== new URL(auth.server).origin) return null;
+  if (auth.expiresAt && auth.expiresAt < Date.now() + 60_000) await refresh();
+  const res = await fetch(url, { headers: { Accept: 'application/json', Authorization: `Bearer ${auth.access}` } });
+  if (res.status === 401 && retry && auth.refresh) {
+    await refresh();
+    return authorizedFetch(url, false);
+  }
+  return res;
+}

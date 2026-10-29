@@ -747,3 +747,13 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .turn-thoughts .thought.live { border-left-color: var(--claude); }
 .turn-thoughts .thought-n { font-size: 11.5px; color: #b6a8f0; margin-bottom: 2px; }
 .turn-thoughts .thought-text { white-space: pre-wrap; font-size: 12.5px; color: var(--fg2); font-style: italic; }
+
+/* ---------- server-side tests after deploy ---------- */
+.server-tests { margin: 4px 0 8px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
+.server-tests.pass { border-color: rgba(95, 184, 101, 0.5); }
+.server-tests.fail { border-color: var(--err); background: var(--err-soft); }
+.server-tests .st-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; cursor: pointer; font-size: 12.5px; }
+.server-tests.pass .st-head b { color: var(--ok); }
+.server-tests.fail .st-head b { color: var(--err); }
+.server-tests .st-failed { font-size: 12px; padding: 2px 0 2px 14px; }
+.tests-report-setup { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }

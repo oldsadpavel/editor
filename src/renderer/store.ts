@@ -1,6 +1,7 @@
 import { useRef, useSyncExternalStore } from 'react';
 import type {
   CloudStatus,
+  ServerTestReport,
   AppState,
   AuthStatus,
   CacheReport,
@@ -81,6 +82,8 @@ export interface Store {
   /** Cloud settings storage status; showCloud opens its window. */
   cloud?: CloudStatus;
   showCloud?: boolean;
+  /** The servers' own test runs after deploys, by repo. */
+  serverTests: Record<string, ServerTestReport>;
   /** Chat whose MCP servers are shown (/mcp). */
   mcpFor?: string;
   /** Selected tree node (target folder for Ctrl+V). */
@@ -107,6 +110,7 @@ let state: Store = {
   setup: [],
   ping: [],
   usage: null,
+  serverTests: {},
   drafts: {},
 };
 
@@ -443,6 +447,32 @@ function autoDeployPrompt(site: string) {
   ].join('\n');
 }
 
+/** The task Claude gets for publishing the server's test results after a deploy. */
+function testsReportPrompt(site?: string) {
+  return [
+    'Настрой отчёт о тестах, которые сервер прогоняет при деплое этого проекта, чтобы редактор показывал результат сразу после деплоя.',
+    '',
+    '1. Разберись, где и как деплой запускает тесты (deploy-скрипт, CI, Coolify, Docker…). Если тестов при деплое нет — скажи и предложи, стоит ли добавить.',
+    '2. Сделай, чтобы итог последнего прогона отдавался по URL в виде JSON:',
+    '   {"commit":"<sha>","status":"running|passed|failed|error","startedAt":"<ISO>","finishedAt":"<ISO>","durationMs":0,',
+    '    "tests":0,"failures":0,"errors":0,"skipped":0,"failed":[{"name":"Class::test","message":"…"}]}',
+    `   Например файлом ${site ? site.replace(/\/+$/, '') + '/' : ''}tests.json, который пишет деплой после прогона (через tmp + mv). Сообщения упавших тестов могут содержать данные —`,
+    '   если сайт публичный, отдавай только имена тестов без сообщений или закрой адрес авторизацией.',
+    '3. Привяжи: mcp__editor__set_tests_report(url=<адрес>).',
+    '4. Закоммить и запушь, дождись деплоя и проверь, что отчёт показывает прогон нового коммита. Коротко сообщи результат.',
+  ].join('\n');
+}
+
+export async function startTestsReportSetup(project: string, site?: string) {
+  if (!state.app!.ui.visible.chat) togglePanel('chat', true);
+  await saveApp({ chatProject: project });
+  const id = await newChat(project);
+  if (!id) return;
+  await renameChat(id, 'Автонастройка тестов после деплоя');
+  await sendPrompt(id, testsReportPrompt(site), {});
+  toast('Claude настраивает отчёт тестов — смотрите новый чат');
+}
+
 /** Opens a new chat in the project and hands Claude the deploy-check setup task. */
 export async function startAutoDeploySetup(project: string, site: string) {
   if (!state.app!.ui.visible.chat) togglePanel('chat', true);
@@ -614,6 +644,9 @@ function onEvent(e: MainEvent) {
     case 'usage':
       set({ usage: e.usage });
       return;
+    case 'serverTests':
+      set({ serverTests: e.reports });
+      return;
     case 'cloud':
       set({ cloud: e.status, ...(e.status.needsChoice ? { showCloud: true } : {}) });
       return;
@@ -655,7 +688,7 @@ export async function init() {
     call<KeyScanResult | null>('keys:last'),
     call<CacheReport | null>('cache:last'),
   ]);
-  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list'), usage: await call<UsageInfo | null>('usage:get'), cloud: await call<CloudStatus>('cloud:status') });
+  set({ problems, deploys, tests, keys, cache, ping: await call<PingResult[]>('ping:list'), usage: await call<UsageInfo | null>('usage:get'), cloud: await call<CloudStatus>('cloud:status'), serverTests: await call<Record<string, ServerTestReport>>('serverTests:list') });
   if (state.cloud?.needsChoice) set({ showCloud: true });
   for (const id of app.openChats) {
     const snap = await call<ChatSnapshot>('chat:open', id).catch(() => null);

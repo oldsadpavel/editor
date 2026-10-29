@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { DeployEvent, DeployTarget, SmokeTest, TestResult } from '../shared/types';
 import { emit } from './bus';
 import * as problems from './problems';
+import * as serverTests from './server-tests';
 import { deploysFile, stateFile, testsFile } from './store';
 
 const POLL_REFS_MS = 8_000;
@@ -257,6 +258,7 @@ async function trackDeploy(ev: DeployEvent, r: RepoState) {
     if (ev.state === 'live') {
       problems.resolve(`deploy|${ev.id}`);
       if (target?.tests?.length) await runTests(r.root, ev.id);
+      if (target?.testsReport) void serverTests.awaitRunFor(r.root, ev.sha);
       return;
     }
     await new Promise((res) => setTimeout(res, POLL_DEPLOY_MS));

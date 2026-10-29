@@ -6,6 +6,7 @@ import * as deploy from './deploy';
 import * as keys from './keys';
 import * as ping from './ping';
 import * as problems from './problems';
+import * as serverTests from './server-tests';
 import { stateFile } from './store';
 
 /** What the user has in front of them in the editor; the renderer reports it (cursor/selection debounced). */
@@ -39,6 +40,8 @@ export const EDITOR_INSTRUCTIONS = `
 - **Пинг** — продакшен-домены и серверы проекта проверяются по расписанию. Узнал новый прод-адрес — добавь
   \`mcp__editor__add_prod_domain\`.
 - **Открыть файл** у пользователя в редакторе — \`mcp__editor__open_file\`.
+- **Тесты на сервере после деплоя** — если деплой проекта сам прогоняет тесты, привяжи их отчёт: \`mcp__editor__set_tests_report\`
+  (URL с JSON {commit, status, tests, failures, errors, skipped, failed:[{name, message}]}). Редактор опрашивает его после каждого деплоя.
 - **Что у пользователя в редакторе** (открытый файл, строка курсора, выделенный текст, открытые вкладки) — \`mcp__editor__get_editor_context\`.
   Когда пользователь пишет «этот файл», «здесь», «выделенное», «эта функция» — сначала посмотри туда.
 
@@ -164,6 +167,21 @@ export function editorMcp(sessionId: string, cwd: string) {
           const res = await ping.pingNow(p.path);
           const r = res.find((x) => x.target === a.target);
           return ok(`Добавлено в «Пинг» проекта ${p.name}. Сейчас: ${r?.ok ? 'OK' : 'НЕ ОТВЕЧАЕТ'} ${r?.ms ?? ''} мс ${r?.detail ?? ''}`);
+        },
+      ),
+      tool(
+        'set_tests_report',
+        'Привязать к проекту отчёт тестов, которые сервер прогоняет при деплое: URL, отдающий JSON {commit, status: running|passed|failed|error, startedAt, finishedAt, durationMs, tests, failures, errors, skipped, failed:[{name, message}], detailsUrl}. После каждого деплоя редактор опрашивает его и показывает результат в «Тестах».',
+        { url: z.string().url(), repo: z.string().optional() },
+        async (a) => {
+          const repo = (a.repo ?? cwd).toLowerCase();
+          const root = Object.keys(stateFile.data.deployTargets).find((k) => repo.startsWith(k)) ?? repo;
+          const t = stateFile.data.deployTargets[root] ?? { url: '', mode: 'change' as const, tests: [] };
+          stateFile.data.deployTargets[root] = { ...t, testsReport: a.url };
+          stateFile.save();
+          emit({ type: 'appState', state: stateFile.data });
+          const r = await serverTests.refresh(root);
+          return ok(r?.fetchError ? `Привязано, но отчёт пока не читается: ${r.fetchError}` : `Привязано. Сейчас: ${r?.status} — ${r?.tests} тестов, упало ${(r?.failures ?? 0) + (r?.errors ?? 0)}, коммит ${r?.commit ?? '?'}`);
         },
       ),
       tool(

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DeployTarget, SetupAction, SetupItem } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, get, refreshSetup, saveApp, set, startAutoDeploySetup, toast, togglePanel, useStore } from '../store';
+import { addProjects, get, refreshSetup, saveApp, set, startAutoDeploySetup, startTestsReportSetup, toast, togglePanel, useStore } from '../store';
 import { MODES } from './ChatView';
 import { PanelFrame } from './Panels';
 
@@ -23,6 +23,33 @@ export async function installClaude() {
   void refreshSetup();
   if (st.notInstalled) toast(st.error ?? 'Установка не удалась', 'error');
   else toast('Claude Code установлен — теперь войдите в аккаунт');
+}
+
+/** Connect the server's test report: a known URL (Insider) right away, otherwise Claude sets it up. */
+function TestsReportSetup({ a }: { a: Extract<SetupAction, { kind: 'testsReport' }> }) {
+  const [url, setUrl] = useState(a.suggested ?? '');
+  return (
+    <span className="tests-report-setup">
+      <input placeholder="https://…/tests.json" value={url} onChange={(e) => setUrl(e.target.value)} style={{ width: 300 }} />
+      <button
+        className="btn primary small"
+        disabled={!/^https?:\/\//.test(url)}
+        onClick={async () => {
+          await saveTarget(a.repo, { testsReport: url.trim() });
+          const r = await call<any>('serverTests:refresh', a.repo).catch((e) => ({ fetchError: e.message }));
+          toast(r?.fetchError ? `Подключено, но отчёт пока не читается: ${r.fetchError}` : `Подключено: ${r?.status}, ${r?.tests} тестов`, r?.fetchError ? 'error' : undefined);
+          void refreshSetup();
+        }}
+      >
+        Подключить
+      </button>
+      {!a.suggested && (
+        <button className="btn small" title="Claude разберётся, как деплой гоняет тесты, и сделает отчёт в нужном формате" onClick={() => void startTestsReportSetup(a.project, a.site)}>
+          🤖 Автонастроить
+        </button>
+      )}
+    </span>
+  );
 }
 
 /** Clones a project that the restored settings know but this machine doesn't have. */
@@ -69,6 +96,8 @@ function ActionControl({ a }: { a: SetupAction }) {
       return <InstallClaudeButton />;
     case 'cloneProject':
       return <CloneButton a={a} />;
+    case 'testsReport':
+      return <TestsReportSetup a={a} />;
     case 'login':
       return (
         <button className="btn primary small" onClick={async () => set({ auth: await call('auth:login') })}>

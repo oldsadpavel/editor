@@ -453,9 +453,63 @@ function NewTest({ repo, onDone }: { repo: string; onDone: () => void }) {
   );
 }
 
+/** The server's own test suite, run by the deploy: latest run, failed tests. */
+function ServerTests({ repo, r }: { repo: string; r?: import('../../shared/types').ServerTestReport }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const bad = r && (r.status === 'failed' || r.status === 'error');
+  const label = !r
+    ? 'ещё не загружен'
+    : r.status === 'running'
+      ? '⏳ идёт прогон…'
+      : r.status === 'passed'
+        ? `✓ прошли: ${r.tests}${r.skipped ? `, пропущено ${r.skipped}` : ''}`
+        : r.status === 'failed'
+          ? `✕ упало ${r.failures + r.errors} из ${r.tests}`
+          : '✕ прогон не удался';
+  return (
+    <div className={`server-tests ${bad ? 'fail' : r?.status === 'passed' ? 'pass' : ''}`}>
+      <div className="st-head" onClick={() => r?.failed.length && setOpen(!open)}>
+        <span>🖥 Тесты на сервере</span>
+        <b>{label}</b>
+        {r?.commit && <span className="muted">коммит {r.commit.slice(0, 8)}</span>}
+        {r?.finishedAt && <span className="muted">{formatTime(r.finishedAt)}{r.durationMs ? ` · ${Math.round(r.durationMs / 1000)} с` : ''}</span>}
+        {r?.forSha && r.commit && !(r.commit.startsWith(r.forSha.slice(0, 7)) || r.forSha.startsWith(r.commit)) && <span className="muted">· ждём прогон {r.forSha.slice(0, 7)}</span>}
+        {r?.fetchError && <span className="bad" title={r.fetchError}>не читается: {r.fetchError.slice(0, 80)}</span>}
+        <div className="grow" />
+        {r?.detailsUrl && (
+          <a className="small" href={r.detailsUrl} target="_blank" onClick={(e) => e.stopPropagation()}>
+            подробно ↗
+          </a>
+        )}
+        <button
+          className="btn small"
+          disabled={busy}
+          onClick={async (e) => {
+            e.stopPropagation();
+            setBusy(true);
+            await call('serverTests:refresh', repo).catch(() => {});
+            setBusy(false);
+          }}
+        >
+          ⟳
+        </button>
+      </div>
+      {open &&
+        r?.failed.map((f, i) => (
+          <div key={i} className="st-failed" title={f.message}>
+            ✕ <b>{f.name}</b>
+            {f.message && <span className="muted"> — {f.message.slice(0, 200)}</span>}
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export function TestsPanel() {
   const targets = useStore((s) => s.app!.deployTargets);
   const results = useStore((s) => s.tests);
+  const serverTests = useStore((s) => s.serverTests);
   const projects = useStore((s) => s.app!.projects);
   const [adding, setAdding] = useState<string | null>(null);
   const [running, setRunning] = useState<string | null>(null);
@@ -473,8 +527,10 @@ export function TestsPanel() {
       {repos.map((repo) => {
         const tests = targets[repo]?.tests ?? [];
         const name = projects.find((p) => p.path.toLowerCase() === repo)?.name ?? basename(repo);
+        const srv = serverTests[repo];
         return (
           <div key={repo} className="test-repo">
+            {targets[repo]?.testsReport && <ServerTests repo={repo} r={srv} />}
             <div className="trepo-head">
               <b>{name}</b>
               <span className="muted">{tests.length} тестов</span>
