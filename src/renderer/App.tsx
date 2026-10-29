@@ -11,6 +11,7 @@ import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { StatusModal } from './components/StatusModal';
+import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { InstallClaudeButton } from './components/SetupPanel';
@@ -238,7 +239,7 @@ export function App() {
     document.title = unreadCount ? `(${unreadCount}) Claude Editor` : 'Claude Editor';
   }, [unreadCount]);
 
-  if (!ready || !app) return <div className="boot">Загрузка…</div>;
+  if (!ready || !app) return <Boot />;
   return (
     <div className="app">
       <div className="topbar">

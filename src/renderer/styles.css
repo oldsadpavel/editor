@@ -42,7 +42,6 @@ a:hover { text-decoration: underline; }
 ::-webkit-scrollbar-thumb { background: #45484d; border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-.boot { display: grid; place-items: center; height: 100%; color: var(--muted); }
 .app { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 
 /* ---------- top bar ---------- */
@@ -757,3 +756,18 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .server-tests.fail .st-head b { color: var(--err); }
 .server-tests .st-failed { font-size: 12px; padding: 2px 0 2px 14px; }
 .tests-report-setup { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- startup screen ---------- */
+.boot { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; background: var(--bg, #1e1f22); color: var(--fg2, #9da0a8); font: 14px system-ui, sans-serif; user-select: none; }
+.boot-star { font-size: 72px; line-height: 1; color: #d97757; animation: boot-spin 2.4s cubic-bezier(.6,.05,.4,.95) infinite, boot-bounce .8s ease-in-out infinite alternate; text-shadow: 0 0 24px rgba(217,119,87,.45); }
+.boot-shadow { width: 46px; height: 8px; margin-top: 10px; border-radius: 50%; background: rgba(0,0,0,.45); animation: boot-shadow .8s ease-in-out infinite alternate; }
+.boot-line { margin-top: 26px; min-height: 20px; font-size: 14.5px; color: #dfe1e5; animation: boot-line .35s ease-out; }
+.boot-dots span { animation: boot-dot 1.2s infinite; opacity: 0; }
+.boot-dots span:nth-child(2) { animation-delay: .2s; }
+.boot-dots span:nth-child(3) { animation-delay: .4s; }
+.boot-name { margin-top: 14px; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #6f737a; }
+@keyframes boot-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes boot-bounce { from { translate: 0 0; } to { translate: 0 -18px; } }
+@keyframes boot-shadow { from { transform: scaleX(1); opacity: .9; } to { transform: scaleX(.6); opacity: .4; } }
+@keyframes boot-line { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes boot-dot { 0%, 20% { opacity: 0; } 40%, 100% { opacity: 1; } }
