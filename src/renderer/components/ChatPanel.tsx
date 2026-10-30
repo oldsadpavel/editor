@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatSnapshot, SessionInfo } from '../../shared/types';
 import { call } from '../api';
-import { closeChat, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
+import { MAX_CHAT_PANES, closeChat, closePane, focusPane, newChatBeside, openChatBeside, setUi, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { ChatView, compactEstimateMs } from './ChatView';
 import { BlockHandle } from './Layout';
@@ -119,6 +119,9 @@ export function ChatPanel() {
   const [tabMenu, setTabMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const cwd = app.chatProject ?? app.projects[0]?.path;
   const active = app.activeChat && chats[app.activeChat] ? app.activeChat : undefined;
+  // several chats side by side (2+ panes); otherwise the one active chat
+  const panes = (app.chatPanes ?? []).filter((id) => chats[id]);
+  const split = app.ui.chatSplit ?? 'auto';
 
   useEffect(() => {
     if (!showHistory) return;
@@ -153,6 +156,35 @@ export function ChatPanel() {
           </button>
           {showHistory && cwd && <History cwd={cwd} onClose={() => setShowHistory(false)} />}
         </div>
+        {active && (
+          <button
+            className="btn small"
+            title={`Открыть ещё один чат рядом (до ${MAX_CHAT_PANES}). Также: Ctrl+клик по вкладке`}
+            onClick={(e) => {
+              const shown = new Set(panes.length ? panes : [active]);
+              const others = app.openChats.filter((id) => chats[id] && !shown.has(id));
+              setTabMenu({
+                x: e.clientX,
+                y: e.clientY + 12,
+                items: [
+                  ...others.map((id) => ({ label: chats[id].title, action: () => void openChatBeside(id) })),
+                  ...(cwd ? [{ label: '＋ Новый чат рядом', action: () => void newChatBeside(cwd) }] : []),
+                ],
+              });
+            }}
+          >
+            ◫ Рядом
+          </button>
+        )}
+        {panes.length >= 2 && (
+          <button
+            className="btn small"
+            title="Как расположить чаты: авто (колонки, пока хватает ширины, иначе сетка) → колонки → строки"
+            onClick={() => setUi({ chatSplit: split === 'auto' ? 'cols' : split === 'cols' ? 'rows' : 'auto' })}
+          >
+            {split === 'auto' ? '▦ Авто' : split === 'cols' ? '▥ Колонки' : '▤ Строки'}
+          </button>
+        )}
         <div className="grow" />
         <Help id="chat" />
       </div>
@@ -168,10 +200,10 @@ export function ChatPanel() {
               data-tab-key={id}
               data-tab-label={`${c.title}${mark}${unread.includes(id) ? '  — новый ответ' : ''}`}
               data-tab-sort={app.chatMeta[id]?.completedAt ?? 0}
-              className={`tab ${id === active ? 'on' : ''} ${unread.includes(id) ? 'unread unseen' : ''} ${c.compacting ? 'compacting' : ''}`}
+              className={`tab ${id === active ? 'on' : ''} ${panes.includes(id) ? 'in-pane' : ''} ${unread.includes(id) ? 'unread unseen' : ''} ${c.compacting ? 'compacting' : ''}`}
               style={c.compacting ? compactFill(c.compacting) : undefined}
-              title={`${c.title}${unread.includes(id) ? '\nЕсть новый ответ — вы ещё не смотрели' : ''}\n${c.cwd}\nДвойной клик — переименовать · средняя кнопка мыши — закрыть`}
-              onClick={() => openChat(id)}
+              title={`${c.title}${unread.includes(id) ? '\nЕсть новый ответ — вы ещё не смотрели' : ''}\n${c.cwd}\nCtrl+клик — открыть рядом · двойной клик — переименовать · средняя кнопка мыши — закрыть`}
+              onClick={(e) => (e.ctrlKey || e.metaKey ? openChatBeside(id) : openChat(id))}
               onDoubleClick={() => setEditing(id)}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -179,6 +211,9 @@ export function ChatPanel() {
                   x: e.clientX,
                   y: e.clientY,
                   items: [
+                    ...(panes.includes(id)
+                      ? [{ label: 'Убрать из «рядом»', action: () => void closePane(id) }]
+                      : [{ label: 'Открыть рядом  (Ctrl+клик)', action: () => void openChatBeside(id) }]),
                     { label: 'Переименовать', action: () => setEditing(id) },
                     {
                       label: 'Ответвить чат (копия)',
@@ -193,6 +228,7 @@ export function ChatPanel() {
               {...middleClose(() => closeChat(id))}
             >
               <StatusDot id={id} status={c.status} />
+              {panes.includes(id) && <span className="pane-badge">{panes.indexOf(id) + 1}</span>}
               {editing === id ? (
                 <Rename
                   value={c.title}
@@ -219,7 +255,9 @@ export function ChatPanel() {
         ))}
       </TabStrip>
       {tabMenu && <ContextMenu {...tabMenu} onClose={() => setTabMenu(null)} />}
-      {active ? (
+      {panes.length >= 2 ? (
+        <ChatSplit panes={panes} active={active} mode={split} />
+      ) : active ? (
         <ChatView key={active} chat={chats[active]} />
       ) : (
         <div className="empty big">
@@ -232,6 +270,57 @@ export function ChatPanel() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const PANE_MIN_WIDTH = 380;
+
+/**
+ * Several chats at once. Each pane is a full chat with its own question box; the focused one (terracotta frame)
+ * is where typing, Tab offers and file inserts go — a click anywhere in a pane focuses it.
+ */
+function ChatSplit({ panes, active, mode }: { panes: string[]; active?: string; mode: 'auto' | 'cols' | 'rows' }) {
+  const chats = useStore((s) => s.chats);
+  const box = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el);
+    setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  const n = panes.length;
+  const cols = mode === 'cols' ? n : mode === 'rows' ? 1 : Math.max(1, Math.min(n, Math.floor(width / PANE_MIN_WIDTH) || 1));
+  const rows = Math.ceil(n / cols);
+  return (
+    <div
+      className="chat-split"
+      ref={box}
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}
+    >
+      {panes.map((id, i) => {
+        const c = chats[id];
+        return (
+          <div key={id} className={`chat-pane ${id === active ? 'focused' : ''}`} onMouseDownCapture={() => focusPane(id)}>
+            <div className="pane-head" title={c.cwd}>
+              <span className="pane-num">{i + 1}</span>
+              <StatusDot id={id} status={c.status} />
+              <span className="pane-title">{c.title}</span>
+              <span className="pane-proj">{basename(c.cwd)}</span>
+              <button className="icon-btn" title="Оставить только этот чат" onClick={() => void saveApp({ chatPanes: [], activeChat: id })}>
+                ⤢
+              </button>
+              <button className="icon-btn" title="Убрать из «рядом» (чат остаётся во вкладках)" onClick={() => void closePane(id)}>
+                ×
+              </button>
+            </div>
+            <ChatView chat={c} />
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -224,7 +224,7 @@ function snapshotGroup(): ProjectGroup[] {
   const a = state.app!;
   return (a.groups ?? []).map((g) =>
     g.id === a.activeGroup
-      ? { ...g, projects: a.projects, favorites: a.favorites, openChats: a.openChats, activeChat: a.activeChat, chatProject: a.chatProject, openFiles: state.files.map((f) => f.path), activeFile: state.activeFile, treeOpen: a.ui.treeOpen }
+      ? { ...g, projects: a.projects, favorites: a.favorites, openChats: a.openChats, activeChat: a.activeChat, chatPanes: a.chatPanes, chatProject: a.chatProject, openFiles: state.files.map((f) => f.path), activeFile: state.activeFile, treeOpen: a.ui.treeOpen }
       : g,
   );
 }
@@ -246,6 +246,7 @@ export async function switchGroup(id: string) {
     favorites: g.favorites,
     openChats: g.openChats,
     activeChat: g.activeChat,
+    chatPanes: g.chatPanes ?? [],
     chatProject: g.chatProject ?? g.projects[0]?.path,
     openFiles: g.openFiles ?? [],
     activeFile: g.activeFile,
@@ -412,8 +413,64 @@ export async function openChat(id: string, cwd?: string) {
     set((s) => ({ chats: { ...s.chats, [id]: snap } }));
   }
   const openChats = state.app!.openChats.includes(id) ? state.app!.openChats : [...state.app!.openChats, id];
-  await saveApp({ openChats, activeChat: id });
+  await saveApp({ openChats, activeChat: id, chatPanes: panesWith(id) });
   if (!state.app!.ui.visible.chat) togglePanel('chat', true);
+  markSeen(id);
+}
+
+// --- several chats side by side ------------------------------------------------------------
+
+export const MAX_CHAT_PANES = 6;
+/** Panes after showing `id`: a chat already shown just gets focus; otherwise it takes the focused pane's place. */
+function panesWith(id: string) {
+  const p = state.app!.chatPanes ?? [];
+  if (p.length < 2 || p.includes(id)) return p;
+  const i = p.indexOf(state.app!.activeChat ?? '');
+  const next = [...p];
+  next[i >= 0 ? i : next.length - 1] = id;
+  return next;
+}
+
+/** Opens a chat in a new pane next to the focused one (Ctrl+click on a tab, «Открыть рядом»). */
+export async function openChatBeside(id: string, cwd?: string) {
+  const a = state.app!;
+  const panes = (a.chatPanes ?? []).length >= 2 ? [...a.chatPanes!] : a.activeChat && a.activeChat !== id ? [a.activeChat] : [];
+  if (panes.includes(id)) return openChat(id, cwd);
+  if (panes.length >= MAX_CHAT_PANES) return toast(`Рядом можно показать до ${MAX_CHAT_PANES} чатов — закройте одну из панелей`, 'error');
+  if (!a.openChats.includes(id) || !state.chats[id]) {
+    const snap = await guard(call<ChatSnapshot>('chat:open', id, cwd));
+    if (!snap) return;
+    set((s) => ({ chats: { ...s.chats, [id]: snap } }));
+  }
+  const at = panes.indexOf(a.activeChat ?? '');
+  panes.splice(at >= 0 ? at + 1 : panes.length, 0, id);
+  const openChats = state.app!.openChats.includes(id) ? state.app!.openChats : [...state.app!.openChats, id];
+  await saveApp({ openChats, activeChat: id, chatPanes: panes.length >= 2 ? panes : [] });
+  if (!state.app!.ui.visible.chat) togglePanel('chat', true);
+  markSeen(id);
+}
+
+/** A new chat in a pane of its own next to the focused one. */
+export async function newChatBeside(cwd: string) {
+  const snap = await guard(call<ChatSnapshot>('chat:new', cwd));
+  if (!snap) return;
+  set((s) => ({ chats: { ...s.chats, [snap.sessionId]: snap } }));
+  return openChatBeside(snap.sessionId, cwd);
+}
+
+/** Removes a pane (the chat stays open as a tab); one pane left = back to a single chat. */
+export async function closePane(id: string) {
+  const a = state.app!;
+  const panes = (a.chatPanes ?? []).filter((x) => x !== id);
+  const i = (a.chatPanes ?? []).indexOf(id);
+  const activeChat = a.activeChat === id ? panes[Math.min(Math.max(i, 0), panes.length - 1)] : a.activeChat;
+  await saveApp({ chatPanes: panes.length >= 2 ? panes : [], activeChat });
+}
+
+/** Clicking into a pane makes it the one the keyboard, Tab offers and «Пишете в» belong to. */
+export function focusPane(id: string) {
+  if (state.app!.activeChat === id) return;
+  void saveApp({ activeChat: id });
   markSeen(id);
 }
 
@@ -421,7 +478,7 @@ export async function newChat(cwd: string) {
   const snap = await guard(call<ChatSnapshot>('chat:new', cwd));
   if (!snap) return;
   set((s) => ({ chats: { ...s.chats, [snap.sessionId]: snap } }));
-  await saveApp({ openChats: [...state.app!.openChats, snap.sessionId], activeChat: snap.sessionId });
+  await saveApp({ openChats: [...state.app!.openChats, snap.sessionId], activeChat: snap.sessionId, chatPanes: panesWith(snap.sessionId) });
   return snap.sessionId;
 }
 
@@ -486,8 +543,9 @@ export async function startAutoDeploySetup(project: string, site: string) {
 
 export async function closeChat(id: string) {
   const openChats = state.app!.openChats.filter((x) => x !== id);
-  const activeChat = state.app!.activeChat === id ? openChats[openChats.length - 1] : state.app!.activeChat;
-  await saveApp({ openChats, activeChat });
+  const panes = (state.app!.chatPanes ?? []).filter((x) => x !== id);
+  const activeChat = state.app!.activeChat === id ? (panes.length >= 2 ? panes[0] : openChats[openChats.length - 1]) : state.app!.activeChat;
+  await saveApp({ openChats, activeChat, chatPanes: panes.length >= 2 ? panes : [] });
   void call('chat:close', id);
 }
 
@@ -606,7 +664,8 @@ export function openLightbox(items: LightboxItem[], index = 0) {
 
 /** A chat counts as "being read" only when its tab is active, the panel is open and the window has focus. */
 export function chatIsVisible(id: string) {
-  return state.app?.activeChat === id && state.app.ui.visible.chat && document.hasFocus();
+  const shown = state.app?.activeChat === id || !!state.app?.chatPanes?.includes(id);
+  return shown && !!state.app?.ui.visible.chat && document.hasFocus();
 }
 
 /** A live update came for a chat whose earlier turns we don't have: take the whole list once. */
@@ -724,7 +783,6 @@ export async function init() {
   refreshSetup();
   call<string | null>('app:pendingUpdate').then((u) => u && set({ update: u }));
   window.addEventListener('focus', () => {
-    const id = state.app?.activeChat;
-    if (id && chatIsVisible(id)) markSeen(id);
+    for (const id of [state.app?.activeChat, ...(state.app?.chatPanes ?? [])]) if (id && chatIsVisible(id)) markSeen(id);
   });
 }

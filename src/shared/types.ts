@@ -411,6 +411,8 @@ export interface ProjectGroup {
   favorites: string[];
   openChats: string[];
   activeChat?: string;
+  /** Chats shown side by side in the chat panel (2+); activeChat is the focused one. Empty = one chat. */
+  chatPanes?: string[];
   chatProject?: string;
   openFiles?: string[];
   activeFile?: string;
@@ -425,6 +427,8 @@ export interface AppState {
   favorites: string[];
   openChats: string[];
   activeChat?: string;
+  /** Chats shown side by side in the chat panel (2+); activeChat is the focused one. Empty = one chat. */
+  chatPanes?: string[];
   chatProject?: string;
   chatMeta: Record<string, ChatMeta>;
   deployTargets: Record<string, DeployTarget>;
@@ -473,6 +477,8 @@ export interface AppState {
     treeSortDefault?: TreeSort;
     /** Code editor: long lines wrap to the window width instead of scrolling sideways. */
     wordWrap?: boolean;
+    /** Several chats side by side: 'auto' = columns while each gets ~380px, otherwise a grid / rows. */
+    chatSplit?: 'auto' | 'cols' | 'rows';
     /** Ctrl+wheel zoom of each block (tree, chat, editor, the tool panels); 1 = normal. */
     zoom?: Record<string, number>;
     /** Expanded tree folders (lower-case paths), restored on start. */

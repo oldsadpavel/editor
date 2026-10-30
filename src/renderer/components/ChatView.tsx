@@ -863,6 +863,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
 
   useEffect(() => {
     const onInsert = (e: Event) => {
+      if (get().app?.activeChat !== chat.sessionId) return; // several chats side by side: the focused one
       const t = (e as CustomEvent).detail as string;
       setText((v) => (v && !v.endsWith(' ') ? v + ' ' : v) + t + ' ');
       ref.current?.focus();
@@ -875,7 +876,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
   useEffect(() => {
     const onRun = (e: Event) => {
       const cmd = ((e as CustomEvent).detail as string).trim();
-      if (!cmd) return;
+      if (!cmd || get().app?.activeChat !== chat.sessionId) return;
       onSent();
       void call('chat:shell', chat.sessionId, cmd).catch((err) => toast(err.message, 'error'));
     };
@@ -905,6 +906,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (get().app?.activeChat !== chat.sessionId) return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest('.cm-editor'))) return;
       if (document.querySelector('.modal-bg, .ctx-menu')) return;
