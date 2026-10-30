@@ -871,6 +871,18 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
     return () => window.removeEventListener('chat-insert', onInsert);
   }, []);
 
+  // ▶ on a `! cmd` in an answer: run it right away, as if typed with ! and sent
+  useEffect(() => {
+    const onRun = (e: Event) => {
+      const cmd = ((e as CustomEvent).detail as string).trim();
+      if (!cmd) return;
+      onSent();
+      void call('chat:shell', chat.sessionId, cmd).catch((err) => toast(err.message, 'error'));
+    };
+    window.addEventListener('chat-run', onRun);
+    return () => window.removeEventListener('chat-run', onRun);
+  }, [chat.sessionId]);
+
   // Typing anywhere that isn't a text field (code editor, inputs, open dialogs) goes straight into the question box;
   // Tab there takes Claude Code's suggested next question, like in the terminal.
   // What Tab offers: commands Claude asked to run by hand (`! …`, e.g. when it isn't allowed to run them itself)
@@ -1087,7 +1099,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         ref={ref}
         value={text}
         placeholder={
-          chat.remote
+          chat.remote && !(tabOffers.length && !busy)
             ? `«${chat.title}» · удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне`
             : busy
             ? `«${chat.title}» · Claude работает… можно дописать — сообщение уйдёт в очередь`

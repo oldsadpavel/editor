@@ -781,3 +781,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 /* compaction progress on the chat tab */
 .chat-tabs .tab.compacting { background-image: linear-gradient(90deg, rgba(255, 196, 160, 0.42) var(--compact-pct, 0%), transparent var(--compact-pct, 0%)); }
 .chat-tabs .tab.compacting .ttitle::before { content: "🗜 "; }
+
+.md .run-line { display: inline-flex; align-items: center; gap: 10px; }
+.md .run-cmd { font: inherit; font-size: 11px; padding: 0 7px; height: 18px; border-radius: 4px; border: 1px solid var(--accent); background: var(--accent-soft); color: #fff; cursor: pointer; }
+.md .run-cmd:hover { filter: brightness(1.25); }
+.md code.run-inline { cursor: pointer; border-bottom: 1px dashed var(--accent); }
+.md code.run-inline:hover { background: var(--accent-soft); }
