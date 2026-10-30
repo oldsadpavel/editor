@@ -192,13 +192,17 @@ class ChatSession {
 
   constructor(public id: string, public cwd: string) {}
 
-  snapshot(): ChatSnapshot {
+  /** `tail`: only that many last turns (live updates; long chats have tens of MB of turns). */
+  snapshot(tail?: number): ChatSnapshot {
+    const all = this.builder.turns;
+    const turns = tail && all.length > tail ? all.slice(-tail) : all;
     return {
       sessionId: this.id,
       cwd: this.cwd,
       title: this.title,
       status: this.status,
-      turns: this.builder.turns,
+      turns,
+      ...(turns !== all ? { turnsFrom: all.length - turns.length, turnsTotal: all.length } : {}),
       partial: this.partial || undefined,
       partialThinking: this.partialThinking || undefined,
       permissionMode: this.permissionMode,
@@ -220,13 +224,13 @@ class ChatSession {
     if (now) {
       if (this.emitTimer) clearTimeout(this.emitTimer);
       this.emitTimer = null;
-      emit({ type: 'chat', snapshot: this.snapshot() });
+      emit({ type: 'chat', snapshot: this.snapshot(LIVE_TAIL) });
       return;
     }
     if (this.emitTimer) return;
     this.emitTimer = setTimeout(() => {
       this.emitTimer = null;
-      emit({ type: 'chat', snapshot: this.snapshot() });
+      emit({ type: 'chat', snapshot: this.snapshot(LIVE_TAIL) });
     }, 80);
   }
 
@@ -241,6 +245,8 @@ class ChatSession {
 }
 
 const sessions = new Map<string, ChatSession>();
+/** Turns sent with each live update; earlier ones don't change once answered. */
+const LIVE_TAIL = 4;
 
 export function getBuilder(sessionId: string) {
   return sessions.get(sessionId)?.builder;

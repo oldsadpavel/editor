@@ -1339,6 +1339,9 @@ function ApprovalsTab({ chat }: { chat: ChatSnapshot }) {
 
 export { MODES };
 
+/** Questions drawn at once; scrolling to the top adds this many more. */
+const TURN_PAGE = 40;
+
 export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals' | 'favorites'>('chat');
   const favCount = useStore((s) => (s.app?.favoriteAnswers ?? []).filter((f) => f.sessionId === chat.sessionId).length);
@@ -1413,7 +1416,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   focusRef.current = focus;
 
   const needle = q.toLowerCase();
-  const turns = needle
+  const found = needle
     ? chat.turns.filter(
         (t) =>
           t.prompt.toLowerCase().includes(needle) ||
@@ -1421,6 +1424,32 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           t.items.some((i) => i.kind === 'text' && i.text.toLowerCase().includes(needle)),
       )
     : chat.turns;
+  // Long chats draw only the last questions; earlier ones come in pages when scrolled to the top.
+  const [limit, setLimit] = useState(TURN_PAGE);
+  const turns = found.length > limit ? found.slice(-limit) : found;
+  const hidden = found.length - turns.length;
+  /** The first drawn question and where it was on screen before earlier ones were added above it. */
+  const growFrom = useRef<{ el: Element; top: number } | null>(null);
+  const showEarlier = () => {
+    if (!hidden || growFrom.current) return;
+    const first = content.current?.querySelector(':scope > :not(.load-earlier)');
+    growFrom.current = first ? { el: first, top: first.getBoundingClientRect().top } : null;
+    setLimit((l) => l + TURN_PAGE);
+  };
+  // keep what was on screen in place (whatever the browser's own scroll anchoring already did)
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    const g = growFrom.current;
+    growFrom.current = null;
+    if (!g || !el) return;
+    el.scrollTop += g.el.getBoundingClientRect().top - g.top;
+  }, [limit]);
+  // a jump to a question that isn't drawn yet (favorites, search in other tabs)
+  useEffect(() => {
+    if (!focus) return;
+    const i = found.findIndex((t) => t.id === focus.turnId);
+    if (i >= 0 && i < found.length - limit) setLimit(found.length - i + 3);
+  }, [focus?.nonce]);
 
   const toggle = (id: string) =>
     setExpanded((s) => {
@@ -1436,7 +1465,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         <div className="chat-toolbar">
           <input className="search" placeholder="Поиск по вопросам и ответам…" value={q} onChange={(e) => setQ(e.target.value)} />
           <span className="muted">
-            {turns.length} {plural(turns.length, 'вопрос', 'вопроса', 'вопросов')}
+            {found.length} {plural(found.length, 'вопрос', 'вопроса', 'вопросов')}
           </span>
           <button className="btn small" onClick={() => setExpanded(new Set(turns.map((t) => t.id)))} title="Развернуть все">
             ⊞
@@ -1467,11 +1496,17 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           // Back at the bottom always re-pins. Leaving it only counts when the user scrolled: while an answer streams,
           // content grows between our scroll and this event, which must not unpin the view.
           if (atBottom) stick.current = true;
+          if (el.scrollTop < 300 && hidden) showEarlier();
           else if (Date.now() - userScrollAt.current < 800 || userScrollAt.current === Number.MAX_SAFE_INTEGER) stick.current = false;
         }}
       >
         {tab === 'chat' && (
           <div ref={content}>
+            {hidden > 0 && (
+              <button className="btn small load-earlier" onClick={showEarlier}>
+                ↑ Ещё {Math.min(hidden, TURN_PAGE)} {plural(Math.min(hidden, TURN_PAGE), 'вопрос', 'вопроса', 'вопросов')} · скрыто {hidden} из {found.length}
+              </button>
+            )}
             {turns.map((t) => (
               <TurnRow
                 key={t.id}

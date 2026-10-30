@@ -791,3 +791,6 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 /* Ctrl+wheel block zoom */
 .zoom-box { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .zoom-box > * { min-height: 0; min-width: 0; }
+
+.load-earlier { display: block; margin: 4px auto 8px; }
+.chat-scroll { overflow-anchor: none; }

@@ -164,6 +164,12 @@ export interface ChatSnapshot {
   title: string;
   status: ChatStatus;
   turns: Turn[];
+  /**
+   * Live updates carry only the last few turns: `turns` then starts at index turnsFrom of the whole list
+   * (turnsTotal long); the renderer keeps the earlier ones it already has. Absent = the full list.
+   */
+  turnsFrom?: number;
+  turnsTotal?: number;
   /** Reasoning being streamed right now (shown open until the answer or the next block comes). */
   partialThinking?: string;
   /** Streaming text not yet committed into a turn item. */

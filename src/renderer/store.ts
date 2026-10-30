@@ -609,13 +609,33 @@ export function chatIsVisible(id: string) {
   return state.app?.activeChat === id && state.app.ui.visible.chat && document.hasFocus();
 }
 
+/** A live update came for a chat whose earlier turns we don't have: take the whole list once. */
+const refetching = new Set<string>();
+async function refetchChat(id: string) {
+  if (refetching.has(id)) return;
+  refetching.add(id);
+  try {
+    const snap = await call<ChatSnapshot>('chat:open', id, state.chats[id]?.cwd).catch(() => null);
+    if (snap) set((s) => ({ chats: { ...s.chats, [id]: snap } }));
+  } finally {
+    refetching.delete(id);
+  }
+}
+
 // --- events -------------------------------------------------------------------------------
 
 function onEvent(e: MainEvent) {
   switch (e.type) {
-    case 'chat':
-      set((s) => ({ chats: { ...s.chats, [e.snapshot.sessionId]: e.snapshot } }));
+    case 'chat': {
+      const snap = e.snapshot;
+      const prev = state.chats[snap.sessionId];
+      if (snap.turnsFrom === undefined) set((s) => ({ chats: { ...s.chats, [snap.sessionId]: snap } }));
+      else if (prev && prev.turns.length >= snap.turnsFrom) {
+        const turns = prev.turns.slice(0, snap.turnsFrom).concat(snap.turns);
+        set((s) => ({ chats: { ...s.chats, [snap.sessionId]: { ...snap, turns } } }));
+      } else void refetchChat(snap.sessionId);
       return;
+    }
     case 'chatMeta':
       set((s) => ({ app: s.app && { ...s.app, chatMeta: { ...s.app.chatMeta, [e.sessionId]: e.meta } } }));
       if (chatIsVisible(e.sessionId)) markSeen(e.sessionId);
