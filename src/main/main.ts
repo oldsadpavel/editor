@@ -18,6 +18,7 @@ import * as keys from './keys';
 import * as ping from './ping';
 import * as problems from './problems';
 import { setupStatus } from './setup';
+import { attachTaskbar } from './taskbar';
 import * as settingsIo from './settings-io';
 import * as updates from './updates';
 import * as usage from './usage';
@@ -291,6 +292,7 @@ function createWindow() {
     },
   });
   Menu.setApplicationMenu(null);
+  attachTaskbar(win);
   win.loadFile(path.join(here, '../renderer/index.html'));
   win.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);

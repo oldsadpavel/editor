@@ -12,6 +12,7 @@ import { IMAGE_EXT } from './files';
 import * as problems from './problems';
 import * as remote from './remote';
 import { dataDir, stateFile } from './store';
+import * as taskbar from './taskbar';
 import { ATTACHMENTS_HEADER, TurnBuilder, compactInfo, findTranscript, loadTranscript } from './transcript';
 import * as usage from './usage';
 import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
@@ -230,8 +231,12 @@ class ChatSession {
   }
 
   setStatus(s: ChatStatus) {
+    const was = this.status;
     this.status = s;
     this.publish(true);
+    // taskbar: progress while any chat works; a check when an answer ends (or needs you) while the window is away
+    const finished = was === 'running' && s !== 'running';
+    taskbar.chatsChanged([...sessions.values()].some((x) => x.status === 'running'), finished);
   }
 }
 
