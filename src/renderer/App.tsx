@@ -316,6 +316,45 @@ function useBlockZoom() {
   }, []);
 }
 
+/**
+ * Double-click selects a word without the space after it (Chromium on Windows takes the trailing space too, so a
+ * copied word came out as "ВставитьИзExcel "). Copying plain page text also drops whitespace at the edges.
+ */
+function useTrimWordSelection() {
+  useEffect(() => {
+    const onDbl = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('.cm-editor')) return; // CodeMirror selects words itself
+      if (t instanceof HTMLTextAreaElement || t instanceof HTMLInputElement) {
+        const v = t.value;
+        let end = t.selectionEnd ?? 0;
+        while (end > (t.selectionStart ?? 0) && /\s/.test(v[end - 1])) end--;
+        t.setSelectionRange(t.selectionStart, end);
+        return;
+      }
+      const sel = getSelection();
+      if (!sel || sel.isCollapsed) return;
+      const n = sel.toString().length - sel.toString().trimEnd().length;
+      for (let i = 0; i < n; i++) sel.modify('extend', 'backward', 'character');
+    };
+    const onCopy = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest?.('.cm-editor') || t instanceof HTMLTextAreaElement || t instanceof HTMLInputElement) return;
+      const text = getSelection()?.toString() ?? '';
+      const trimmed = text.replace(/^[ \t]+|\s+$/g, '');
+      if (!trimmed || trimmed === text) return;
+      e.preventDefault();
+      e.clipboardData?.setData('text/plain', trimmed);
+    };
+    document.addEventListener('dblclick', onDbl, true);
+    document.addEventListener('copy', onCopy, true);
+    return () => {
+      document.removeEventListener('dblclick', onDbl, true);
+      document.removeEventListener('copy', onCopy, true);
+    };
+  }, []);
+}
+
 const BLOCKS: Record<MainBlock, () => React.ReactElement> = { tree: TreePanel, chat: ChatPanel, editor: EditorArea };
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
@@ -326,6 +365,7 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
 function Workspace() {
   const ui = useStore((s) => s.app!.ui);
   useBlockZoom();
+  useTrimWordSelection();
   const v = ui.visible;
   const shown = (b: MainBlock) => b === 'editor' || v[b];
   const columns = (['left', 'center', 'right'] as ColumnId[]).filter((c) => shown(ui.layout[c]));
