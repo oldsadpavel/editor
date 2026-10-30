@@ -135,10 +135,7 @@ handle('fs:write', (p: string, text: string) => {
 handle('fs:exists', (p: string) => fs.existsSync(p));
 handle('fs:watch', (p: string) => watchFile(p));
 handle('fs:unwatch', (p: string) => unwatchFile(p));
-handle('fs:resolve', (base: string, rel: string) => {
-  const candidates = path.isAbsolute(rel) ? [rel] : [path.join(base, rel)];
-  return candidates.find((c) => fs.existsSync(c)) ?? null;
-});
+handle('fs:resolve', (base: string, rel: string) => files.resolvePath(base, rel, stateFile.data.projects.map((p) => p.path)));
 handle('dialog:folder', async () => {
   const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory', 'multiSelections'] });
   return r.canceled ? [] : r.filePaths;

@@ -2,6 +2,7 @@ import { ClipboardItem, clipboard, nativeImage, shell } from 'electron';
 import { execFile, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -193,4 +194,51 @@ export function searchFiles(cwd: string, q: string): string[] {
   const byName = all.filter((f) => f.slice(f.lastIndexOf('/') + 1).toLowerCase().includes(needle));
   const byPath = all.filter((f) => !byName.includes(f) && f.toLowerCase().includes(needle));
   return [...byName.sort((a, b) => a.length - b.length), ...byPath].slice(0, 30);
+}
+
+/** Latin/Cyrillic look-alikes folded together: the model often writes `1c` for a folder named `1с` or the other way round. */
+const LOOKALIKE: Record<string, string> = { а: 'a', в: 'b', е: 'e', к: 'k', м: 'm', н: 'h', о: 'o', р: 'p', с: 'c', т: 't', у: 'y', х: 'x' };
+const fold = (s: string) => Array.from(s.normalize('NFC').toLowerCase(), (ch) => LOOKALIKE[ch] ?? ch).join('');
+
+/** Walks `rel` from `base` segment by segment; a segment that isn't there exactly matches a sibling with the same folded name. */
+function walkFolded(base: string, rel: string): string | null {
+  let cur = base;
+  for (const seg of rel.split(/[\/]+/).filter(Boolean)) {
+    const exact = path.join(cur, seg);
+    if (fs.existsSync(exact)) {
+      cur = exact;
+      continue;
+    }
+    let names: string[];
+    try {
+      names = fs.readdirSync(cur);
+    } catch {
+      return null;
+    }
+    const hit = names.find((n) => fold(n) === fold(seg));
+    if (!hit) return null;
+    cur = path.join(cur, hit);
+  }
+  return cur;
+}
+
+/**
+ * A path from a chat answer → an existing file. Relative paths are tried against the chat's project first, then the
+ * other projects (a chat often works across several), each time tolerating Unicode normalization and c/с-style look-alikes.
+ */
+export function resolvePath(base: string, rel: string, roots: string[]): string | null {
+  rel = rel.trim().replace(/^["'`]|["'`]$/g, '');
+  if (rel.startsWith('~/')) rel = path.join(os.homedir(), rel.slice(2));
+  if (path.isAbsolute(rel)) {
+    if (fs.existsSync(rel)) return rel;
+    const root = path.parse(rel).root;
+    return walkFolded(root, rel.slice(root.length));
+  }
+  const bases = [base, ...roots.filter((r) => r.toLowerCase() !== base.toLowerCase())];
+  for (const b of bases) if (fs.existsSync(path.join(b, rel))) return path.join(b, rel);
+  for (const b of bases) {
+    const hit = walkFolded(b, rel);
+    if (hit) return hit;
+  }
+  return null;
 }
