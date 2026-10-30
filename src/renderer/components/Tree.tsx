@@ -73,24 +73,50 @@ const inProject = (cwd: string, root: string) => {
   return a === b || a.startsWith(b + '\\');
 };
 
-/** On a project row: a spinner while one of its chats works, «!» when one waits for you, a blue dot for an unread answer. */
-function ProjectActivity({ path }: { path: string }) {
-  const state = useStore((s) => {
-    const ids = s.app!.openChats.filter((id) => s.chats[id] && inProject(s.chats[id].cwd, path));
-    if (ids.some((id) => s.chats[id].status === 'waiting')) return 'waiting';
-    if (ids.some((id) => s.chats[id].status === 'running')) return 'running';
-    const unread = ids.filter((id) => isUnread(id, s)).length;
-    return unread ? `unread:${unread}` : '';
-  });
+/** 'waiting' | 'running' | 'unread:N' | '' for a set of chats. */
+function activityOf(s: ReturnType<typeof get>, ids: string[]) {
+  if (ids.some((id) => s.chats[id]?.status === 'waiting')) return 'waiting';
+  if (ids.some((id) => s.chats[id]?.status === 'running')) return 'running';
+  const unread = ids.filter((id) => isUnread(id, s)).length;
+  return unread ? `unread:${unread}` : '';
+}
+
+/** A spinner while a chat works, «!» when one waits for you, a blue dot (or the count) for unread answers. */
+function ActivityMark({ state, what }: { state: string; what: string }) {
   if (!state) return null;
-  if (state === 'running') return <span className="proj-act running" title="В этом проекте работает чат" />;
-  if (state === 'waiting') return <span className="proj-act waiting" title="Чат этого проекта ждёт вашего ответа">!</span>;
+  if (state === 'running') return <span className="proj-act running" title={`В ${what} работает чат`} />;
+  if (state === 'waiting') return <span className="proj-act waiting" title={`Чат в ${what} ждёт вашего ответа`}>!</span>;
   const n = Number(state.split(':')[1]);
   return (
-    <span className="proj-act unread" title={`Готов ответ в ${n} ${n === 1 ? 'чате' : 'чатах'} этого проекта — вы ещё не смотрели`}>
+    <span className="proj-act unread" title={`Готов ответ в ${n} ${n === 1 ? 'чате' : 'чатах'} — в ${what}; вы ещё не смотрели`}>
       {n > 1 ? n : ''}
     </span>
   );
+}
+
+/** On a project row: what the open chats of this project are doing. */
+function ProjectActivity({ path }: { path: string }) {
+  const state = useStore((s) => activityOf(s, s.app!.openChats.filter((id) => s.chats[id] && inProject(s.chats[id].cwd, path))));
+  return <ActivityMark state={state} what="этом проекте" />;
+}
+
+/**
+ * On a group tab: its chats — the ones open in that group, plus any chat still working in the background in one of its
+ * projects (chats of a group you left keep running and keep reporting).
+ */
+function GroupActivity({ groupId }: { groupId: string }) {
+  const state = useStore((s) => {
+    const a = s.app!;
+    const g = a.groups?.find((x) => x.id === groupId);
+    if (!g) return '';
+    const isActive = a.activeGroup === groupId;
+    const projects = isActive ? a.projects : g.projects;
+    const open = isActive ? a.openChats : g.openChats;
+    const ids = new Set(open);
+    for (const [id, c] of Object.entries(s.chats)) if (projects.some((p) => inProject(c.cwd, p.path))) if (c.status === 'running' || c.status === 'waiting') ids.add(id);
+    return activityOf(s, [...ids]);
+  });
+  return <ActivityMark state={state} what="этой группе" />;
 }
 
 function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; root?: boolean; onMenu: (e: React.MouseEvent, entry: DirEntry, root?: boolean) => void }) {
@@ -263,6 +289,7 @@ function GroupTabs() {
           >
             {g.name}
             <span className="count">{g.id === active ? get().app!.projects.length : g.projects.length}</span>
+            <GroupActivity groupId={g.id} />
           </span>
         ),
       )}
