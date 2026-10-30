@@ -102,8 +102,54 @@ export async function openPathLink(raw: string, cwd: string) {
   else toast(`Файл не найден: ${m[1]}`, 'error');
 }
 
+/** Section headings in answers: what the user has to do, what's left / unchecked, what was done. */
+const SECTION_KINDS: [string, RegExp][] = [
+  ['warn', /не сделано|не проверено|не провер|осталось|риски|внимание|ограничени|не работает|не удалось|известные проблемы/],
+  ['action', /тебе|вам |вам$|от вас|от тебя|что делать|что сделать|нужно сделать|сделать вручную|ваши действия|твои действия|ваш ход|твой ход|запусти|выполни|проверь(те)? сам|на вашей стороне|ручн/],
+  ['done', /что сделано|^сделано|итог|готово|что изменено|изменения/],
+];
+const sectionKind = (title: string) => {
+  const t = title.toLowerCase().replace(/[^\p{L}\p{N} /]+/gu, ' ').replace(/\s+/g, ' ').trim();
+  return t.length <= 60 ? SECTION_KINDS.find(([, re]) => re.test(t))?.[0] : undefined;
+};
+
+/**
+ * Wraps "👉 Тебе сделать" / "Что нужно от вас:", "Не сделано / не проверено", "Что сделано" (a heading, or a short
+ * paragraph ending with ":" / all in bold) together with what follows, up to the next heading, into a coloured block.
+ */
+function markSections(html: string) {
+  if (!/<h\d|<p>/.test(html)) return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  const root = doc.body.firstElementChild!;
+  const isTitle = (el: Element) => {
+    if (/^H[1-6]$/.test(el.tagName)) return true;
+    if (el.tagName !== 'P') return false;
+    const text = el.textContent?.trim() ?? '';
+    const onlyBold = el.children.length === 1 && el.firstElementChild!.tagName === 'STRONG' && el.firstElementChild!.textContent?.trim() === text;
+    return text.length <= 60 && (text.endsWith(':') || onlyBold);
+  };
+  let box: Element | null = null;
+  let found = false;
+  for (const el of Array.from(root.children)) {
+    if (isTitle(el) || el.tagName === 'HR') {
+      const kind = el.tagName === 'HR' ? undefined : sectionKind(el.textContent ?? '');
+      box = null;
+      if (kind) {
+        box = doc.createElement('div');
+        box.className = `md-sec sec-${kind}`;
+        el.replaceWith(box);
+        box.appendChild(el);
+        found = true;
+      }
+      continue;
+    }
+    if (box) box.appendChild(el);
+  }
+  return found ? root.innerHTML : html;
+}
+
 export function Markdown({ text, cwd }: { text: string; cwd: string }) {
-  const html = useMemo(() => marked.parse(text, { async: false }) as string, [text]);
+  const html = useMemo(() => markSections(marked.parse(text, { async: false }) as string), [text]);
   return (
     <div
       className="md"
