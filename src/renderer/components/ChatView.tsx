@@ -4,7 +4,7 @@ import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
 import { isFavorite, openFavorite, removeFavorite, toggleFavorite } from '../favorites';
 import { PlanCard, ShellCard, TasksBar, ThinkingBlock, TodoCard, ToolDetails, openClaudeConfig, rewindTo } from './ChatExtras';
-import { get, openChat, closeChat, newChat, loadDraft, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
+import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { fileIcon } from './icons';
@@ -1347,7 +1347,13 @@ const TURN_PAGE = 40;
 export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals' | 'favorites'>('chat');
   const favCount = useStore((s) => (s.app?.favoriteAnswers ?? []).filter((f) => f.sessionId === chat.sessionId).length);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(chat.turns.slice(-1).map((t) => t.id)));
+  // open questions come back as they were (last 20 chats); a chat seen for the first time opens its last question
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(savedExpanded(chat.sessionId) ?? chat.turns.slice(-1).map((t) => t.id)));
+  const firstExpanded = useRef(true);
+  useEffect(() => {
+    if (firstExpanded.current) return void (firstExpanded.current = false);
+    saveExpanded(chat.sessionId, [...expanded]);
+  }, [expanded]);
   const [q, setQ] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);

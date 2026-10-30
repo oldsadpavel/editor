@@ -418,6 +418,21 @@ export async function openChat(id: string, cwd?: string) {
   markSeen(id);
 }
 
+// --- expanded questions are remembered ------------------------------------------------------
+
+const EXPANDED_CHATS = 20;
+const EXPANDED_TURNS = 60;
+export const savedExpanded = (id: string) => state.app?.chatExpanded?.find((x) => x.id === id)?.turns;
+let expandTimer: ReturnType<typeof setTimeout> | null = null;
+/** Which questions of a chat are open; this chat moves to the front, the oldest beyond 20 chats are forgotten. */
+export function saveExpanded(id: string, turns: string[]) {
+  const rest = (state.app!.chatExpanded ?? []).filter((x) => x.id !== id);
+  const chatExpanded = [{ id, turns: turns.slice(-EXPANDED_TURNS) }, ...rest].slice(0, EXPANDED_CHATS);
+  set((s) => ({ app: s.app && { ...s.app, chatExpanded } }));
+  if (expandTimer) clearTimeout(expandTimer);
+  expandTimer = setTimeout(() => void call('state:set', { chatExpanded: state.app!.chatExpanded }), 600);
+}
+
 // --- several chats side by side ------------------------------------------------------------
 
 export const MAX_CHAT_PANES = 6;

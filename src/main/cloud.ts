@@ -301,9 +301,9 @@ export async function versions(): Promise<CloudVersion[]> {
  * expanded folders) — otherwise every click would make a new version and push real changes out of the last 10.
  */
 export function payload(): Partial<AppState> {
-  const { openChats: _a, activeChat: _b, chatProject: _c, openFiles: _d, activeFile: _e, chatModels: _f, cloud: _g, ...rest } = exportable();
-  const ui = rest.ui ? { ...rest.ui, treeOpen: undefined } : undefined;
-  const groups = rest.groups?.map(({ openChats: _1, activeChat: _2, chatProject: _3, openFiles: _4, activeFile: _5, treeOpen: _6, ...g }) => g);
+  const { openChats: _a, activeChat: _b, chatProject: _c, openFiles: _d, activeFile: _e, chatModels: _f, cloud: _g, chatPanes: _h, chatExpanded: _i, ...rest } = exportable();
+  const ui = rest.ui ? { ...rest.ui, treeOpen: undefined, treeSelected: undefined, treeScroll: undefined } : undefined;
+  const groups = rest.groups?.map(({ openChats: _1, activeChat: _2, chatProject: _3, openFiles: _4, activeFile: _5, treeOpen: _6, chatPanes: _7, ...g }) => g);
   // git origins go along, so a new machine can clone projects it doesn't have
   return withGitOrigins({ ...rest, ui, groups } as Partial<AppState>);
 }
@@ -335,10 +335,10 @@ export function download(id?: number | string) {
     // Groups keep their local open tabs and chats.
     const groups = incoming.groups?.map((g) => {
       const mine = local.groups?.find((x) => x.id === g.id);
-      return { ...g, openChats: [] as string[], ...(mine ? { openChats: mine.openChats, activeChat: mine.activeChat, chatProject: mine.chatProject, openFiles: mine.openFiles, activeFile: mine.activeFile, treeOpen: mine.treeOpen } : {}) };
+      return { ...g, openChats: [] as string[], ...(mine ? { openChats: mine.openChats, activeChat: mine.activeChat, chatProject: mine.chatProject, openFiles: mine.openFiles, activeFile: mine.activeFile, treeOpen: mine.treeOpen, chatPanes: mine.chatPanes } : {}) };
     });
     const cloud = local.cloud;
-    applySettings({ ...incoming, ...(groups ? { groups } : {}), ui: { ...incoming.ui!, treeOpen: local.ui.treeOpen } } as Partial<AppState>);
+    applySettings({ ...incoming, ...(groups ? { groups } : {}), ui: { ...incoming.ui!, treeOpen: local.ui.treeOpen, treeSelected: local.ui.treeSelected, treeScroll: local.ui.treeScroll } } as Partial<AppState>);
     stateFile.data.cloud = cloud;
     const c = cfg();
     c.hash = hashOf(payload());

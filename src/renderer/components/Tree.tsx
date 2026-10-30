@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DirEntry, TreeSort, TreeSortBy } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, createGroup, deleteGroup, get, openFile, renameGroup, saveApp, set, setTreeOpen, setUi, switchGroup, toggleFavorite, toast, useStore } from '../store';
+import { addProjects, isUnread, createGroup, deleteGroup, get, openFile, renameGroup, saveApp, set, setTreeOpen, setUi, switchGroup, toggleFavorite, toast, useStore } from '../store';
 import { Help, basename, dirname } from '../util';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { BlockHandle } from './Layout';
@@ -65,6 +65,32 @@ async function pasteInto(dir: string) {
   } catch (e: any) {
     toast(e.message, 'error');
   }
+}
+
+const inProject = (cwd: string, root: string) => {
+  const a = cwd.replace(/\//g, '\\').toLowerCase();
+  const b = root.replace(/\//g, '\\').toLowerCase().replace(/\\$/, '');
+  return a === b || a.startsWith(b + '\\');
+};
+
+/** On a project row: a spinner while one of its chats works, «!» when one waits for you, a blue dot for an unread answer. */
+function ProjectActivity({ path }: { path: string }) {
+  const state = useStore((s) => {
+    const ids = s.app!.openChats.filter((id) => s.chats[id] && inProject(s.chats[id].cwd, path));
+    if (ids.some((id) => s.chats[id].status === 'waiting')) return 'waiting';
+    if (ids.some((id) => s.chats[id].status === 'running')) return 'running';
+    const unread = ids.filter((id) => isUnread(id, s)).length;
+    return unread ? `unread:${unread}` : '';
+  });
+  if (!state) return null;
+  if (state === 'running') return <span className="proj-act running" title="В этом проекте работает чат" />;
+  if (state === 'waiting') return <span className="proj-act waiting" title="Чат этого проекта ждёт вашего ответа">!</span>;
+  const n = Number(state.split(':')[1]);
+  return (
+    <span className="proj-act unread" title={`Готов ответ в ${n} ${n === 1 ? 'чате' : 'чатах'} этого проекта — вы ещё не смотрели`}>
+      {n > 1 ? n : ''}
+    </span>
+  );
 }
 
 function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; root?: boolean; onMenu: (e: React.MouseEvent, entry: DirEntry, root?: boolean) => void }) {
@@ -137,6 +163,7 @@ function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; 
           </span>
         )}
         {root && <span className="troot-path">{entry.path}</span>}
+        {root && <ProjectActivity path={entry.path} />}
         {root && get().app!.projects.some((p) => p.path === entry.path) && (
           <span
             className="troot-gear"
@@ -255,6 +282,15 @@ export function TreePanel() {
   const app = useStore((s) => s.app!);
   const tab = app.ui.leftTab === 'favorites' ? 'favorites' : 'projects';
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  // the selected row survives restarts
+  const selected = useStore((s) => s.treeSelected);
+  useEffect(() => {
+    const saved = get().app!.ui.treeSelected;
+    if (saved && !get().treeSelected) set({ treeSelected: saved });
+  }, []);
+  useEffect(() => {
+    if (selected && selected !== get().app!.ui.treeSelected) setUi({ treeSelected: selected });
+  }, [selected]);
 
   function onMenu(e: React.MouseEvent, entry: DirEntry, root?: boolean) {
     e.preventDefault();
@@ -282,6 +318,31 @@ export function TreePanel() {
     tab === 'projects'
       ? app.projects.map((p) => ({ name: p.name, path: p.path, dir: true }))
       : app.favorites.map((f) => ({ name: basename(f), path: f, dir: !/\.[^\\/]+$/.test(basename(f)) }));
+
+  // the scroll position comes back after a restart (folders load lazily, so wait until the tree is tall enough)
+  const body = useRef<HTMLDivElement>(null);
+  const restoring = useRef(tab === 'projects' ? (get().app!.ui.treeScroll ?? 0) : 0);
+  useEffect(() => {
+    const target = restoring.current;
+    if (!target) return;
+    const started = Date.now();
+    const t = setInterval(() => {
+      const el = body.current;
+      if (el && el.scrollHeight - el.clientHeight >= target) el.scrollTop = target;
+      if (!el || el.scrollTop >= target - 1 || Date.now() - started > 4000) {
+        restoring.current = 0;
+        clearInterval(t);
+      }
+    }, 100);
+    return () => clearInterval(t);
+  }, []);
+  const scrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (tab !== 'projects' || restoring.current) return;
+    const top = Math.round(e.currentTarget.scrollTop);
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => setUi({ treeScroll: top }), 500);
+  };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'v') return;
@@ -311,7 +372,7 @@ export function TreePanel() {
         </button>
         <Help id="tree" />
       </div>
-      <div className="tree-body" key={tab} tabIndex={0} onKeyDown={onKeyDown}>
+      <div className="tree-body" key={tab} tabIndex={0} onKeyDown={onKeyDown} ref={body} onScroll={onScroll}>
         {roots.map((r) => (
           <Node key={r.path} entry={r} depth={0} root onMenu={onMenu} />
         ))}
