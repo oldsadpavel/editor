@@ -467,6 +467,8 @@ export interface AppState {
     treeSortDefault?: TreeSort;
     /** Code editor: long lines wrap to the window width instead of scrolling sideways. */
     wordWrap?: boolean;
+    /** Ctrl+wheel zoom of each block (tree, chat, editor, the tool panels); 1 = normal. */
+    zoom?: Record<string, number>;
     /** Expanded tree folders (lower-case paths), restored on start. */
     treeOpen?: string[];
     leftWidth: number;

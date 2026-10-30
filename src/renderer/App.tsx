@@ -16,7 +16,7 @@ import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
-import { init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
+import { get, init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
 import { Markdown } from './util';
 
 const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
@@ -270,6 +270,52 @@ export function App() {
   );
 }
 
+/** A block scaled by Ctrl+wheel over it (see useBlockZoom); the top menu bar isn't inside any of these. */
+function Zoom({ id, children }: { id: string; children: React.ReactNode }) {
+  const z = useStore((s) => s.app!.ui.zoom?.[id] ?? 1);
+  return (
+    <div className="zoom-box" data-zoom={id} style={z !== 1 ? { zoom: z } : undefined}>
+      {children}
+    </div>
+  );
+}
+
+/** Ctrl+wheel zooms the block under the cursor, Ctrl+0 resets it; remembered per block. */
+function useBlockZoom() {
+  useEffect(() => {
+    let pointer = { x: 0, y: 0 };
+    const blockAt = (x: number, y: number) => (document.elementFromPoint(x, y)?.closest('[data-zoom]') as HTMLElement | null)?.dataset.zoom;
+    const apply = (id: string, z: number) => {
+      z = Math.round(clamp(z, 0.5, 2.5) * 20) / 20;
+      setUi({ zoom: { ...get().app!.ui.zoom, [id]: z } });
+      toast(`Масштаб блока: ${Math.round(z * 100)}%  ·  Ctrl+0 — сбросить`);
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault(); // not the whole window
+      const id = blockAt(e.clientX, e.clientY);
+      if (!id || !e.deltaY) return;
+      apply(id, (get().app!.ui.zoom?.[id] ?? 1) * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+    };
+    const onMove = (e: MouseEvent) => (pointer = { x: e.clientX, y: e.clientY });
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.key !== '0') return;
+      const id = blockAt(pointer.x, pointer.y);
+      if (!id) return;
+      e.preventDefault();
+      apply(id, 1);
+    };
+    window.addEventListener('wheel', onWheel, { passive: false, capture: true });
+    window.addEventListener('mousemove', onMove, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('wheel', onWheel, true);
+      window.removeEventListener('mousemove', onMove, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, []);
+}
+
 const BLOCKS: Record<MainBlock, () => React.ReactElement> = { tree: TreePanel, chat: ChatPanel, editor: EditorArea };
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
@@ -279,6 +325,7 @@ const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(ma
  */
 function Workspace() {
   const ui = useStore((s) => s.app!.ui);
+  useBlockZoom();
   const v = ui.visible;
   const shown = (b: MainBlock) => b === 'editor' || v[b];
   const columns = (['left', 'center', 'right'] as ColumnId[]).filter((c) => shown(ui.layout[c]));
@@ -293,7 +340,7 @@ function Workspace() {
         if (c === flexColumn)
           return (
             <DropColumn key={c} column={c} className="col center">
-              <CenterColumn Block={Block} />
+              <CenterColumn Block={Block} block={block} />
             </DropColumn>
           );
         const before = i < flexIndex;
@@ -310,7 +357,9 @@ function Workspace() {
           <Fragment key={c}>
             {!before && splitter}
             <DropColumn column={c} className="col" style={{ width }}>
-              <Block />
+              <Zoom id={block}>
+                <Block />
+              </Zoom>
             </DropColumn>
             {before && splitter}
           </Fragment>
@@ -337,7 +386,9 @@ function ToolDock() {
       <div className="col tool-dock" style={{ width }}>
         {open.map(({ id, C }) => (
           <div key={id} className="bottom-slot" style={{ flex: 1 }}>
-            <C />
+            <Zoom id={id}>
+              <C />
+            </Zoom>
           </div>
         ))}
       </div>
@@ -345,7 +396,7 @@ function ToolDock() {
   );
 }
 
-function CenterColumn({ Block }: { Block: () => React.ReactElement }) {
+function CenterColumn({ Block, block }: { Block: () => React.ReactElement; block: MainBlock }) {
   const ui = useStore((s) => s.app!.ui);
   const bottom = ui.toolDock === 'right' ? [] : BOTTOM_PANELS.filter((p) => ui.visible[p.id]);
   const max = !!ui.bottomMax && bottom.length > 0;
@@ -367,7 +418,9 @@ function CenterColumn({ Block }: { Block: () => React.ReactElement }) {
   return (
     <>
       <div className="center-top" style={max ? { display: 'none' } : undefined}>
-        <Block />
+        <Zoom id={block}>
+          <Block />
+        </Zoom>
       </div>
       {bottom.length > 0 && (
         <>
@@ -377,7 +430,9 @@ function CenterColumn({ Block }: { Block: () => React.ReactElement }) {
               <Fragment key={id}>
                 {i > 0 && <Splitter dir="x" onDrag={(d) => resizePair(bottom[i - 1].id, id, d)} />}
                 <div className="bottom-slot" style={{ flex: flex[id] ?? 1 }}>
-                  <C />
+                  <Zoom id={id}>
+                    <C />
+                  </Zoom>
                 </div>
               </Fragment>
             ))}
