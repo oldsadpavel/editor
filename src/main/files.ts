@@ -240,5 +240,17 @@ export function resolvePath(base: string, rel: string, roots: string[]): string 
     const hit = walkFolded(b, rel);
     if (hit) return hit;
   }
+  // a bare file name (`МОДУЛЬ_X.txt`): look it up in the projects' files and memory folders, chat's project first
+  if (!/[\\/]/.test(rel)) {
+    const name = fold(rel);
+    for (const b of bases) {
+      const mem = walkFolded(path.join(b, '.claude', 'memory'), rel);
+      if (mem) return mem;
+      const found = projectFiles(b)
+        .filter((f) => fold(f.slice(f.lastIndexOf('/') + 1)) === name)
+        .sort((x, y) => x.length - y.length)[0];
+      if (found) return path.join(b, found);
+    }
+  }
   return null;
 }
