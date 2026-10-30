@@ -14,6 +14,7 @@ import { StatusModal } from './components/StatusModal';
 import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
+import { Switcher } from './components/Switcher';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
 import { get, init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
@@ -265,6 +266,7 @@ export function App() {
       <StatusModal />
       <CloudModal />
       <McpModal />
+      <Switcher />
       <Toast />
     </div>
   );
