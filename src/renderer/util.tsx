@@ -58,7 +58,8 @@ const unescapeHtml = (s: string) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) 
 
 /** Absolute paths in plain text (E:\\dir\\file.ext, /home/…/file.ext) become links too. */
 const TEXT_PATH_RE = /(?<![\p{L}\p{N}])((?:[A-Za-z]:[\\/]|(?<=\s|^)\/)[^\s<>"'`|?*,;]*[\\/][^\s<>"'`|?*,;]*\.[\p{L}\p{N}]{1,8})(?=[\s,.;:)!?»]*(?:\s|$|<))/gu;
-const linkPaths = (html: string) => html.replace(TEXT_PATH_RE, (m) => `<span class="path-link" data-path="${m}">${m}</span>`);
+const copyButton = (path: string) => `<button class="copy-file" data-copy="${path}" title="Скопировать весь текст файла в буфер">⧉</button>`;
+const linkPaths = (html: string) => html.replace(TEXT_PATH_RE, (m) => `<span class="path-link" data-path="${m}">${m}</span>${copyButton(m)}`);
 
 marked.use({
   gfm: true,
@@ -82,7 +83,7 @@ marked.use({
       const raw = unescapeHtml(text);
       const run = raw.match(RUN_RE);
       if (run) return `<code class="run-inline" data-run="${escapeHtml(run[1].trim())}" title="Клик — выполнить в этом чате">${text}</code>`;
-      if (isPath(raw)) return `<code class="path-link" data-path="${escapeHtml(raw)}">${text}</code>`;
+      if (isPath(raw)) return `<code class="path-link" data-path="${escapeHtml(raw)}">${text}</code>${copyButton(escapeHtml(raw))}`;
       return `<code>${text}</code>`;
     },
     link: ({ href, text }) => `<a href="${escapeHtml(href)}" target="_blank">${text}</a>`,
@@ -93,6 +94,22 @@ marked.use({
     },
   },
 });
+
+/** The whole text of a file from an answer's link goes to the clipboard. */
+export async function copyFileText(raw: string, cwd: string) {
+  const rel = raw.replace(/:\d+$/, '');
+  const found = await call<string | null>('fs:resolve', cwd, rel);
+  if (!found) return toast(`Файл не найден: ${rel}`, 'error');
+  try {
+    const f = await call<{ text: string; binary: boolean }>('fs:read', found);
+    if (f.binary) return toast(`${basename(found)} — не текстовый файл, скопировать текст нельзя`, 'error');
+    await navigator.clipboard.writeText(f.text);
+    const lines = f.text ? f.text.split('\n').length : 0;
+    toast(`Скопировано в буфер: ${basename(found)} — ${lines} ${plural(lines, 'строка', 'строки', 'строк')}`);
+  } catch (e: any) {
+    toast(e.message, 'error');
+  }
+}
 
 /** Opens `path` or `path:line` relative to the chat's project. */
 export async function openPathLink(raw: string, cwd: string) {
@@ -155,6 +172,8 @@ export function Markdown({ text, cwd }: { text: string; cwd: string }) {
       className="md"
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={(e) => {
+        const copy = (e.target as HTMLElement).closest('[data-copy]') as HTMLElement | null;
+        if (copy) return void copyFileText(copy.dataset.copy!, cwd);
         const run = (e.target as HTMLElement).closest('[data-run]') as HTMLElement | null;
         if (run) return void window.dispatchEvent(new CustomEvent('chat-run', { detail: run.dataset.run }));
         const el = (e.target as HTMLElement).closest('[data-path]') as HTMLElement | null;

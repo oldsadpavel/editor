@@ -32,6 +32,23 @@ const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
   { id: 'cache', label: 'Кеш ИИ', icon: '🧹' },
 ];
 
+/** Hides the code editor so the chat gets the whole width; opening any file brings it back. */
+function EditorButton() {
+  const hidden = useStore((s) => !!s.app!.ui.editorHidden);
+  const files = useStore((s) => s.files.length);
+  return (
+    <button
+      className={`tb-btn ${hidden ? '' : 'on'}`}
+      onClick={() => setUi({ editorHidden: !hidden })}
+      title={hidden ? 'Показать редактор файлов' : 'Скрыть редактор файлов — чат займёт его место (открытие файла вернёт редактор)'}
+    >
+      <span className="tb-icon">📝</span>
+      Редактор
+      {hidden && files > 0 && <span className="badge" title="Открытых файлов">{files}</span>}
+    </button>
+  );
+}
+
 function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: string }) {
   const visible = useStore((s) => s.app!.ui.visible[id]);
   const alerts = useStore((s) => panelAlerts(s, id));
@@ -247,7 +264,10 @@ export function App() {
         <span className="brand">✳ Claude Editor</span>
         <div className="tb-group">
           {TOOLBAR.map((b) => (
-            <ToolbarButton key={b.id} {...b} />
+            <Fragment key={b.id}>
+              <ToolbarButton {...b} />
+              {b.id === 'chat' && <EditorButton />}
+            </Fragment>
           ))}
         </div>
         <div className="grow" />
@@ -369,9 +389,14 @@ function Workspace() {
   useBlockZoom();
   useTrimWordSelection();
   const v = ui.visible;
-  const shown = (b: MainBlock) => b === 'editor' || v[b];
+  // the editor can be hidden too, but something has to stay: with nothing else open it shows anyway
+  const editorShown = !ui.editorHidden || (!v.tree && !v.chat);
+  const shown = (b: MainBlock) => (b === 'editor' ? editorShown : v[b]);
   const columns = (['left', 'center', 'right'] as ColumnId[]).filter((c) => shown(ui.layout[c]));
-  const flexColumn: ColumnId = shown(ui.layout.center) ? 'center' : columns.find((c) => ui.layout[c] === 'editor')!;
+  // the elastic column: the center one; if its block is hidden — the chat, then the editor, then whatever is left
+  const flexColumn: ColumnId = shown(ui.layout.center)
+    ? 'center'
+    : (columns.find((c) => ui.layout[c] === 'chat') ?? columns.find((c) => ui.layout[c] === 'editor') ?? columns[0]);
   const flexIndex = columns.indexOf(flexColumn);
 
   return (

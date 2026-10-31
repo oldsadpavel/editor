@@ -304,6 +304,7 @@ export async function openInSystem(path: string) {
  * (no tab, the editor can't show it anyway).
  */
 export async function openFile(path: string, line?: number) {
+  if (state.app?.ui.editorHidden) setUi({ editorHidden: false });
   const existing = state.files.find((f) => f.path.toLowerCase() === path.toLowerCase());
   if (!existing) {
     if (isImage(path)) {

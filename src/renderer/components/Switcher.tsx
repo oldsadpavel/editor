@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { get, set, useStore } from '../store';
+import { get, set, setUi, useStore } from '../store';
 import { basename, dirname, relPath } from '../util';
 import { fileIcon } from './icons';
 
@@ -76,7 +76,9 @@ export function Switcher() {
 
   const pick = (p?: string) => {
     setIndex(null);
-    if (p) set({ activeFile: p });
+    if (!p) return;
+    set({ activeFile: p });
+    if (get().app?.ui.editorHidden) setUi({ editorHidden: false });
   };
 
   if (index === null) return null;

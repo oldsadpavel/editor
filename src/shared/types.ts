@@ -481,6 +481,8 @@ export interface AppState {
     wordWrap?: boolean;
     /** Several chats side by side: 'auto' = columns while each gets ~380px, otherwise a grid / rows. */
     chatSplit?: 'auto' | 'cols' | 'rows';
+    /** The code editor is hidden: the chat (or another block) takes its space. Opening a file shows it again. */
+    editorHidden?: boolean;
     /** Project tree: the selected row and the scroll position, restored after a restart. */
     treeSelected?: string;
     treeScroll?: number;

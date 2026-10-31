@@ -843,3 +843,7 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .md .sec-done > :first-child { color: #7fd3a0; }
 /* when an answer has a «what you need to do» block, the rest of its text is dimmed a little */
 .turn-body:has(.sec-action) .md > :not(.md-sec) { color: var(--fg2); }
+
+/* ⧉ after a file link: copy the whole file */
+.md .copy-file { border: 0; background: transparent; color: var(--fg2); opacity: 0.4; cursor: pointer; padding: 0 3px; margin-left: 1px; font-size: 12px; vertical-align: baseline; }
+.md .copy-file:hover, .md .path-link:hover + .copy-file { opacity: 1; color: var(--accent); }
