@@ -1345,7 +1345,7 @@ export { MODES };
 const TURN_PAGE = 40;
 
 export function ChatView({ chat }: { chat: ChatSnapshot }) {
-  const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals' | 'favorites'>('chat');
+  const [tab, setTab] = useState<'chat' | 'files' | 'deploys' | 'approvals' | 'favorites' | 'questions'>('chat');
   const favCount = useStore((s) => (s.app?.favoriteAnswers ?? []).filter((f) => f.sessionId === chat.sessionId).length);
   // open questions come back as they were (last 20 chats); a chat seen for the first time opens its last question
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(savedExpanded(chat.sessionId) ?? chat.turns.slice(-1).map((t) => t.id)));
@@ -1362,6 +1362,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const focus = useStore((s) => (s.focusTurn?.sessionId === chat.sessionId ? s.focusTurn : undefined));
   const deploys = useStore((s) => s.deploys.filter((d) => d.sessionId === chat.sessionId));
   const files = useMemo(() => aggregate(chat.turns), [chat.turns]);
+  const questionCount = useMemo(() => myQuestions(chat.turns).length, [chat.turns]);
   const last = chat.turns[chat.turns.length - 1];
   const chatBusy = chat.status === 'running' || chat.status === 'waiting';
   // A decision belongs to the turn that was running when it was made. Matched by time, because a turn's id
@@ -1394,9 +1395,14 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
     setTab('chat');
     setExpanded((s) => new Set(s).add(focus.turnId));
     stick.current = false;
+    // Bring the question to the top once it's drawn (it may be on a page that loads just now, and the chat's own
+    // scrolling can cut a smooth scroll short).
+    const toTurn = () => scroller.current?.querySelector('.turn.flash')?.scrollIntoView({ block: 'start' });
+    const s1 = setTimeout(toTurn, 120);
+    const s2 = setTimeout(toTurn, 500);
     // The jump is done once the turn is on screen; after that the chat follows new output again (if at the bottom).
     const t = setTimeout(() => set({ focusTurn: undefined }), 1500);
-    return () => clearTimeout(t);
+    return () => [s1, s2, t].forEach(clearTimeout);
   }, [focus?.nonce]);
 
   useLayoutEffect(() => {
@@ -1568,6 +1574,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         )}
         {tab === 'approvals' && <ApprovalsTab chat={chat} />}
         {tab === 'favorites' && <FavoritesTab chat={chat} onOpen={() => setTab('chat')} />}
+        {tab === 'questions' && <QuestionsTab chat={chat} onOpen={() => setTab('chat')} />}
       </div>
       <TasksBar chat={chat} />
       {chat.pending.map((p) => (
@@ -1602,6 +1609,9 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         <div className={`tab ${tab === 'favorites' ? 'on' : ''}`} onClick={() => setTab('favorites')} title="Ответы, сохранённые в избранное (☆ у ответа)">
           ★ Избранное {favCount > 0 && <span className="count">{favCount}</span>}
         </div>
+        <div className={`tab ${tab === 'questions' ? 'on' : ''}`} onClick={() => setTab('questions')} title="Все мои вопросы в этом чате — списком">
+          ❓ Мои вопросы {questionCount > 0 && <span className="count">{questionCount}</span>}
+        </div>
         <div className="grow" />
         <span className="muted chat-cwd" title={chat.sessionId}>
           {chat.cwd}
@@ -1611,6 +1621,87 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   );
 }
 
+
+interface MyQuestion {
+  turnId: string;
+  text: string;
+  at: number;
+  files: number;
+}
+
+/** Everything I asked in this chat, in order: each question and the follow-ups sent while Claude was answering. */
+function myQuestions(turns: Turn[]): MyQuestion[] {
+  const out: MyQuestion[] = [];
+  const add = (turnId: string, text: string, at: number, files: number) => {
+    // slash commands and other service entries aren't questions
+    if (text.trimStart().startsWith('<')) return;
+    if (!text.trim() && !files) return;
+    out.push({ turnId, text, at, files });
+  };
+  for (const t of turns) {
+    add(t.id, t.prompt, t.startedAt, t.attachments?.length ?? t.images ?? 0);
+    for (const m of t.more ?? []) add(t.id, m.prompt, m.at, m.attachments?.length ?? 0);
+  }
+  return out;
+}
+
+/** «Мои вопросы»: all my questions as a list; click — the whole text, → — show it in the chat, ⧉ — copy, ↩ — into the box. */
+function QuestionsTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void }) {
+  const all = useMemo(() => myQuestions(chat.turns), [chat.turns]);
+  const [q, setQ] = useState('');
+  const [newestFirst, setNewestFirst] = useState(true);
+  const [open, setOpen] = useState<number | null>(null);
+  const needle = q.trim().toLowerCase();
+  const rows = all.map((x, i) => ({ ...x, n: i + 1 })).filter((x) => !needle || x.text.toLowerCase().includes(needle));
+  if (newestFirst) rows.reverse();
+  const show = (turnId: string) => {
+    onOpen();
+    set({ focusTurn: { sessionId: chat.sessionId, turnId, nonce: Date.now() } });
+  };
+  return (
+    <div className="questions-tab">
+      <div className="q-bar">
+        <input className="search" placeholder="Поиск по моим вопросам…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <span className="muted">
+          {rows.length} из {all.length}
+        </span>
+        <button className="btn small" onClick={() => setNewestFirst(!newestFirst)} title="Порядок">
+          {newestFirst ? '↓ новые сверху' : '↑ старые сверху'}
+        </button>
+      </div>
+      {rows.map((x) => (
+        <div key={`${x.n}`} className={`q-item ${open === x.n ? 'open' : ''}`}>
+          <div className="q-head" onClick={() => setOpen(open === x.n ? null : x.n)} title={open === x.n ? '' : x.text.slice(0, 1500)}>
+            <span className="q-num">#{x.n}</span>
+            <span className="q-text">{x.text.trim() ? (open === x.n ? '' : x.text.replace(/\s+/g, ' ').slice(0, 300)) : '(только вложения)'}</span>
+            {x.files > 0 && <span className="muted small">📎{x.files}</span>}
+            <span className="muted small q-time">{formatTime(x.at)}</span>
+            <button className="icon-btn" title="Показать в чате" onClick={(e) => (e.stopPropagation(), show(x.turnId))}>
+              →
+            </button>
+            <button
+              className="icon-btn"
+              title="Скопировать текст вопроса"
+              onClick={(e) => (e.stopPropagation(), void navigator.clipboard.writeText(x.text).then(() => toast('Вопрос скопирован')))}
+            >
+              ⧉
+            </button>
+            <button
+              className="icon-btn"
+              title="Вставить в поле ввода (чтобы поправить и отправить снова)"
+              // the question box exists only on the chat tab: switch first, insert once it's there
+              onClick={(e) => (e.stopPropagation(), onOpen(), setTimeout(() => window.dispatchEvent(new CustomEvent('chat-insert', { detail: x.text })), 50))}
+            >
+              ↩
+            </button>
+          </div>
+          {open === x.n && <div className="q-full">{x.text}</div>}
+        </div>
+      ))}
+      {!rows.length && <div className="empty">{all.length ? 'Ничего не найдено' : 'Вопросов пока нет'}</div>}
+    </div>
+  );
+}
 
 /** Saved answers: this chat's first, other chats on request. Click — jump to the answer (opens its chat). */
 function FavoritesTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void }) {

@@ -847,3 +847,16 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 /* ⧉ after a file link: copy the whole file */
 .md .copy-file { border: 0; background: transparent; color: var(--fg2); opacity: 0.4; cursor: pointer; padding: 0 3px; margin-left: 1px; font-size: 12px; vertical-align: baseline; }
 .md .copy-file:hover, .md .path-link:hover + .copy-file { opacity: 1; color: var(--accent); }
+
+/* «Мои вопросы» tab */
+.questions-tab { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+.q-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.q-bar .search { flex: 1; }
+.q-item { border: 1px solid var(--line-soft); border-radius: var(--radius); background: var(--bg2); }
+.q-item.open { border-color: var(--accent); }
+.q-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px; cursor: pointer; }
+.q-head:hover { background: rgba(255, 255, 255, 0.03); }
+.q-num { color: var(--muted); font-size: 11px; min-width: 30px; font-variant-numeric: tabular-nums; }
+.q-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-time { white-space: nowrap; }
+.q-full { padding: 6px 10px 10px 46px; white-space: pre-wrap; word-break: break-word; user-select: text; border-top: 1px solid var(--line-soft); }
