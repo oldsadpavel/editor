@@ -1569,25 +1569,34 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
       <div
         className="chat-scroll"
         ref={scroller}
-        onWheel={() => (userScrollAt.current = Date.now())}
-        onTouchMove={() => (userScrollAt.current = Date.now())}
-        onKeyDown={() => (userScrollAt.current = Date.now())}
-        onPointerDown={(e) => {
-          // a press on the scrollbar (right of the content box)
+        // The view leaves the end of the chat only when the user scrolls up by hand (wheel / keys / touch / dragging
+        // the scrollbar) and comes back to it when they scroll down to the end or send a question. Content growing
+        // or shrinking (streaming, a page of earlier questions, cards) never unpins it.
+        onWheel={(e) => {
           const el = e.currentTarget;
-          if (e.clientX <= el.getBoundingClientRect().left + el.clientWidth) return;
-          // dragging the thumb: counts as scrolling by hand until the button is released
+          // only when there is somewhere to scroll up to
+          if (e.deltaY < 0 && !e.ctrlKey && el.scrollTop > 0) stick.current = false;
+        }}
+        onTouchMove={() => (userScrollAt.current = Date.now())}
+        onKeyDown={(e) => {
+          if (['PageUp', 'ArrowUp', 'Home'].includes(e.key)) stick.current = false;
+        }}
+        onPointerDown={(e) => {
+          // a press on the scrollbar (past the content box; offsetX is in the element's own units, zoom or not)
+          if (e.nativeEvent.offsetX <= e.currentTarget.clientWidth) return;
           userScrollAt.current = Number.MAX_SAFE_INTEGER;
-          window.addEventListener('pointerup', () => (userScrollAt.current = Date.now()), { once: true });
+          const done = () => (userScrollAt.current = 0);
+          window.addEventListener('pointerup', done, { once: true });
+          window.addEventListener('pointercancel', done, { once: true });
+          window.addEventListener('blur', done, { once: true });
         }}
         onScroll={(e) => {
           const el = e.currentTarget;
           const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-          // Back at the bottom always re-pins. Leaving it only counts when the user scrolled: while an answer streams,
-          // content grows between our scroll and this event, which must not unpin the view.
           if (atBottom) stick.current = true;
+          // dragging the scrollbar or swiping away from the end unpins
+          else if (userScrollAt.current === Number.MAX_SAFE_INTEGER || Date.now() - userScrollAt.current < 300) stick.current = false;
           if (el.scrollTop < 300 && hidden) showEarlier();
-          else if (Date.now() - userScrollAt.current < 800 || userScrollAt.current === Number.MAX_SAFE_INTEGER) stick.current = false;
         }}
       >
         {tab === 'chat' && (
