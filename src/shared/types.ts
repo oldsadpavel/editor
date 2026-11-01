@@ -121,8 +121,15 @@ export interface Turn {
   costUsd?: number;
   /** Tokens spent on this answer (all API calls of the turn). */
   tokens?: TurnTokens;
+  /** Every API call of this answer: when it came and what it cost (the token badge shows how the total grew). */
+  tokenLog?: TokenLogEntry[];
   /** Models that produced this answer (e.g. claude-fable-5-1), in order of first use. */
   models?: string[];
+}
+
+export interface TokenLogEntry extends TurnTokens {
+  at: number;
+  model?: string;
 }
 
 export interface TurnTokens {

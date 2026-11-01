@@ -235,7 +235,7 @@ export class TurnBuilder {
   /** API message ids already counted: one API response is written as several entries sharing its usage. */
   private countedMessages = new Set<string>();
 
-  private countTokens(turn: Turn, message: any) {
+  private countTokens(turn: Turn, message: any, at: number) {
     const u = message?.usage;
     if (!u || (message.id && this.countedMessages.has(message.id))) return;
     if (message.id) this.countedMessages.add(message.id);
@@ -245,6 +245,16 @@ export class TurnBuilder {
     t.output += u.output_tokens ?? 0;
     t.cacheRead += u.cache_read_input_tokens ?? 0;
     t.cacheWrite += u.cache_creation_input_tokens ?? 0;
+    const log = (turn.tokenLog ??= []);
+    log.push({
+      at,
+      model: typeof message.model === 'string' && message.model !== '<synthetic>' ? message.model : undefined,
+      input: u.input_tokens ?? 0,
+      output: u.output_tokens ?? 0,
+      cacheRead: u.cache_read_input_tokens ?? 0,
+      cacheWrite: u.cache_creation_input_tokens ?? 0,
+    });
+    if (log.length > 300) log.splice(0, log.length - 300);
   }
 
   private current(at: number): Turn {
@@ -363,7 +373,7 @@ export class TurnBuilder {
     const content = entry.message?.content;
     if (!Array.isArray(content)) return;
     const turn = this.current(at);
-    this.countTokens(turn, entry.message);
+    this.countTokens(turn, entry.message, at);
     const model = entry.message?.model;
     if (typeof model === 'string' && model !== '<synthetic>' && !turn.models?.includes(model)) (turn.models ??= []).push(model);
     // tool_use means Claude keeps working; any other stop reason ends its answer.

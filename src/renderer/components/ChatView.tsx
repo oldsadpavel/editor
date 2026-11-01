@@ -497,6 +497,41 @@ function modelName(id: string) {
   return m ? `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] && m[3].length <= 2 ? '.' + m[3] : ''}` : id;
 }
 
+/** m:ss (or h:mm:ss) since the question was sent. */
+function sinceStart(ms: number) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+/** Tooltip lines: each model call of the answer — time from the question, what it added, the running total. */
+function tokenHistory(turn: Turn): string[] {
+  const log = turn.tokenLog ?? [];
+  if (!log.length) return [];
+  const SHOW = 40;
+  let total = 0;
+  const rows = log.map((e) => {
+    const add = e.input + e.cacheWrite + e.output;
+    total += add;
+    const parts = [
+      e.cacheWrite ? `кеш-запись ${kTokens(e.cacheWrite)}` : '',
+      e.input ? `вход ${kTokens(e.input)}` : '',
+      e.output ? `выход ${kTokens(e.output)}` : '',
+      e.cacheRead ? `из кеша ${kTokens(e.cacheRead)}` : '',
+    ].filter(Boolean);
+    const warn = e.cacheWrite > 50_000 ? '  ⚠' : '';
+    return `+${sinceStart(e.at - turn.startedAt)}   +${kTokens(add)} → ${kTokens(total)}   (${parts.join(', ')})${warn}`;
+  });
+  return [
+    '',
+    `Как росло (время от отправки вопроса · добавлено → всего), обращений к модели: ${log.length}`,
+    ...(rows.length > SHOW ? [`… ещё ${rows.length - SHOW} раньше`] : []),
+    ...rows.slice(-SHOW),
+  ];
+}
+
 function TokensBadge({ turn }: { turn: Turn }) {
   const t = turn.tokens;
   if (!t) return null;
@@ -517,6 +552,7 @@ function TokensBadge({ turn }: { turn: Turn }) {
     `Чтение из кеша: ${t.cacheRead.toLocaleString('ru-RU')} (дешевле в 10 раз)`,
     `Всего с кешем: ${(main + t.cacheRead).toLocaleString('ru-RU')}`,
     ...(turn.costUsd !== undefined ? [`Стоимость по ценам API: $${turn.costUsd.toFixed(4)}`] : []),
+    ...tokenHistory(turn),
     ...(t.cacheWrite > 50_000
       ? [
           '',
