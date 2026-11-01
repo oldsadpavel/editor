@@ -1483,7 +1483,14 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
 
   useLayoutEffect(() => {
     const el = scroller.current;
-    if (el && stick.current && tab === 'chat' && !focus) el.scrollTop = el.scrollHeight;
+    if (!el || !stick.current || tab !== 'chat' || focus) return;
+    el.scrollTop = el.scrollHeight;
+    // Effects of this same render can still change the height (a new question opens right after it appears): it may
+    // shrink and grow back within one frame, which the ResizeObserver never sees — so settle at the end once more.
+    const f = requestAnimationFrame(() => {
+      if (stick.current && !focusRef.current) el.scrollTop = el.scrollHeight;
+    });
+    return () => cancelAnimationFrame(f);
   }, [chat, tab]);
 
   // Content keeps growing after a render (a turn expands, thumbnails load, the answer streams): while the view is
