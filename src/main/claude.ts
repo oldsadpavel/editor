@@ -519,7 +519,8 @@ async function pump(s: ChatSession) {
     }
   } catch (e: any) {
     const msg = e?.message ?? String(e);
-    failTurn(s, msg);
+    // a process replaced by a restart: its end is expected, not an error of the new answer
+    if (s.q === q) failTurn(s, msg);
   } finally {
     if (s.q === q) {
       s.q = null;
@@ -1143,6 +1144,56 @@ export async function interrupt(sessionId: string) {
     return;
   }
   s.setStatus('idle');
+}
+
+/**
+ * A stuck answer: the chat's Claude process (or the hidden /RC one) is killed and started anew on the same session,
+ * the hanging answer is closed, and what Claude never got to is sent again — the grey queued questions, and the
+ * question itself if no answer came at all. Returns how many questions were resent.
+ */
+export async function restart(sessionId: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  const last = s.builder.turns[s.builder.turns.length - 1];
+  const resend: string[] = [];
+  if (last?.live) {
+    const nothingYet = !last.items.length;
+    if (nothingYet && last.prompt.trim()) resend.push(last.prompt);
+    for (const m of last.more ?? []) if ((m.pending || nothingYet) && m.prompt.trim()) resend.push(m.prompt);
+  }
+  for (const q of s.remoteQueue) if (!resend.includes(q.text)) resend.push(q.text);
+  for (const [id] of s.pending) answerPermission(sessionId, id, { behavior: 'deny', message: 'Чат перезапущен' });
+  if (s.awaitingQueued) clearTimeout(s.awaitingQueued);
+  s.awaitingQueued = null;
+  for (const m of last?.more ?? []) m.pending = false;
+  s.remoteQueue = [];
+  s.compacting = undefined;
+  s.partial = '';
+  s.partialThinking = '';
+  const wasRemote = s.remote;
+  if (wasRemote) {
+    setRemote(sessionId, false);
+  } else {
+    const q = s.q;
+    stopProcess(s);
+    try {
+      q?.close();
+    } catch {
+      /* already gone */
+    }
+  }
+  finishLiveTurns(s);
+  s.builder.markInterrupted();
+  s.setStatus('idle');
+  const text = resend.join('\n\n');
+  if (wasRemote) {
+    // a fresh hidden Claude needs a few seconds before it takes typing
+    setRemote(sessionId, true);
+    if (text) setTimeout(() => void send(sessionId, text, {}).catch(() => {}), 8000);
+  } else if (text) {
+    await send(sessionId, text, { model: s.model, effort: s.effort, permissionMode: s.permissionMode });
+  }
+  return resend.length;
 }
 
 /** Ends the background Claude process of a chat that was closed in the UI (history stays on disk). */

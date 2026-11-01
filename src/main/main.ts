@@ -172,6 +172,7 @@ handle('chat:new', (cwd: string) => claude.newChat(cwd));
 const ensure = (id: string) => claude.ensureSession(id);
 handle('chat:send', async (id: string, text: string, opts?: SendOptions) => (await ensure(id), claude.send(id, text, opts ?? {})));
 handle('chat:interrupt', async (id: string) => (await ensure(id), claude.interrupt(id)));
+handle('chat:restart', async (id: string) => (await ensure(id), claude.restart(id)));
 handle('chat:autoApprove', async (id: string, on: boolean) => (await ensure(id), claude.setAutoApprove(id, on)));
 handle('chat:remote', async (id: string, on: boolean) => (await ensure(id), claude.setRemote(id, on)));
 handle('chat:diff', async (id: string, turnIds: string[], file: string) => {

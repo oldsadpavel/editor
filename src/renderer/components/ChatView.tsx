@@ -1241,6 +1241,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           </button>
         )}
         <div className="grow" />
+        {busy && <RestartButton chat={chat} />}
         {busy && (
           chat.turns[chat.turns.length - 1]?.more?.some((m) => m.pending) ? (
             <button
@@ -1261,6 +1262,45 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         </button>
       </div>
     </div>
+  );
+}
+
+const STALL_MS = 3 * 60_000;
+
+/**
+ * ⟳ while Claude works: restarts the chat's Claude process when an answer hangs (spinner turns, nothing comes) and sends
+ * the questions it never got to again. After 3 minutes of silence it turns orange and says how long it's been quiet.
+ */
+function RestartButton({ chat }: { chat: ChatSnapshot }) {
+  const last = chat.turns[chat.turns.length - 1];
+  const since = Math.max(last?.answeredAt ?? 0, last?.startedAt ?? 0, ...(last?.more?.map((m) => m.at) ?? []));
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+  // streaming text or reasoning means it's alive
+  const quiet = chat.partial || chat.partialThinking ? 0 : now - since;
+  const stalled = since > 0 && quiet > STALL_MS;
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      className={`btn small ${stalled ? 'stalled' : ''}`}
+      disabled={busy}
+      title={
+        (stalled ? `От Claude ничего не приходит ${Math.round(quiet / 60_000)} мин.\n` : '') +
+        'Перезапустить: процесс Claude этого чата запускается заново (история сохраняется), зависший ответ закрывается, а вопросы, до которых Claude не дошёл (серые), отправляются снова. Вложения при повторе не прикладываются.'
+      }
+      onClick={() => {
+        setBusy(true);
+        void call<number>('chat:restart', chat.sessionId)
+          .then((n) => toast(n ? `Чат перезапущен, отправлено заново: ${n}` : 'Чат перезапущен'))
+          .catch((e) => toast(e.message, 'error'))
+          .finally(() => setBusy(false));
+      }}
+    >
+      ⟳ {stalled ? `Завис? ${Math.round(quiet / 60_000)} мин` : 'Перезапустить'}
+    </button>
   );
 }
 
