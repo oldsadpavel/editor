@@ -860,3 +860,6 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .q-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-time { white-space: nowrap; }
 .q-full { padding: 6px 10px 10px 46px; white-space: pre-wrap; word-break: break-word; user-select: text; border-top: 1px solid var(--line-soft); }
+
+.tab-strip .block-close { flex: none; align-self: center; margin: 0 4px; font-size: 15px; line-height: 1; color: var(--muted); }
+.tab-strip .block-close:hover { color: var(--fg); background: rgba(255, 255, 255, 0.08); }

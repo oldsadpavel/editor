@@ -29,6 +29,7 @@ export function TabStrip({
   activeKey,
   onPick,
   lead,
+  trail,
   children,
 }: {
   className: string;
@@ -36,6 +37,8 @@ export function TabStrip({
   onPick: (key: string) => void;
   /** Fixed content before the scrolling row (e.g. a block handle). */
   lead?: React.ReactNode;
+  /** Fixed content at the very end, after the »N button (e.g. a close button for the whole block). */
+  trail?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const row = useRef<HTMLDivElement>(null);
@@ -103,6 +106,7 @@ export function TabStrip({
           »{hidden.length}
         </button>
       )}
+      {trail}
       {menu && (
         <ContextMenu
           x={menu.x}

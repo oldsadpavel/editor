@@ -27,7 +27,7 @@ import {
 } from '@codemirror/view';
 import { useEffect, useRef } from 'react';
 import { call } from '../api';
-import { closeFile, editFile, get, reloadFile, saveFile, set, setUi, useStore, type OpenFile } from '../store';
+import { closeFile, editFile, get, reloadFile, saveFile, set, setUi, toast, useStore, type OpenFile } from '../store';
 import { basename, dirname } from '../util';
 import { fileIcon } from './icons';
 import { ImageTab } from './ImageViewer';
@@ -194,6 +194,18 @@ export function EditorArea() {
           <span className="tabs-handle">
             <BlockHandle block="editor" />
           </span>
+        }
+        trail={
+          <button
+            className="icon-btn block-close"
+            title="Скрыть редактор — чат займёт его место. Файлы остаются открытыми; вернуть — кнопка «Редактор» вверху или открыть любой файл"
+            onClick={() => {
+              setUi({ editorHidden: true });
+              toast('Редактор скрыт. Вернуть — кнопка «📝 Редактор» вверху или откройте любой файл');
+            }}
+          >
+            ×
+          </button>
         }
       >
         {files.map((f) => {
