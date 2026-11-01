@@ -866,3 +866,4 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 
 .btn.stalled { background: rgba(224, 168, 74, 0.2); border-color: var(--warn); color: #ffcf8a; animation: stall-pulse 1.6s ease-in-out infinite; }
 @keyframes stall-pulse { 50% { box-shadow: 0 0 0 3px rgba(224, 168, 74, 0.25); } }
+.cg-tabs { position: relative; }

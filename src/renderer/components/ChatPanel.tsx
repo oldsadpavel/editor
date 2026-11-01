@@ -349,11 +349,8 @@ function ProjectGroup({ cwd, children }: { cwd: string; children: React.ReactNod
     const el = tabs.current;
     if (!el) return;
     const measure = () => {
-      const box = el.getBoundingClientRect();
-      const next = Array.from(el.querySelectorAll<HTMLElement>('[data-tab-key]')).map((t) => {
-        const r = t.getBoundingClientRect();
-        return Math.round(r.left - box.left + r.width / 2);
-      });
+      // layout offsets, not screen rects: they stay right when the chat block is zoomed (Ctrl+wheel)
+      const next = Array.from(el.querySelectorAll<HTMLElement>('[data-tab-key]')).map((t) => Math.round(t.offsetLeft + t.offsetWidth / 2));
       setCenters((prev) => (prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next));
     };
     measure();
