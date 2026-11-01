@@ -941,8 +941,12 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+      // Ctrl+V anywhere outside a text field (and outside the tree, which pastes files into a folder) pastes into the
+      // question box: text, screenshots and files all go there. KeyV — any keyboard layout (м on the Russian one).
+      const paste = (e.ctrlKey || e.metaKey) && !e.altKey && e.code === 'KeyV';
+      if (e.defaultPrevented || ((e.ctrlKey || e.metaKey || e.altKey) && !paste)) return;
       if (get().app?.activeChat !== chat.sessionId) return;
+      if (paste && (document.activeElement as HTMLElement | null)?.closest('.tree-body')) return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest('.cm-editor'))) return;
       if (document.querySelector('.modal-bg, .ctx-menu')) return;
