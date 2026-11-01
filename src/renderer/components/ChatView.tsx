@@ -1609,8 +1609,8 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
         <div className={`tab ${tab === 'favorites' ? 'on' : ''}`} onClick={() => setTab('favorites')} title="Ответы, сохранённые в избранное (☆ у ответа)">
           ★ Избранное {favCount > 0 && <span className="count">{favCount}</span>}
         </div>
-        <div className={`tab ${tab === 'questions' ? 'on' : ''}`} onClick={() => setTab('questions')} title="Все мои вопросы в этом чате — списком">
-          ❓ Мои вопросы {questionCount > 0 && <span className="count">{questionCount}</span>}
+        <div className={`tab ${tab === 'questions' ? 'on' : ''}`} onClick={() => setTab('questions')} title="Все мои запросы в этом чате — списком">
+          ❓ Мои запросы {questionCount > 0 && <span className="count">{questionCount}</span>}
         </div>
         <div className="grow" />
         <span className="muted chat-cwd" title={chat.sessionId}>
@@ -1645,7 +1645,7 @@ function myQuestions(turns: Turn[]): MyQuestion[] {
   return out;
 }
 
-/** «Мои вопросы»: all my questions as a list; click — the whole text, → — show it in the chat, ⧉ — copy, ↩ — into the box. */
+/** «Мои запросы»: all my prompts as a list; click — the whole text, → — show it in the chat, ⧉ — copy, ↩ — into the box. */
 function QuestionsTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void }) {
   const all = useMemo(() => myQuestions(chat.turns), [chat.turns]);
   const [q, setQ] = useState('');
@@ -1661,7 +1661,7 @@ function QuestionsTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void
   return (
     <div className="questions-tab">
       <div className="q-bar">
-        <input className="search" placeholder="Поиск по моим вопросам…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="search" placeholder="Поиск по моим запросам…" value={q} onChange={(e) => setQ(e.target.value)} />
         <span className="muted">
           {rows.length} из {all.length}
         </span>
@@ -1681,8 +1681,8 @@ function QuestionsTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void
             </button>
             <button
               className="icon-btn"
-              title="Скопировать текст вопроса"
-              onClick={(e) => (e.stopPropagation(), void navigator.clipboard.writeText(x.text).then(() => toast('Вопрос скопирован')))}
+              title="Скопировать текст запроса"
+              onClick={(e) => (e.stopPropagation(), void navigator.clipboard.writeText(x.text).then(() => toast('Запрос скопирован')))}
             >
               ⧉
             </button>
@@ -1698,7 +1698,7 @@ function QuestionsTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void
           {open === x.n && <div className="q-full">{x.text}</div>}
         </div>
       ))}
-      {!rows.length && <div className="empty">{all.length ? 'Ничего не найдено' : 'Вопросов пока нет'}</div>}
+      {!rows.length && <div className="empty">{all.length ? 'Ничего не найдено' : 'Запросов пока нет'}</div>}
     </div>
   );
 }
