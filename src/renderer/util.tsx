@@ -164,12 +164,21 @@ function markSections(html: string) {
     return text.length <= 60 && (text.endsWith(':') || onlyBold);
   };
   let box: Element | null = null;
+  /** How strong the title that opened the box is: h1 = 1 … h6 = 6, a bold / «…:» paragraph = 7. */
+  let boxLevel = 0;
   let found = false;
   for (const el of Array.from(root.children)) {
     if (isTitle(el) || el.tagName === 'HR') {
       const kind = el.tagName === 'HR' ? undefined : sectionKind(el.textContent ?? '');
+      const level = /^H[1-6]$/.test(el.tagName) ? Number(el.tagName[1]) : 7;
+      // a sub-title of its own ("Способ 1 — по ссылке:") stays inside the block it belongs to
+      if (box && !kind && el.tagName !== 'HR' && (level > boxLevel || level === 7)) {
+        box.appendChild(el);
+        continue;
+      }
       box = null;
       if (kind) {
+        boxLevel = level;
         box = doc.createElement('div');
         box.className = `md-sec sec-${kind}`;
         el.replaceWith(box);
