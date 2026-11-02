@@ -51,7 +51,23 @@ const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
  */
 const PATH_RE = /^(?:[A-Za-z]:)?[\p{L}\p{N}_.\-\\/@()+]+\.[\p{L}\p{N}]{1,8}(?::\d+)?$/u;
 const ABS_PATH_RE = /^(?:[A-Za-z]:[\\/]|\/|~\/)[^<>"|?*\n]+\.[\p{L}\p{N}]{1,8}(?::\d+)?$/u;
-const isPath = (raw: string) => (PATH_RE.test(raw) && /[\\/.]/.test(raw)) || ABS_PATH_RE.test(raw);
+/**
+ * Extensions a bare name (no folder) must have to count as a file — so smtp.office365.com, mail.ru or a version
+ * like v1.2 stay text. With a folder in it (src/a.ts, app/1с/x.txt) any extension goes.
+ */
+const FILE_EXT = new Set(
+  ('txt md mdx log csv tsv json jsonl yml yaml toml ini cfg conf env xml html htm css scss less sass js mjs cjs jsx ts tsx ' +
+    'vue svelte php phtml blade py rb go rs java kt kts cs cpp cc c h hpp swift sql sh bash zsh ps1 psm1 bat cmd ' +
+    'lock gradle properties dockerfile makefile bsl os epf erf cf cfe mxl xlsx xls docx doc pdf odt ods pptx png jpg jpeg ' +
+    'gif webp svg ico bmp zip rar 7z gz tar exe dll msi apk ipa').split(' '),
+);
+const isPath = (raw: string) => {
+  if (ABS_PATH_RE.test(raw)) return true;
+  if (!PATH_RE.test(raw) || !/[\\/.]/.test(raw) || raw.includes('@')) return false;
+  if (/[\\/]/.test(raw)) return true;
+  const ext = raw.replace(/:\d+$/, '').split('.').pop()!.toLowerCase();
+  return FILE_EXT.has(ext);
+};
 
 const RUN_RE = /^\s*!\s*(\S.*)$/;
 const unescapeHtml = (s: string) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" })[e as string]!);
@@ -59,6 +75,8 @@ const unescapeHtml = (s: string) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) 
 /** Absolute paths in plain text (E:\\dir\\file.ext, /home/…/file.ext) become links too. */
 const TEXT_PATH_RE = /(?<![\p{L}\p{N}])((?:[A-Za-z]:[\\/]|(?<=\s|^)\/)[^\s<>"'`|?*,;]*[\\/][^\s<>"'`|?*,;]*\.[\p{L}\p{N}]{1,8})(?=[\s,.;:)!?»]*(?:\s|$|<))/gu;
 const copyButton = (path: string) => `<button class="copy-file" data-copy="${path}" title="Скопировать весь текст файла в буфер">⧉</button>`;
+/** ⧉ after inline code that isn't a file: copies the text itself (a host, an address, a command, a hash). */
+const copyTextButton = (text: string) => `<button class="copy-file" data-copy-text="${text}" title="Скопировать в буфер">⧉</button>`;
 const linkPaths = (html: string) => html.replace(TEXT_PATH_RE, (m) => `<span class="path-link" data-path="${m}">${m}</span>${copyButton(m)}`);
 
 marked.use({
@@ -84,7 +102,7 @@ marked.use({
       const run = raw.match(RUN_RE);
       if (run) return `<code class="run-inline" data-run="${escapeHtml(run[1].trim())}" title="Клик — выполнить в этом чате">${text}</code>`;
       if (isPath(raw)) return `<code class="path-link" data-path="${escapeHtml(raw)}">${text}</code>${copyButton(escapeHtml(raw))}`;
-      return `<code>${text}</code>`;
+      return raw.trim().length >= 3 ? `<code>${text}</code>${copyTextButton(escapeHtml(raw))}` : `<code>${text}</code>`;
     },
     link: ({ href, text }) => `<a href="${escapeHtml(href)}" target="_blank">${text}</a>`,
     // like marked's own text renderer (nested tokens, escaping) plus clickable absolute paths
@@ -172,6 +190,8 @@ export function Markdown({ text, cwd }: { text: string; cwd: string }) {
       className="md"
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={(e) => {
+        const copyText = (e.target as HTMLElement).closest('[data-copy-text]') as HTMLElement | null;
+        if (copyText) return void navigator.clipboard.writeText(copyText.dataset.copyText!).then(() => toast(`Скопировано: ${copyText.dataset.copyText!.slice(0, 60)}`));
         const copy = (e.target as HTMLElement).closest('[data-copy]') as HTMLElement | null;
         if (copy) return void copyFileText(copy.dataset.copy!, cwd);
         const run = (e.target as HTMLElement).closest('[data-run]') as HTMLElement | null;
