@@ -1,18 +1,77 @@
-# Claude Editor
+<p align="center"><img src="docs/logo.png" width="120" alt="MPI logo"></p>
 
-A PhpStorm-style code editor built around Claude Code. It runs several Claude chats per project at once. Each chat keeps its own history, and all chats share the project's memory. The editor also shows which files each answer changed, and tracks git pushes through CI to the live site with smoke tests. Panels for problems, keys, deploys and tests light up when something needs attention.
+<h1 align="center">MPI — Meat Proxy Interface</h1>
+
+<p align="center"><i>Редактор кода вокруг чатов с Claude Code — для того, кто нажимает F7, пока ИИ думает.</i></p>
+
+MPI — десктопный редактор в духе PhpStorm, построенный вокруг чатов Claude Code. В нём одновременно идут несколько
+чатов по каждому проекту, рядом открыты файлы, а панели следят за тем, что происходит дальше: пуши, деплои, тесты,
+ключи и ошибки. Название — шутка: ИИ всё придумывает, а человек служит ему «мясным прокси» — вставляет модуль в 1С,
+жмёт F7, присылает скриншот. MPI делает эту работу удобной.
+
+*A PhpStorm-style desktop editor built around Claude Code chats: several chats per project, files next to them,
+and panels that follow pushes, deploys, tests, keys and problems. The UI is in Russian.*
+
+![Главное окно](docs/screenshots/main.png)
+
+## Что умеет
+
+**Чаты**
+- Несколько чатов на проект, у каждого своя история; память проекта (CLAUDE.md, memory) общая.
+- Несколько чатов рядом в одном окне (◫ Рядом или Ctrl+клик по вкладке), группы проектов.
+- Ответ «гармошкой»: действия, размышления, изменённые файлы, окно «что изменилось в файле».
+- Блоки «Тебе сделать / Что сделано / Не сделано» подсвечиваются, команды `! …` запускаются кнопкой ▶.
+- Ссылки на файлы открывают файл (даже без пути и в соседнем проекте), ⧉ копирует файл или текст.
+- Вкладки «Мои запросы», «Избранное», «Файлы», «Деплои», «Разрешения».
+- Удалённый режим /RC — продолжить чат с телефона через claude.ai; Claude in Chrome.
+- Перезапуск зависшего ответа (⟳), подсказка следующего вопроса по Tab, история по ↑.
+- Сжатие истории с прогрессом, расход токенов с историей по времени, звук «ответ готов».
+
+**Редактор и окно**
+- Дерево проектов и избранное, CodeMirror с подсветкой, Ctrl+Tab между файлами, перенос строк.
+- Ctrl+колесо — масштаб любого блока; редактор можно скрыть, чтобы чат занял всё место.
+- Индикатор работы и «галочка готово» на кнопке в панели задач.
+
+**Панели**
+- Деплои: пуш → CI → сайт отдаёт новую версию; smoke-тесты после деплоя, отчёт серверных тестов.
+- Ошибки, Ключи (где лежат и когда истекают), Пинг продакшен-адресов, Кеш ИИ на диске.
+- Чек-лист «Настройка»: что ещё стоит настроить в проекте.
+- Чаты сами управляют панелями через встроенный MCP-сервер `editor`.
+
+![Два чата рядом](docs/screenshots/split.png)
+
+## Установка
+
+Готовые сборки — на странице [Releases](https://github.com/oldsadpavel/editor/releases):
+
+- **Windows** — `MPI-<версия>-portable.exe`, установка не нужна.
+- **macOS** — `MPI-<версия>-arm64-mac.zip` (Apple Silicon) или `MPI-<версия>-mac.zip` (Intel). Сборка не подписана:
+  при первом запуске правый клик → «Открыть», либо `xattr -cr /Applications/MPI.app`.
+
+Нужен установленный [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) с выполненным входом.
+Если его нет, MPI предложит установить; вход (`claude auth login`) тоже запускается из редактора.
+
+## Сборка из исходников
 
 ```
 npm install
-npm start          # build and run
-npm run dist       # portable Windows .exe in release/
+npm start          # собрать и запустить
+npm run dist       # портативный .exe в release/
 ```
 
-Requires Claude Code (`claude`) installed and logged in; the app can start `claude auth login` for you.
+Electron + React + CodeMirror 6 + [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk).
 
-Full guide in Russian: [docs/ИНСТРУКЦИЯ.md](docs/ИНСТРУКЦИЯ.md).
+## Документация
 
-## Облако настроек
+- Подробная инструкция: [docs/ИНСТРУКЦИЯ.md](docs/ИНСТРУКЦИЯ.md); в самом редакторе — кнопки «?» на панелях.
+- Облако настроек: настройки можно хранить онлайн — в Insider (вход Microsoft 365) или на своём сервере `server/`
+  (Node без зависимостей, вход через любой OIDC, последние 10 версий; см. [server/README.md](server/README.md)).
+  В редакторе: меню аккаунта → «☁ Облако настроек».
 
-Настройки можно хранить онлайн: в Insider (вход Microsoft 365) или на своём сервере — `server/` (Node без зависимостей,
-вход через любой OIDC, последние 10 версий; см. [server/README.md](server/README.md)). В редакторе: меню аккаунта → «☁ Облако настроек».
+## Автор и лицензия
+
+Автор — oldsadpavel, [oldsadpavel@gmail.com](mailto:oldsadpavel@gmail.com).
+
+Лицензия [MIT](LICENSE).
+
+MPI — независимый проект, не связанный с Anthropic. Claude и Claude Code — торговые марки Anthropic.

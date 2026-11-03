@@ -2,7 +2,7 @@
   "name": "claude-editor",
   "version": "0.2.8",
   "private": true,
-  "description": "Code editor built around Claude Code chats",
+  "description": "MPI — Meat Proxy Interface: a code editor built around Claude Code chats",
   "main": "dist/main/main.mjs",
   "type": "module",
   "scripts": {
@@ -56,7 +56,9 @@
     "esbuild@0.28.2": true,
     "electron-winstaller@5.4.0": true
   },
-  "author": "oldsadpavel",
+  "author": "oldsadpavel <oldsadpavel@gmail.com>",
+  "license": "MIT",
+  "homepage": "https://github.com/oldsadpavel/editor",
   "build": {
     "appId": "com.oldsadpavel.claude-editor",
     "productName": "MPI",

@@ -12,7 +12,6 @@ import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { StatusModal } from './components/StatusModal';
 import { Boot } from './components/Boot';
-import { Logo } from './components/Logo';
 import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { Switcher } from './components/Switcher';
@@ -254,18 +253,22 @@ export function App() {
   }, []);
 
   const unreadCount = useStore((s) => (s.app ? Object.keys(s.app.chatMeta).filter((k) => isUnread(k, s)).length : 0));
+  // the window title says where you are: «MPI — <chat>: <project>», unread answers counted in front
+  const where = useStore((s) => {
+    const c = s.app?.activeChat ? s.chats[s.app.activeChat] : undefined;
+    if (!c) return '';
+    const cwd = c.cwd.replace(/\//g, '\\').toLowerCase();
+    const project = s.app!.projects.find((p) => cwd.startsWith(p.path.replace(/\//g, '\\').toLowerCase()))?.name ?? c.cwd.split(/[\\/]/).pop();
+    return `${c.title}: ${project}`;
+  });
   useEffect(() => {
-    document.title = unreadCount ? `(${unreadCount}) MPI` : 'MPI — Meat Proxy Interface';
-  }, [unreadCount]);
+    document.title = `${unreadCount ? `(${unreadCount}) ` : ''}MPI — ${where || 'Meat Proxy Interface'}`;
+  }, [unreadCount, where]);
 
   if (!ready || !app) return <Boot />;
   return (
     <div className="app">
       <div className="topbar">
-        <span className="brand" title="MPI — Meat Proxy Interface">
-          <Logo size={20} />
-          MPI
-        </span>
         <div className="tb-group">
           {TOOLBAR.map((b) => (
             <Fragment key={b.id}>
