@@ -35,18 +35,47 @@ function globalNodeModules(): string | null {
 }
 
 /** The program and leading args that start an agent (npm scripts run with Electron's own Node), or null. */
+/**
+ * Codex's npm script only starts a native binary — and that grandchild gets a console window of its own on Windows.
+ * The binary is started directly instead (hidden like everything else).
+ */
+function codexNative(dir: string): string | null {
+  const exe = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  const roots = [path.join(dir, 'vendor')];
+  try {
+    for (const d of fs.readdirSync(path.join(dir, 'node_modules', '@openai'))) if (d.startsWith('codex-')) roots.push(path.join(dir, 'node_modules', '@openai', d, 'vendor'));
+  } catch {
+    /* no platform package */
+  }
+  for (const r of roots) {
+    let triples: string[] = [];
+    try {
+      triples = fs.readdirSync(r);
+    } catch {
+      continue;
+    }
+    for (const t of triples) for (const sub of ['bin', 'codex']) if (fs.existsSync(path.join(r, t, sub, exe))) return path.join(r, t, sub, exe);
+  }
+  return null;
+}
+
 export function agentCommand(id: AgentId): { file: string; args: string[]; env?: NodeJS.ProcessEnv } | null {
   const pkg = NPM_PACKAGES[id];
   const root = globalNodeModules();
   if (pkg && root) {
     const dir = path.join(root, pkg);
+    if (id === 'codex') {
+      const native = codexNative(dir);
+      if (native) return { file: native, args: [] };
+    }
     try {
       const bin = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).bin;
       const rel = typeof bin === 'string' ? bin : Object.values(bin ?? {})[0];
       if (typeof rel === 'string') {
         const file = path.join(dir, rel);
         if (fs.existsSync(file)) {
-          if (/\.(c|m)?js$/.test(file)) return { file: process.execPath, args: [file], env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } };
+          // Gemini restarts itself in a new Node process (a visible console on Windows): it may not
+          if (/\.(c|m)?js$/.test(file)) return { file: process.execPath, args: [file], env: { ...process.env, ELECTRON_RUN_AS_NODE: '1', GEMINI_CLI_NO_RELAUNCH: 'true' } };
           return { file, args: [] };
         }
       }
@@ -55,6 +84,9 @@ export function agentCommand(id: AgentId): { file: string; args: string[]; env?:
     }
   }
   if (id === 'aider') {
+    // aider.exe is a launcher that starts Python in a console of its own: run the tool's Python directly
+    const venv = process.platform === 'win32' && process.env.APPDATA ? path.join(process.env.APPDATA, 'uv', 'tools', 'aider-chat', 'Scripts', 'python.exe') : null;
+    if (venv && fs.existsSync(venv)) return { file: venv, args: ['-m', 'aider'] };
     const exe = process.platform === 'win32' ? 'aider.exe' : 'aider';
     for (const dir of [path.join(os.homedir(), '.local', 'bin'), ...(process.env.PATH ?? '').split(path.delimiter)]) {
       const f = path.join(dir, exe);
@@ -151,6 +183,22 @@ const INSTALL: Partial<Record<AgentId, string>> = {
 };
 const LOGIN: Partial<Record<AgentId, string>> = { codex: 'codex login', gemini: 'gemini', opencode: 'opencode auth login' };
 
+/** Installed version, read from the package files — nothing is started for it. */
+function agentVersion(id: AgentId): string | undefined {
+  const pkg = NPM_PACKAGES[id];
+  const root = globalNodeModules();
+  try {
+    if (pkg && root) return JSON.parse(fs.readFileSync(path.join(root, pkg, 'package.json'), 'utf8')).version;
+    if (id === 'aider' && process.env.APPDATA) {
+      const site = path.join(process.env.APPDATA, 'uv', 'tools', 'aider-chat', 'Lib', 'site-packages');
+      return fs.readdirSync(site).find((d) => /^aider_chat-.*\.dist-info$/.test(d))?.match(/aider_chat-(.+)\.dist-info/)?.[1];
+    }
+  } catch {
+    /* unknown */
+  }
+  return undefined;
+}
+
 let cache: { at: number; list: AgentInfo[] } | null = null;
 
 /** All agents (Claude Code first): installed or not, ready or not, their models. Cached for 5 minutes. */
@@ -161,12 +209,12 @@ export async function listAgents(refresh = false): Promise<AgentInfo[]> {
     ids.map(async (id): Promise<AgentInfo> => {
       const installed = !!agentCommand(id);
       if (!installed) return { id, name: AGENT_NAMES[id], installed, ready: false, status: 'не установлен', models: [], install: INSTALL[id], login: LOGIN[id] };
-      const [version, ready, ms] = await Promise.all([runQuick(id, ['--version']), readiness(id), models(id)]);
+      const [ready, ms] = await Promise.all([readiness(id), models(id)]);
       return {
         id,
         name: AGENT_NAMES[id],
         installed,
-        version: version.replace(/\x1b\[[0-9;]*m/g, '').trim().split(/\r?\n/)[0]?.replace(/^[^\d]*/, '') || undefined,
+        version: agentVersion(id),
         ...ready,
         models: ms,
         install: INSTALL[id],
