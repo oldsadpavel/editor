@@ -2,7 +2,7 @@
   "name": "claude-editor",
   "version": "0.2.8",
   "private": true,
-  "description": "MPI — Meat Proxy Interface: a code editor built around Claude Code chats",
+  "description": "MPI — Meat Proxy Interface: a code editor built around AI agent chats (Claude Code)",
   "main": "dist/main/main.mjs",
   "type": "module",
   "scripts": {
