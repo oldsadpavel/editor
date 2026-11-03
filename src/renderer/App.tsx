@@ -36,6 +36,8 @@ const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
 function EditorButton() {
   const hidden = useStore((s) => !!s.app!.ui.editorHidden);
   const files = useStore((s) => s.files.length);
+  const off = useStore((s) => !!s.app!.ui.hiddenButtons?.includes('editor'));
+  if (off && !hidden) return null;
   return (
     <button
       className={`tb-btn ${hidden ? '' : 'on'}`}
@@ -62,6 +64,8 @@ function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: 
   );
   const todo = useStore((s) => (id === 'setup' ? s.setup.filter((i) => i.level === 'todo').length : 0));
   const waiting = useStore((s) => (id === 'chat' ? Object.values(s.chats).some((c) => c.status === 'waiting') : false));
+  const hidden = useStore((s) => !!s.app!.ui.hiddenButtons?.includes(id));
+  if (hidden && !visible && !alerts && !waiting) return null;
   const cls = ['tb-btn', visible ? 'on' : '', alerts ? (visible ? 'alert-open' : 'alert') : '', waiting && !visible ? 'alert' : '', todo && !visible ? 'attn' : ''].join(' ');
   return (
     <button className={cls} onClick={() => togglePanel(id)} title={`${visible ? 'Скрыть' : 'Показать'}: ${label}`}>
@@ -239,10 +243,55 @@ function Toast() {
   return <div className={`toast ${t.kind}`}>{t.text}</div>;
 }
 
+const NO_HIDDEN: string[] = [];
+
+/** Every top-bar button the user can hide; «Настройка» first since that's where people look for it. */
+const CUSTOMIZABLE: { id: string; label: string }[] = [
+  ...TOOLBAR.flatMap((b) => (b.id === 'chat' ? [{ id: b.id, label: `${b.icon} ${b.label}` }, { id: 'editor', label: '📝 Редактор' }] : [{ id: b.id, label: `${b.icon} ${b.label}` }])),
+  { id: 'meters', label: '▤ Лимиты (Сессия / Неделя)' },
+  { id: 'layout', label: '▦ Раскладка' },
+];
+
+/** ⋯ / right click on the top bar: which buttons to show. A hidden panel button still appears when its panel is open or has an error. */
+function TopbarCustomize({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
+  const hidden = useStore((s) => s.app!.ui.hiddenButtons ?? NO_HIDDEN);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && onClose();
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, []);
+  const toggle = (id: string, show: boolean) => setUi({ hiddenButtons: show ? hidden.filter((h) => h !== id) : [...hidden, id] });
+  return (
+    <div className="tb-customize" ref={box} style={{ left: Math.max(8, Math.min(x, window.innerWidth - 270)), top: y }}>
+      <div className="tb-customize-head">Кнопки верхней панели</div>
+      {CUSTOMIZABLE.map((b) => (
+        <label key={b.id}>
+          <input type="checkbox" checked={!hidden.includes(b.id)} onChange={(e) => toggle(b.id, e.target.checked)} />
+          {b.label}
+        </label>
+      ))}
+      <div className="tb-customize-note">Скрытая кнопка всё равно появится, если её панель открыта или в ней ошибка.</div>
+      {hidden.length > 0 && (
+        <button className="btn small" onClick={() => setUi({ hiddenButtons: [] })}>
+          Показать все
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function App() {
   const app = useStore((s) => s.app);
   const [ready, setReady] = useState(false);
   const [, rerender] = useState(0);
+  const [customize, setCustomize] = useState<{ x: number; y: number } | null>(null);
+  const hiddenButtons = useStore((s) => s.app?.ui.hiddenButtons ?? NO_HIDDEN);
 
   useEffect(() => {
     init().then(() => setReady(true));
@@ -268,7 +317,7 @@ export function App() {
   if (!ready || !app) return <Boot />;
   return (
     <div className="app">
-      <div className="topbar">
+      <div className="topbar" onContextMenu={(e) => (e.preventDefault(), setCustomize({ x: e.clientX, y: e.clientY + 6 }))}>
         <div className="tb-group">
           {TOOLBAR.map((b) => (
             <Fragment key={b.id}>
@@ -279,9 +328,12 @@ export function App() {
         </div>
         <div className="grow" />
         <UpdateButton />
-        <UsageMeters />
-        <LayoutButton />
+        {!hiddenButtons.includes('meters') && <UsageMeters />}
+        {!hiddenButtons.includes('layout') && <LayoutButton />}
         <AuthButton />
+        <button className="icon-btn" title="Какие кнопки показывать на верхней панели (или правый клик по панели)" onClick={(e) => setCustomize({ x: e.clientX - 230, y: e.clientY + 14 })}>
+          ⋯
+        </button>
         <button className="icon-btn help-btn" title="Инструкция" onClick={() => set({ help: 'general' })}>
           ?
         </button>
@@ -294,6 +346,7 @@ export function App() {
       <CloudModal />
       <McpModal />
       <Switcher />
+      {customize && <TopbarCustomize {...customize} onClose={() => setCustomize(null)} />}
       <Toast />
     </div>
   );

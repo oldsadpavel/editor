@@ -901,3 +901,10 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 /* «вывод команды уйдёт Claude через N с» above the question box */
 .shell-autosend { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin-bottom: 6px; border: 1px solid rgba(74, 158, 255, 0.5); background: rgba(74, 158, 255, 0.1); border-radius: 6px; font-size: 12px; }
 .shell-autosend label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+
+/* ⋯ which top-bar buttons to show */
+.tb-customize { position: fixed; z-index: 110; width: 260px; background: var(--bg2); border: 1px solid #4e5157; border-radius: 8px; padding: 8px 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5); display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.tb-customize-head { font-weight: 600; margin-bottom: 4px; }
+.tb-customize label { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 2px 0; }
+.tb-customize-note { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.tb-customize .btn { align-self: flex-start; margin-top: 4px; }

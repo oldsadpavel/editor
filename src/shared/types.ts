@@ -498,6 +498,8 @@ export interface AppState {
     editorHidden?: boolean;
     /** After `!` commands finish, send their output to Claude by itself (after a short countdown). Default on. */
     autoSendShell?: boolean;
+    /** Top-bar buttons the user hid (panel ids, 'editor', 'meters', 'layout'). */
+    hiddenButtons?: string[];
     /** Project tree: the selected row and the scroll position, restored after a restart. */
     treeSelected?: string;
     treeScroll?: number;
