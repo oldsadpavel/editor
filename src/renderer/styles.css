@@ -897,3 +897,7 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 /* icon-only buttons in the question box bar (the tooltip says what they do) */
 .btn.icon-only { min-width: 30px; padding-left: 8px; padding-right: 8px; font-size: 14px; line-height: 1; justify-content: center; }
 .btn.send-btn { min-width: 40px; font-size: 15px; }
+
+/* «вывод команды уйдёт Claude через N с» above the question box */
+.shell-autosend { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin-bottom: 6px; border: 1px solid rgba(74, 158, 255, 0.5); background: rgba(74, 158, 255, 0.1); border-radius: 6px; font-size: 12px; }
+.shell-autosend label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }

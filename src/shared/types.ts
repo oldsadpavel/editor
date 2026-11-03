@@ -167,6 +167,8 @@ export interface ChatSnapshot {
   suggestion?: string;
   /** Context size of the last request, to estimate how long a compaction takes. */
   contextTokens?: number;
+  /** Outputs of `!` commands not sent to Claude yet (they go with the next message). */
+  shellPending?: number;
   cwd: string;
   title: string;
   status: ChatStatus;
@@ -494,6 +496,8 @@ export interface AppState {
     chatSplit?: 'auto' | 'cols' | 'rows';
     /** The code editor is hidden: the chat (or another block) takes its space. Opening a file shows it again. */
     editorHidden?: boolean;
+    /** After `!` commands finish, send their output to Claude by itself (after a short countdown). Default on. */
+    autoSendShell?: boolean;
     /** Project tree: the selected row and the scroll position, restored after a restart. */
     treeSelected?: string;
     treeScroll?: number;

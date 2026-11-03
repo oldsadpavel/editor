@@ -4,7 +4,7 @@ import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
 import { isFavorite, openFavorite, removeFavorite, toggleFavorite } from '../favorites';
 import { PlanCard, ShellCard, TasksBar, ThinkingBlock, TodoCard, ToolDetails, openClaudeConfig, rewindTo } from './ChatExtras';
-import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
+import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setUi, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { SoundButton } from './SoundButton';
@@ -1210,6 +1210,14 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           if (e.key === 'Escape' && busy) void call('chat:interrupt', chat.sessionId);
         }}
       />
+      <ShellAutoSend
+        chat={chat}
+        typing={!!text.trim()}
+        send={(t) => {
+          onSent();
+          void sendPrompt(chat.sessionId, t, { permissionMode: mode || undefined, model, effort });
+        }}
+      />
       <div className="composer-bar">
         <select value={model} onChange={(e) => (setModel(e.target.value), void call('chat:options', chat.sessionId, { model: e.target.value }))} title="Какая модель отвечает (меняется на лету, история чата сохраняется)">
           {MODELS.map((m) => (
@@ -1307,6 +1315,71 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           ➤
         </button>
       </div>
+    </div>
+  );
+}
+
+const SHELL_SEND_S = 5;
+
+/**
+ * Outputs of `!` commands wait for the next message. When the commands are done, this sends them to Claude by itself
+ * after a short countdown — restarted by every new command, paused while the user types (then they go with that
+ * question), and only when Claude isn't busy. «Не отправлять» keeps them for the next message.
+ */
+function ShellAutoSend({ chat, typing, send }: { chat: ChatSnapshot; typing: boolean; send: (text: string) => void }) {
+  const auto = useStore((s) => s.app?.ui.autoSendShell ?? true);
+  const pending = chat.shellPending ?? 0;
+  const running = chat.turns.some((t) => t.shell?.running);
+  const busy = chat.status === 'running' || chat.status === 'waiting';
+  const [left, setLeft] = useState(SHELL_SEND_S);
+  const [skipped, setSkipped] = useState(0);
+  // these outputs were already sent (the snapshot catches up a moment later): never twice
+  const sent = useRef(0);
+  if (!pending) sent.current = 0;
+  const go = () => {
+    if (sent.current === pending) return;
+    sent.current = pending;
+    send(text);
+  };
+  const armed = pending > 0 && pending !== skipped && !running && !busy;
+  const text = pending > 1 ? 'Выполнил команды — вывод выше. Посмотри и продолжай.' : 'Выполнил команду — вывод выше. Посмотри и продолжай.';
+  // every new output (another command) starts the countdown again
+  useEffect(() => setLeft(SHELL_SEND_S), [pending, running]);
+  useEffect(() => {
+    if (!armed || !auto || typing) return;
+    if (left <= 0) return go();
+    const t = setTimeout(() => setLeft((x) => x - 1), 1000);
+    return () => clearTimeout(t);
+  }, [armed, auto, typing, left]);
+  if (!pending || pending === skipped || sent.current === pending) return null;
+  return (
+    <div className="shell-autosend">
+      <span>
+        💻 {pending > 1 ? `Вывод ${pending} команд` : 'Вывод команды'}
+        {running
+          ? ' — ждём, пока команда закончится'
+          : busy
+            ? ' уйдёт Claude, когда он освободится'
+            : typing
+              ? ' уйдёт вместе с вашим вопросом'
+              : auto
+                ? ` уйдёт Claude через ${left} с`
+                : ' уйдёт с вашим следующим вопросом'}
+      </span>
+      <div className="grow" />
+      {!running && !busy && (
+        <button className="btn primary small" onClick={go} title="Отправить вывод Claude сейчас">
+          ➤ Отправить сейчас
+        </button>
+      )}
+      {auto && !running && !busy && !typing && (
+        <button className="btn small" onClick={() => setSkipped(pending)} title="Не отправлять сейчас: вывод уйдёт с вашим следующим вопросом">
+          Не отправлять
+        </button>
+      )}
+      <label className="muted small" title="Сразу отправлять вывод `!`-команд Claude, когда они закончились">
+        <input type="checkbox" checked={auto} onChange={(e) => setUi({ autoSendShell: e.target.checked })} /> авто
+      </label>
     </div>
   );
 }

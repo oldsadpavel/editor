@@ -215,6 +215,7 @@ class ChatSession {
       tasks: this.tasks.length ? this.tasks : undefined,
       suggestion: this.suggestion,
       contextTokens: this.contextTokens,
+      shellPending: this.shellContext.length || undefined,
       approvals: this.approvals,
       pending: [...this.pending.values()].map((p) => p.req),
     };
