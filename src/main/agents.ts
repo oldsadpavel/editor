@@ -197,6 +197,13 @@ export function installAgent(id: AgentId): Promise<string> {
   });
 }
 
+/** Signs an agent out (only Codex has a command for it). */
+export async function logoutAgent(id: AgentId) {
+  if (id !== 'codex') throw new Error('Выход для этого агента — в его собственных настройках');
+  await runQuick('codex', ['logout']);
+  cache = null;
+}
+
 /** Login needs the agent's own interactive screen: it opens in a terminal window. */
 export function openLogin(id: AgentId) {
   const cmd = LOGIN[id];

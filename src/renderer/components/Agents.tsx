@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AgentId, AgentInfo, ChatSnapshot } from '../../shared/types';
 import { call } from '../api';
 import { closeChat, get, loadAgents, newChat, openFile, set, toast, useStore } from '../store';
@@ -133,6 +133,100 @@ const AIDER_KEYS_TEMPLATE = `# Ключи для Aider (MPI). Уберите «#
 #   - openrouter=sk-or-...
 `;
 
+/**
+ * The account button's menu: every agent's login in one place — Claude Code (its own sign-in options), Codex, Gemini,
+ * OpenCode, Aider — plus the settings cloud and the agents window.
+ */
+export function AccountsPopover({ x, y, claudeItems, onClose }: { x: number; y: number; claudeItems: { label: string; action: () => unknown; danger?: boolean }[]; onClose: () => void }) {
+  const auth = useStore((s) => s.auth);
+  const agents = useStore((s) => s.agents);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    void loadAgents(true);
+    const close = (e: MouseEvent) => !box.current?.contains(e.target as Node) && onClose();
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, []);
+  const act = (f: () => unknown) => () => {
+    onClose();
+    void f();
+  };
+  const login = (a: AgentInfo) => act(() => call('agents:login', a.id).then(() => toast(`${a.name}: войдите в открывшемся окне терминала`), (e) => toast(e.message, 'error')));
+  const keysFile = async (a: AgentInfo) => {
+    if (!a.keysFile) return;
+    if (!(await call<boolean>('fs:exists', a.keysFile))) await call('fs:write', a.keysFile, AIDER_KEYS_TEMPLATE);
+    await openFile(a.keysFile);
+  };
+  const [first, ...restClaude] = claudeItems;
+  return (
+    <div className="accounts-pop" ref={box} style={{ left: Math.max(8, Math.min(x - 300, window.innerWidth - 400)), top: y }}>
+      <div className="acc-row">
+        <span className={`acc-dot ${auth?.loggedIn ? 'ok' : 'off'}`} />
+        <div className="acc-main">
+          <b>Claude Code</b>
+          <span className="muted small">{auth?.loggedIn ? `${auth.email ?? ''}${auth.method ? ' · ' + auth.method : ''}` : 'вход не выполнен'}</span>
+        </div>
+      </div>
+      <div className="acc-actions">
+        {[first, ...restClaude].filter(Boolean).map((it) => (
+          <button key={it.label} className={`btn small ${it.danger ? 'danger' : ''}`} onClick={act(it.action)}>
+            {it.label.replace(/ \(.*\)$/, '')}
+          </button>
+        ))}
+      </div>
+      {agents.map((a) => (
+        <div key={a.id} className="acc-agent">
+          <div className="acc-row">
+            <span className={`acc-dot ${!a.installed ? 'off' : a.ready ? 'ok' : 'warn'}`} />
+            <div className="acc-main">
+              <b>{a.name}</b>
+              <span className="muted small">{a.installed ? a.status : 'не установлен'}</span>
+            </div>
+            <div className="acc-actions inline">
+              {!a.installed && (
+                <button className="btn small" onClick={act(() => set({ showAgents: true }))}>
+                  Установить…
+                </button>
+              )}
+              {a.installed && a.login && (
+                <button className="btn small" onClick={login(a)}>
+                  {a.id === 'opencode' ? 'Добавить ключ' : a.ready ? 'Сменить' : 'Войти'}
+                </button>
+              )}
+              {a.installed && a.id === 'codex' && a.ready && (
+                <button className="btn small danger" onClick={act(() => call('agents:logout', 'codex').then(() => loadAgents(true)))}>
+                  Выйти
+                </button>
+              )}
+              {a.installed && a.keysFile && (
+                <button className="btn small" onClick={act(() => keysFile(a))}>
+                  Ключи
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="acc-footer">
+        <button className="btn small" onClick={act(() => set({ showCloud: true }))}>
+          ☁ Облако настроек…
+        </button>
+        <button className="btn small" onClick={act(() => set({ showAgents: true }))}>
+          ⚙ Агенты…
+        </button>
+        <button className="btn small" onClick={() => void loadAgents(true).then(() => call('auth:status').then((a: any) => set({ auth: a })))}>
+          ⟳ Обновить
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** ⚙ Агенты: which coding agents are installed and logged in; install, log in, keys. */
 export function AgentsModal() {
   const open = useStore((s) => s.showAgents);
@@ -186,7 +280,7 @@ export function AgentsModal() {
             )}
             {a.installed && a.login && (
               <button className="btn small" onClick={() => void call('agents:login', a.id).then(() => toast('Войдите в открывшемся окне терминала, затем нажмите «Обновить»'))}>
-                {a.ready ? 'Сменить вход' : 'Войти'}
+                {a.id === 'opencode' ? 'Добавить ключ' : a.ready ? 'Сменить вход' : 'Войти'}
               </button>
             )}
             {a.installed && a.keysFile && (

@@ -142,6 +142,7 @@ handle('fs:exists', (p: string) => fs.existsSync(p));
 handle('agents:list', (refresh?: boolean) => agents.listAgents(refresh));
 handle('agents:install', (id: AgentId) => agents.installAgent(id));
 handle('agents:login', (id: AgentId) => agents.openLogin(id));
+handle('agents:logout', (id: AgentId) => agents.logoutAgent(id));
 handle('sounds:system', () => systemSounds());
 handle('fs:watch', (p: string) => watchFile(p));
 handle('fs:unwatch', (p: string) => unwatchFile(p));

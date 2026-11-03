@@ -15,10 +15,10 @@ import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { Switcher } from './components/Switcher';
-import { AgentSwitchModal, AgentsModal } from './components/Agents';
+import { AccountsPopover, AgentSwitchModal, AgentsModal } from './components/Agents';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
-import { get, init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
+import { get, init, isUnread, loadAgents, set, setUi, toast, togglePanel, useStore } from './store';
 import { Markdown } from './util';
 
 const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
@@ -106,6 +106,8 @@ function UpdateButton() {
  */
 function AuthButton() {
   const auth = useStore((s) => s.auth);
+  const agentsReady = useStore((s) => s.agents.filter((x) => x.installed && x.ready).length);
+  useEffect(() => void loadAgents(), []);
   const [busy, setBusy] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
@@ -123,8 +125,6 @@ function AuthButton() {
     { label: auth?.loggedIn ? 'Сменить аккаунт (claude.ai, подписка)' : 'Войти через claude.ai (подписка)', action: () => run('Ждём вход в браузере…', 'auth:login', 'claudeai') },
     { label: 'Войти через Anthropic Console (оплата по API)', action: () => run('Ждём вход в браузере…', 'auth:login', 'console') },
     { label: 'Войти через SSO (корпоративный вход)', action: () => run('Ждём вход в браузере…', 'auth:login', 'sso') },
-    { label: 'Обновить статус входа', action: () => run('Проверяю…', 'auth:status') },
-    { label: '☁ Облако настроек (Insider или свой сервер)…', action: () => set({ showCloud: true }) },
     ...(auth?.loggedIn
       ? [
           {
@@ -155,7 +155,8 @@ function AuthButton() {
       ) : auth.loggedIn ? (
         <button className="auth ok auth-btn" title={`${auth.method ?? ''} · ${auth.orgName ?? ''}\n${auth.cliPath ?? ''}\nНажмите — сменить аккаунт или выйти`} onClick={open}>
           <span className="auth-avatar">{(auth.email ?? '?')[0].toUpperCase()}</span>
-          <span className="auth-name">{auth.email?.split('@')[0]}</span> ▾
+          <span className="auth-name">{auth.email?.split('@')[0]}</span>
+          {agentsReady > 0 && <span className="auth-more" title="Ещё подключено агентов">+{agentsReady}</span>} ▾
         </button>
       ) : (
         <span className="auth-login">
@@ -167,7 +168,7 @@ function AuthButton() {
           </button>
         </span>
       )}
-      {menu && <ContextMenu x={menu.x} y={menu.y} items={items} onClose={() => setMenu(null)} />}
+      {menu && <AccountsPopover x={menu.x} y={menu.y} claudeItems={items} onClose={() => setMenu(null)} />}
     </>
   );
 }
