@@ -41,6 +41,7 @@ export function SoundButton({ sessionId }: { sessionId: string }) {
   const volume = useStore((s) => s.app?.sound?.volume ?? 0.6);
   const sound = useStore((s) => s.app?.sound);
   const chatSounds = useStore((s) => s.app?.chatSounds);
+  const notifications = useStore((s) => s.app?.notifications !== false);
   const [open, setOpen] = useState(false);
   const [system, setSystem] = useState<SoundOption[]>([]);
   const box = useRef<HTMLSpanElement>(null);
@@ -96,6 +97,10 @@ export function SoundButton({ sessionId }: { sessionId: string }) {
               onChange={(e) => void saveApp({ sound: { ...sound, volume: Number(e.target.value) / 100 } })}
               onMouseUp={() => playSound(effective, volume)}
             />
+          </label>
+          <label className="sound-check" title="Всплывающее уведомление Windows, когда ответ готов, а окно MPI свёрнуто или в фоне. У чата «без звука» его не будет">
+            <input type="checkbox" checked={notifications} onChange={(e) => void saveApp({ notifications: e.target.checked })} />
+            Уведомления Windows, когда ответ готов
           </label>
           <div className="sound-row">
             <button className="btn small" onClick={() => playSound(effective === 'none' ? def : effective, volume || 0.6)}>

@@ -466,6 +466,8 @@ export interface AppState {
   chatMeta: Record<string, ChatMeta>;
   /** «Answer ready» sound: default for all chats ('none' | 'synth:<name>' | 'file:<path>') and volume 0…1. */
   sound?: { default?: string; volume?: number };
+  /** Windows / macOS pop-up when an answer is ready while the window is away (default on). */
+  notifications?: boolean;
   /** A chat's own «answer ready» sound (absent — the default one). */
   chatSounds?: Record<string, string>;
   deployTargets: Record<string, DeployTarget>;
@@ -567,6 +569,7 @@ export type MainEvent =
   | { type: 'update'; exe: string }
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
+  | { type: 'openChat'; sessionId: string }
   | { type: 'sessionsChanged'; cwd: string }
   | { type: 'cloud'; status: CloudStatus }
   | { type: 'serverTests'; reports: Record<string, ServerTestReport> };

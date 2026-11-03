@@ -940,3 +940,4 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .acc-agent { border-top: 1px solid var(--line-soft); padding-top: 6px; }
 .acc-footer { display: flex; gap: 6px; border-top: 1px solid var(--line-soft); padding-top: 7px; margin-top: 2px; }
 .auth-more { font-size: 10px; padding: 0 4px; border-radius: 6px; background: #2f6f4f; color: #e8fff2; }
+.sound-pop label.sound-check { flex-direction: row; align-items: center; gap: 6px; cursor: pointer; color: var(--fg); }

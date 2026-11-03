@@ -26,7 +26,7 @@ import type {
 } from '../shared/types';
 import { bridge, call } from './api';
 import { isImage } from './clipboard';
-import { playDone } from './sounds';
+import { playDone, soundFor } from './sounds';
 
 export interface OpenFile {
   path: string;
@@ -697,7 +697,7 @@ export function openLightbox(items: LightboxItem[], index = 0) {
 /** A chat counts as "being read" only when its tab is active, the panel is open and the window has focus. */
 export function chatIsVisible(id: string) {
   const shown = state.app?.activeChat === id || !!state.app?.chatPanes?.includes(id);
-  return shown && !!state.app?.ui.visible.chat && document.hasFocus();
+  return shown && !!state.app?.ui.visible.chat && document.hasFocus() && document.visibilityState === 'visible';
 }
 
 /** A live update came for a chat whose earlier turns we don't have: take the whole list once. */
@@ -733,6 +733,9 @@ function onEvent(e: MainEvent) {
       set((s) => ({ app: s.app && { ...s.app, chatMeta: { ...s.app.chatMeta, [e.sessionId]: e.meta } } }));
       if (chatIsVisible(e.sessionId)) markSeen(e.sessionId);
       else notifyDone(e.sessionId);
+      return;
+    case 'openChat':
+      void openChat(e.sessionId);
       return;
     case 'sessionsChanged':
       void loadSessions(e.cwd);
@@ -785,9 +788,9 @@ function onEvent(e: MainEvent) {
 
 function notifyDone(id: string) {
   const chat = state.chats[id];
-  if (!chat || !('Notification' in window)) return;
-  const n = new Notification(chat.status === 'error' ? 'Чат завершился с ошибкой' : 'Claude закончил', { body: chat.title, silent: true });
-  n.onclick = () => void openChat(id);
+  // «без звука» on a chat means quiet altogether: no pop-up either
+  if (!chat || state.app?.notifications === false || soundFor(id) === 'none') return;
+  void call('notify:done', id, chat.status === 'error' ? 'Чат завершился с ошибкой' : 'Ответ готов', chat.title).catch(() => {});
 }
 
 export async function init() {

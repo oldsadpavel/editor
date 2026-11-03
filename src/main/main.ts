@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, clipboard, app, dialog, ipcMain, net, protocol, shell } from 'electron';
+import { BrowserWindow, Menu, Notification, clipboard, app, dialog, ipcMain, net, protocol, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -140,6 +140,17 @@ handle('fs:write', (p: string, text: string) => {
 });
 handle('fs:exists', (p: string) => fs.existsSync(p));
 handle('agents:list', (refresh?: boolean) => agents.listAgents(refresh));
+handle('notify:done', (sessionId: string, title: string, body: string) => {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body, silent: true });
+  n.on('click', () => {
+    if (win?.isMinimized()) win.restore();
+    win?.show();
+    win?.focus();
+    win?.webContents.send('event', { type: 'openChat', sessionId });
+  });
+  n.show();
+});
 handle('agents:install', (id: AgentId) => agents.installAgent(id));
 handle('agents:login', (id: AgentId) => agents.openLogin(id));
 handle('agents:logout', (id: AgentId) => agents.logoutAgent(id));
