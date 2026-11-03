@@ -2,12 +2,12 @@
 
 <h1 align="center">MPI — Meat Proxy Interface</h1>
 
-<p align="center"><i>Редактор кода вокруг чатов с Claude Code — для того, кто нажимает F7, пока ИИ думает.</i></p>
+<p align="center"><i>Редактор кода вокруг чатов с Claude Code: ИИ думает, кожаный нажимает кнопки.</i></p>
 
 MPI — десктопный редактор в духе PhpStorm, построенный вокруг чатов Claude Code. В нём одновременно идут несколько
 чатов по каждому проекту, рядом открыты файлы, а панели следят за тем, что происходит дальше: пуши, деплои, тесты,
-ключи и ошибки. Название — шутка: ИИ всё придумывает, а человек служит ему «мясным прокси» — вставляет модуль в 1С,
-жмёт F7, присылает скриншот. MPI делает эту работу удобной.
+ключи и ошибки. Название — шутка: ИИ всё придумывает, а человек служит ему «мясным прокси» — запускает команды,
+жмёт кнопки, проверяет результат и присылает скриншоты. MPI делает эту работу удобной.
 
 *A PhpStorm-style desktop editor built around Claude Code chats: several chats per project, files next to them,
 and panels that follow pushes, deploys, tests, keys and problems. The UI is in Russian.*
@@ -73,5 +73,3 @@ Electron + React + CodeMirror 6 + [Claude Agent SDK](https://www.npmjs.com/packa
 Автор — oldsadpavel, [oldsadpavel@gmail.com](mailto:oldsadpavel@gmail.com).
 
 Лицензия [MIT](LICENSE).
-
-MPI — независимый проект, не связанный с Anthropic. Claude и Claude Code — торговые марки Anthropic.
