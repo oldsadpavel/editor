@@ -59,7 +59,7 @@
   "author": "oldsadpavel",
   "build": {
     "appId": "com.oldsadpavel.claude-editor",
-    "productName": "Claude Editor",
+    "productName": "MPI",
     "directories": {
       "output": "release"
     },
@@ -80,13 +80,14 @@
       ]
     },
     "portable": {
-      "artifactName": "ClaudeEditor-${version}-portable.exe"
+      "artifactName": "MPI-${version}-portable.exe"
     },
     "mac": {
       "target": [
         "zip"
       ],
-      "category": "public.app-category.developer-tools"
+      "category": "public.app-category.developer-tools",
+      "artifactName": "MPI-${version}-${arch}-mac.zip"
     },
     "npmRebuild": false
   }

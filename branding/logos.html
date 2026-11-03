@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin: 0; background: #1e1f22; color: #dfe1e5; font: 14px system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(3, 300px); gap: 26px; padding: 28px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cell b { font-size: 15px; }
+  .cell span { color: #9da0a8; font-size: 12px; text-align: center; max-width: 260px; }
+  .row { display: flex; gap: 14px; align-items: flex-end; }
+  .light { background: #f2f0ec; border-radius: 10px; padding: 6px; }
+</style>
+</head>
+<body>
+<div class="grid">
+
+<!-- 1. Remote pressed by a finger -->
+<div class="cell"><div class="row">
+<svg id="l1" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <rect x="86" y="44" width="84" height="170" rx="30" fill="#45484d"/>
+  <circle cx="128" cy="76" r="5" fill="#ff6b4a"/>
+  <circle cx="128" cy="122" r="26" fill="#d97757"/>
+  <text x="128" y="133" font-size="30" text-anchor="middle" fill="#fff" font-family="Segoe UI Symbol, sans-serif">✳</text>
+  <g fill="#6b6e75"><rect x="104" y="160" width="18" height="12" rx="4"/><rect x="134" y="160" width="18" height="12" rx="4"/><rect x="104" y="180" width="18" height="12" rx="4"/><rect x="134" y="180" width="18" height="12" rx="4"/></g>
+  <path d="M150 150 C150 128 172 126 174 140 L178 168 C190 162 204 168 202 184 L196 222 L150 222 C140 206 138 190 148 178 Z" fill="#c8875e" stroke="#8b5a3c" stroke-width="3"/>
+  <path d="M150 150 L150 132 C150 118 166 118 166 132 L168 158" fill="#c8875e" stroke="#8b5a3c" stroke-width="3"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#l1"/></svg></div>
+<b>1. Палец на пульте</b><span>Пульт с главной кнопкой ✳, на неё жмёт кожаный палец</span></div>
+
+<!-- 2. Leather hand cursor -->
+<div class="cell"><div class="row">
+<svg id="l2" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#d97757"/>
+  <path d="M104 68 C104 54 124 54 124 68 L124 128 L128 128 L128 104 C128 92 146 92 146 104 L146 132 L150 132 L150 112 C150 100 168 100 168 112 L168 138 L172 138 L172 124 C172 112 190 112 190 124 L190 172 C190 202 170 220 142 220 L128 220 C106 220 94 206 84 188 L66 154 C60 142 72 132 84 140 L104 158 Z" fill="#8b5a3c" stroke="#3d2618" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M112 74 L112 150 M137 108 L137 140 M159 116 L159 144 M181 128 L181 150" stroke="#c8875e" stroke-width="3" stroke-dasharray="6 6" fill="none"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#l2"/></svg></div>
+<b>2. Кожаный курсор</b><span>Курсор-рука из кожи со строчкой: «кожаный» жмёт куда скажут</span></div>
+
+<!-- 3. Joystick -->
+<div class="cell"><div class="row">
+<svg id="l3" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <rect x="58" y="160" width="140" height="44" rx="14" fill="#8b5a3c"/>
+  <path d="M66 166 L190 166" stroke="#c8875e" stroke-width="3" stroke-dasharray="7 6"/>
+  <rect x="120" y="96" width="16" height="70" rx="6" fill="#9da0a8"/>
+  <circle cx="128" cy="86" r="34" fill="#d97757"/>
+  <circle cx="117" cy="75" r="9" fill="#f0a888" opacity="0.8"/>
+  <circle cx="82" cy="182" r="7" fill="#ff6b4a"/>
+  <circle cx="174" cy="182" r="7" fill="#4a9eff"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#l3"/></svg></div>
+<b>3. Джойстик</b><span>Кожаный корпус, терракотовый шар: управление вручную</span></div>
+
+<!-- 4. TV remote with LED and stitching -->
+<div class="cell"><div class="row">
+<svg id="l4" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#1e1f22" stroke="#d97757" stroke-width="6"/>
+  <g transform="rotate(-24 128 128)">
+    <rect x="92" y="38" width="72" height="180" rx="26" fill="#8b5a3c"/>
+    <rect x="100" y="46" width="56" height="164" rx="20" fill="none" stroke="#c8875e" stroke-width="3" stroke-dasharray="6 5"/>
+    <circle cx="128" cy="66" r="6" fill="#ff4d2e"/>
+    <circle cx="128" cy="108" r="20" fill="#d97757" stroke="#3d2618" stroke-width="3"/>
+    <g fill="#3d2618"><circle cx="114" cy="146" r="6"/><circle cx="142" cy="146" r="6"/><circle cx="114" cy="168" r="6"/><circle cx="142" cy="168" r="6"/><circle cx="128" cy="190" r="6"/></g>
+  </g>
+  <path d="M182 52 q14 6 18 20 M190 40 q22 10 26 32" stroke="#ff6b4a" stroke-width="5" fill="none" stroke-linecap="round"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#l4"/></svg></div>
+<b>4. Кожаный пульт</b><span>Пульт в кожаном чехле со строчкой, «сигнал» уходит в ИИ</span></div>
+
+<!-- 5. Monogram ПК -->
+<div class="cell"><div class="row">
+<svg id="l5" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#8b5a3c"/>
+  <rect x="38" y="38" width="180" height="180" rx="40" fill="none" stroke="#e8c09a" stroke-width="4" stroke-dasharray="9 7"/>
+  <text x="128" y="160" font-size="96" font-weight="800" text-anchor="middle" fill="#fff4ea" font-family="Segoe UI, Arial, sans-serif" letter-spacing="-4">ПК</text>
+  <circle cx="190" cy="66" r="12" fill="#d97757"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#l5"/></svg></div>
+<b>5. «ПК» на коже</b><span>Пульт Кожаного = ПК. Монограмма, тиснение и строчка</span></div>
+
+<!-- 6. Fingerprint button -->
+<div class="cell"><div class="row">
+<svg id="l6" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <circle cx="128" cy="128" r="78" fill="#d97757"/>
+  <circle cx="128" cy="128" r="78" fill="none" stroke="#f0a888" stroke-width="4" opacity="0.5"/>
+  <g fill="none" stroke="#3d2618" stroke-width="6" stroke-linecap="round">
+    <path d="M92 150 C86 104 112 84 132 86 C156 88 168 108 166 132"/>
+    <path d="M104 166 C100 140 102 106 130 104 C150 104 152 124 150 142"/>
+    <path d="M120 174 C116 156 116 124 130 122 C138 122 138 140 136 160"/>
+    <path d="M160 156 C158 166 154 174 148 180"/>
+  </g>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#l6"/></svg></div>
+<b>6. Отпечаток на кнопке</b><span>Большая кнопка с отпечатком пальца: всё делается кожаным пальцем</span></div>
+
+</div>
+</body>
+</html>

@@ -899,7 +899,7 @@ export function setRemote(sessionId: string, on: boolean) {
     const cli = claudeExecutable();
     if (!cli) throw new Error('Claude Code не найден');
     stopProcess(s);
-    const name = s.title.replace(/[^\p{L}\p{N} _.-]/gu, '').slice(0, 40) || 'Claude Editor';
+    const name = s.title.replace(/[^\p{L}\p{N} _.-]/gu, '').slice(0, 40) || 'MPI';
     s.remoteProc = remote.start({
       cli,
       sessionId: s.id,

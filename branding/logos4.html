@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin: 0; background: #1e1f22; color: #dfe1e5; font: 14px system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(3, 300px); gap: 26px; padding: 28px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cell b { font-size: 15px; }
+  .cell span { color: #9da0a8; font-size: 12px; text-align: center; max-width: 260px; }
+  .row { display: flex; gap: 14px; align-items: flex-end; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- the shared cabinet: purple body, neon-framed screen, control strip with two buttons and a coin slot -->
+    <g id="cab">
+      <rect x="24" y="24" width="208" height="208" rx="52" fill="#3a1d5c"/>
+      <rect x="44" y="50" width="168" height="120" rx="14" fill="#0a0f0a" stroke="#ff4fd8" stroke-width="5"/>
+      <rect x="44" y="184" width="168" height="30" rx="10" fill="#d97757"/>
+      <circle cx="80" cy="199" r="9" fill="#ff3b30"/><circle cx="108" cy="199" r="9" fill="#ffcc33"/>
+      <rect x="150" y="190" width="40" height="18" rx="3" fill="#2b1540"/><rect x="167" y="193" width="5" height="12" fill="#ffcc33"/>
+    </g>
+  </defs>
+</svg>
+<div class="grid">
+
+<div class="cell"><div class="row">
+<svg id="a" width="160" height="160" viewBox="0 0 256 256"><use href="#cab"/>
+  <text x="128" y="96" font-size="24" font-weight="900" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace">ХОД</text>
+  <text x="128" y="128" font-size="24" font-weight="900" text-anchor="middle" fill="#ffcc33" font-family="Consolas, monospace">КОЖАНОГО</text>
+  <text x="128" y="156" font-size="13" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace" opacity="0.8">▶ PRESS START</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#a"/></svg></div>
+<b>А. «Ход кожаного»</b><span>ИИ всё сделал и ждёт: теперь твой ход. Это ровно то, что происходит в «Тебе сделать»</span></div>
+
+<div class="cell"><div class="row">
+<svg id="b" width="160" height="160" viewBox="0 0 256 256"><use href="#cab"/>
+  <text x="128" y="94" font-size="22" font-weight="900" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace">ИГРОК 1:</text>
+  <text x="128" y="126" font-size="24" font-weight="900" text-anchor="middle" fill="#ffcc33" font-family="Consolas, monospace">КОЖАНЫЙ</text>
+  <text x="128" y="156" font-size="13" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace" opacity="0.8">ИГРОК 2: ИИ</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#b"/></svg></div>
+<b>Б. «Игрок 1: Кожаный»</b><span>Экран выбора игроков: первый — кожаный, второй — ИИ. Кооператив</span></div>
+
+<div class="cell"><div class="row">
+<svg id="c" width="160" height="160" viewBox="0 0 256 256"><use href="#cab"/>
+  <text x="128" y="96" font-size="23" font-weight="900" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace">КОЖАНЫЙ,</text>
+  <text x="128" y="128" font-size="24" font-weight="900" text-anchor="middle" fill="#ffcc33" font-family="Consolas, monospace">ЖМИ F7</text>
+  <text x="128" y="156" font-size="13" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace" opacity="0.8">▶ PRESS START</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#c"/></svg></div>
+<b>В. «Кожаный, жми F7»</b><span>Для тех, кто в теме 1С: самая частая просьба ИИ. Свой, внутренний юмор</span></div>
+
+<div class="cell"><div class="row">
+<svg id="d" width="160" height="160" viewBox="0 0 256 256"><use href="#cab"/>
+  <text x="128" y="96" font-size="23" font-weight="900" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace">КОЖАНЫЙ</text>
+  <text x="128" y="128" font-size="24" font-weight="900" text-anchor="middle" fill="#ffcc33" font-family="Consolas, monospace">ГОТОВ?</text>
+  <text x="128" y="156" font-size="13" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace" opacity="0.8">▶ PRESS START</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#d"/></svg></div>
+<b>Г. «Кожаный готов?»</b><span>Классический вопрос перед раундом. Коротко и однозначно</span></div>
+
+<div class="cell"><div class="row">
+<svg id="e" width="160" height="160" viewBox="0 0 256 256"><use href="#cab"/>
+  <text x="128" y="100" font-size="34" font-weight="900" text-anchor="middle" fill="#ffcc33" font-family="Consolas, monospace">1UP</text>
+  <text x="128" y="134" font-size="22" font-weight="900" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace">КОЖАНЫЙ</text>
+  <text x="128" y="158" font-size="13" text-anchor="middle" fill="#ff4fd8" font-family="Consolas, monospace">♥ ♥ ♥</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#e"/></svg></div>
+<b>Д. «1UP Кожаный»</b><span>Как счётчик игрока в аркаде, с тремя жизнями. Крупное «1UP» видно и на маленькой иконке</span></div>
+
+<div class="cell"><div class="row">
+<svg id="f" width="160" height="160" viewBox="0 0 256 256"><use href="#cab"/>
+  <g fill="#ffcc33" shape-rendering="crispEdges" transform="translate(98 66)">
+    <rect x="12" y="0" width="8" height="36"/><rect x="20" y="20" width="8" height="16"/><rect x="28" y="22" width="8" height="14"/><rect x="36" y="24" width="8" height="12"/>
+    <rect x="4" y="30" width="8" height="8"/><rect x="8" y="36" width="40" height="20"/><rect x="12" y="56" width="32" height="8"/>
+  </g>
+  <text x="128" y="156" font-size="15" font-weight="900" text-anchor="middle" fill="#7CFF7C" font-family="Consolas, monospace">ТВОЙ ХОД</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#f"/></svg></div>
+<b>Е. Пиксельная рука</b><span>На экране пиксельная рука и «ТВОЙ ХОД». На маленькой иконке читается рука, а не текст</span></div>
+
+</div>
+</body>
+</html>

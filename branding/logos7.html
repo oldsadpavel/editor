@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin: 0; background: #26282c; color: #dfe1e5; font: 13px system-ui, sans-serif; }
+  table { border-collapse: separate; border-spacing: 12px 12px; margin: 8px 8px; }
+  th { color: #dfe1e5; font-size: 12px; font-weight: 700; text-align: center; }
+  th small { display: block; color: #9da0a8; font-weight: 400; font-size: 10.5px; margin-top: 2px; }
+  th.side { text-align: right; width: 110px; }
+  th.side span { display: block; color: #9da0a8; font-weight: 400; font-size: 11px; margin-top: 3px; }
+  td { text-align: center; }
+  .pair { display: inline-flex; gap: 6px; align-items: flex-end; }
+  .sw { display: inline-flex; gap: 2px; margin-top: 4px; }
+  .sw i { width: 12px; height: 8px; border-radius: 2px; display: inline-block; }
+</style>
+</head>
+<body>
+<table id="t"></table>
+<script>
+// Palettes taken from popular IDE themes: background · lines/nodes · the circle behind the person · accents
+const P = [
+  { name: 'Ночная сеть', src: 'наш синий', bg: '#16213a', line: '#4a9eff', node: '#2b4a7a', disk: '#d97757', man: '#f4d3c8', manS: '#5a2e1c', ink: '#e6edf3', led: '#7CFF7C' },
+  { name: 'VS Code', src: 'Dark+ / синий #007acc', bg: '#1e1e1e', line: '#3794ff', node: '#0e3a5c', disk: '#007acc', man: '#ffffff', manS: '#0b2a44', ink: '#d4d4d4', led: '#89d185' },
+  { name: 'JetBrains', src: 'New UI · #3574f0', bg: '#1e1f22', line: '#548af7', node: '#25324d', disk: '#3574f0', man: '#ffffff', manS: '#14213d', ink: '#dfe1e5', led: '#5fb865' },
+  { name: 'One Dark', src: 'Atom · голубой + жёлтый', bg: '#282c34', line: '#61afef', node: '#2f3f55', disk: '#e5c07b', man: '#282c34', manS: '#282c34', ink: '#abb2bf', led: '#98c379' },
+  { name: 'Tokyo Night', src: 'синий + сиреневый', bg: '#1a1b26', line: '#7aa2f7', node: '#24283b', disk: '#bb9af7', man: '#1a1b26', manS: '#1a1b26', ink: '#c0caf5', led: '#9ece6a' },
+  { name: 'GitHub Dark', src: '#0d1117 · #58a6ff', bg: '#0d1117', line: '#58a6ff', node: '#161b22', disk: '#1f6feb', man: '#ffffff', manS: '#0d2a5c', ink: '#c9d1d9', led: '#3fb950' },
+  { name: 'Nord', src: 'холодный голубой + персик', bg: '#2e3440', line: '#88c0d0', node: '#3b4252', disk: '#d08770', man: '#2e3440', manS: '#2e3440', ink: '#eceff4', led: '#a3be8c' },
+];
+
+const nodes = (c) => `
+  <circle cx="50" cy="96" r="20" fill="${c.node}" stroke="${c.line}" stroke-width="4"/>
+  <text x="50" y="103" font-size="17" font-weight="800" text-anchor="middle" fill="${c.ink}" font-family="Arial, sans-serif">AI</text>
+  <rect x="186" y="76" width="40" height="40" rx="7" fill="${c.node}" stroke="${c.line}" stroke-width="4"/>
+  <circle cx="196" cy="88" r="3" fill="${c.led}"/><circle cx="196" cy="104" r="3" fill="${c.led}"/>
+  <rect x="203" y="86" width="15" height="4" fill="${c.ink}" opacity=".6"/><rect x="203" y="102" width="15" height="4" fill="${c.ink}" opacity=".6"/>`;
+
+// the person with arms spread: head, body, arms straight out, legs together
+const man = (c, tilt = 0) => {
+  const limbs = 'M128 136 L128 186 M86 144 L170 144 M128 186 L120 210 M128 186 L136 210';
+  return `
+    <path d="${limbs}" stroke="${c.manS}" stroke-width="10" stroke-linecap="round" fill="none"/>
+    <path d="${limbs}" stroke="${c.man}" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <g transform="rotate(${tilt} 128 136)"><circle cx="128" cy="122" r="12" fill="${c.man}" stroke="${c.manS}" stroke-width="3"/></g>`;
+};
+const wires = (c) => `
+  <g stroke="${c.line}" stroke-width="4" fill="none" stroke-linecap="round"><path d="M68 104 C76 124 80 140 86 144"/><path d="M186 108 C178 126 174 140 170 144"/></g>
+  <circle cx="86" cy="144" r="5" fill="${c.line}"/><circle cx="170" cy="144" r="5" fill="${c.line}"/>`;
+
+const kinds = [
+  { name: 'Распятый', note: 'руки в стороны, провода в ладонях', draw: (c) => `<circle cx="128" cy="160" r="54" fill="${c.disk}"/>${wires(c)}${man(c, 14)}` },
+  {
+    name: 'На кресте', note: 'с крестом позади',
+    draw: (c) => `<circle cx="128" cy="160" r="54" fill="${c.disk}"/>
+      <g fill="${c.node}" stroke="${c.manS}" stroke-width="2"><rect x="121" y="96" width="14" height="124" rx="2"/><rect x="78" y="137" width="100" height="14" rx="2"/></g>
+      ${wires(c)}${man(c, 14)}`,
+  },
+  {
+    name: 'Святой оператор', note: 'нимб из значка Wi-Fi',
+    draw: (c) => `<circle cx="128" cy="160" r="54" fill="${c.disk}"/>${wires(c)}${man(c, 0)}
+      <g stroke="${c.led}" stroke-width="4" fill="none" stroke-linecap="round">
+        <path d="M118 102 A14 14 0 0 1 138 102"/><path d="M111 94 A24 24 0 0 1 145 94"/><path d="M104 86 A34 34 0 0 1 152 86"/>
+      </g>`,
+  },
+];
+
+const svg = (c, k, size) => `<svg width="${size}" height="${size}" viewBox="0 0 256 256"><rect x="24" y="24" width="208" height="208" rx="52" fill="${c.bg}"/>${nodes(c)}${k.draw(c)}</svg>`;
+let html = '<tr><th></th>' + P.map((c) => `<th>${c.name}<small>${c.src}</small><div class="sw">${[c.bg, c.line, c.disk, c.led].map((x) => `<i style="background:${x}"></i>`).join('')}</div></th>`).join('') + '</tr>';
+kinds.forEach((k, i) => {
+  html += `<tr><th class="side">${i + 1}. ${k.name}<span>${k.note}</span></th>` + P.map((c) => `<td><div class="pair">${svg(c, k, 104)}${svg(c, k, 28)}</div></td>`).join('') + '</tr>';
+});
+document.getElementById('t').innerHTML = html;
+</script>
+</body>
+</html>

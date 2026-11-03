@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" class="mpi-logo">
+  <!-- MPI — Meat Proxy Interface: a person on a cross, holding the link between the AI and the server -->
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#16213a"/>
+  <circle class="mpi-ai" cx="50" cy="96" r="20" fill="#2b4a7a" stroke="#4a9eff" stroke-width="4"/>
+  <text x="50" y="103" font-size="17" font-weight="800" text-anchor="middle" fill="#e6edf3" font-family="Arial, Helvetica, sans-serif">AI</text>
+  <rect x="186" y="76" width="40" height="40" rx="7" fill="#2b4a7a" stroke="#4a9eff" stroke-width="4"/>
+  <circle class="mpi-led mpi-led1" cx="196" cy="88" r="3" fill="#7CFF7C"/>
+  <circle class="mpi-led mpi-led2" cx="196" cy="104" r="3" fill="#7CFF7C"/>
+  <rect x="203" y="86" width="15" height="4" fill="#e6edf3" opacity=".6"/>
+  <rect x="203" y="102" width="15" height="4" fill="#e6edf3" opacity=".6"/>
+  <circle cx="128" cy="160" r="54" fill="#d97757"/>
+  <g fill="#8b5a2b" stroke="#4a2c14" stroke-width="2.5">
+    <rect x="120" y="94" width="16" height="128" rx="2"/>
+    <rect x="76" y="136" width="104" height="16" rx="2"/>
+  </g>
+  <path d="M125 100 L125 132 M131 156 L131 214 M84 141 L116 141 M140 147 L174 147" stroke="#6b4220" stroke-width="1.5" fill="none" opacity=".8"/>
+  <g stroke="#4a9eff" stroke-width="4" fill="none" stroke-linecap="round">
+    <path class="mpi-wire mpi-wire-in" d="M68 104 C76 124 80 140 86 144"/>
+    <path class="mpi-wire mpi-wire-out" d="M170 144 C174 140 178 126 186 108"/>
+  </g>
+  <circle cx="86" cy="144" r="5" fill="#4a9eff"/>
+  <circle cx="170" cy="144" r="5" fill="#4a9eff"/>
+  <path d="M128 136 L128 186 M86 144 L170 144 M128 186 L120 210 M128 186 L136 210" stroke="#5a2e1c" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <path d="M128 136 L128 186 M86 144 L170 144 M128 186 L120 210 M128 186 L136 210" stroke="#f4d3c8" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <g class="mpi-head"><circle cx="128" cy="122" r="12" fill="#f4d3c8" stroke="#5a2e1c" stroke-width="3" transform="rotate(14 128 136)"/></g>
+</svg>

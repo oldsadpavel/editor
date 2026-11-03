@@ -7,27 +7,30 @@
 $ErrorActionPreference = 'Stop'
 $src = Join-Path $PSScriptRoot '..\release\win-unpacked'
 $root = Join-Path $env:LOCALAPPDATA 'Programs\ClaudeEditor'
-if (-not (Test-Path (Join-Path $src 'Claude Editor.exe'))) { throw "No build in $src - run npm run dist first" }
+$exeName = 'MPI.exe'
+if (-not (Test-Path (Join-Path $src $exeName))) { throw "No build in $src - run npm run dist first" }
 
 $dst = Join-Path $root ('app-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force $dst | Out-Null
 robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed with code $LASTEXITCODE" }
 
-$exe = Join-Path $dst 'Claude Editor.exe'
+$exe = Join-Path $dst $exeName
 Set-Content -Path (Join-Path $root 'current.txt') -Value $exe -Encoding utf8 -NoNewline
 
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shell = New-Object -ComObject WScript.Shell
-$lnk = $shell.CreateShortcut((Join-Path $desktop 'Claude Editor.lnk'))
+# the shortcut of the old name goes away
+Remove-Item (Join-Path $desktop 'Claude Editor.lnk') -ErrorAction SilentlyContinue
+$lnk = $shell.CreateShortcut((Join-Path $desktop 'MPI.lnk'))
 $lnk.TargetPath = $exe
 $lnk.WorkingDirectory = $dst
 $lnk.IconLocation = "$exe,0"
-$lnk.Description = 'Claude Editor'
+$lnk.Description = 'MPI — Meat Proxy Interface'
 $lnk.Save()
 
 # Clean up: versions that are not current and not running.
-$running = @(Get-Process -Name 'Claude Editor' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path } | Where-Object { $_ })
+$running = @(Get-Process -Name 'MPI', 'Claude Editor' -ErrorAction SilentlyContinue | ForEach-Object { $_.Path } | Where-Object { $_ })
 $inUse = { param($dir) $running | Where-Object { $_.StartsWith($dir + '\', [StringComparison]::OrdinalIgnoreCase) } }
 Get-ChildItem $root -Directory -Filter 'app-*' | Where-Object { $_.FullName -ne $dst -and -not (& $inUse $_.FullName) } |
   ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
@@ -38,4 +41,4 @@ if ((Test-Path $flatExe) -and -not ($running | Where-Object { $_ -ieq $flatExe }
     ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
 }
 Write-Output "Installed to $dst"
-Write-Output "Shortcut: $(Join-Path $desktop 'Claude Editor.lnk')"
+Write-Output "Shortcut: $(Join-Path $desktop 'MPI.lnk')"

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin: 0; background: #1e1f22; color: #dfe1e5; font: 14px system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(3, 300px); gap: 26px; padding: 28px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cell b { font-size: 15px; }
+  .cell span { color: #9da0a8; font-size: 12px; text-align: center; max-width: 260px; }
+  .row { display: flex; gap: 14px; align-items: flex-end; }
+</style>
+</head>
+<body>
+<div class="grid">
+
+<!-- A. Microchip with marbled-steak die -->
+<div class="cell"><div class="row">
+<svg id="a" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#1e2a22"/>
+  <g fill="#c8ccd2">
+    <rect x="86" y="44" width="10" height="22" rx="2"/><rect x="110" y="44" width="10" height="22" rx="2"/><rect x="136" y="44" width="10" height="22" rx="2"/><rect x="160" y="44" width="10" height="22" rx="2"/>
+    <rect x="86" y="190" width="10" height="22" rx="2"/><rect x="110" y="190" width="10" height="22" rx="2"/><rect x="136" y="190" width="10" height="22" rx="2"/><rect x="160" y="190" width="10" height="22" rx="2"/>
+    <rect x="44" y="86" width="22" height="10" rx="2"/><rect x="44" y="110" width="22" height="10" rx="2"/><rect x="44" y="136" width="22" height="10" rx="2"/><rect x="44" y="160" width="22" height="10" rx="2"/>
+    <rect x="190" y="86" width="22" height="10" rx="2"/><rect x="190" y="110" width="22" height="10" rx="2"/><rect x="190" y="136" width="22" height="10" rx="2"/><rect x="190" y="160" width="22" height="10" rx="2"/>
+  </g>
+  <rect x="62" y="62" width="132" height="132" rx="14" fill="#2b2d30"/>
+  <rect x="76" y="76" width="104" height="104" rx="10" fill="#b5373a"/>
+  <g fill="none" stroke="#f4d3c8" stroke-linecap="round" opacity="0.9">
+    <path d="M84 102 C104 92 116 110 136 100 C150 94 160 104 172 98" stroke-width="5"/>
+    <path d="M86 132 C100 124 110 140 126 132" stroke-width="4"/>
+    <path d="M132 150 C146 142 158 156 172 146" stroke-width="5"/>
+    <path d="M92 164 C102 158 110 168 118 162" stroke-width="3"/>
+    <path d="M140 118 C148 114 156 122 164 118" stroke-width="3"/>
+  </g>
+  <text x="128" y="226" font-size="0" text-anchor="middle">.</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#a"/></svg></div>
+<b>А. Мясной чип</b><span>Микросхема, у которой вместо кристалла — мраморная говядина. Interface + meat в одной картинке</span></div>
+
+<!-- B. Terminal prompt with a bacon cursor -->
+<div class="cell"><div class="row">
+<svg id="b" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#0d1117"/>
+  <circle cx="58" cy="58" r="7" fill="#ff5f57"/><circle cx="80" cy="58" r="7" fill="#febc2e"/><circle cx="102" cy="58" r="7" fill="#28c840"/>
+  <text x="52" y="136" font-size="54" font-weight="800" fill="#7CFF7C" font-family="Consolas, monospace">&gt;</text>
+  <text x="88" y="136" font-size="40" font-weight="800" fill="#e6edf3" font-family="Consolas, monospace">MPI</text>
+  <g transform="translate(60 160)">
+    <path d="M0 8 C20 -2 40 18 60 8 C80 -2 100 18 120 8 L120 30 C100 40 80 20 60 30 C40 40 20 20 0 30 Z" fill="#c0504d"/>
+    <path d="M0 16 C20 6 40 26 60 16 C80 6 100 26 120 16 L120 22 C100 32 80 12 60 22 C40 32 20 12 0 22 Z" fill="#f4d3c8"/>
+  </g>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#b"/></svg></div>
+<b>Б. Беконовый курсор</b><span>Терминал «&gt; MPI», а мигающий курсор — полоска бекона. Свой для разработчиков</span></div>
+
+<!-- C. Wordmark: P as a plug -->
+<div class="cell"><div class="row">
+<svg id="c" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#d97757"/>
+  <text x="62" y="160" font-size="72" font-weight="900" fill="#2b1810" font-family="Arial Black, Arial, sans-serif" text-anchor="middle">M</text>
+  <g transform="translate(108 92)">
+    <rect x="0" y="0" width="16" height="70" rx="3" fill="#2b1810"/>
+    <path d="M14 0 L32 0 C52 0 58 14 58 22 C58 32 52 44 32 44 L14 44 Z" fill="#2b1810"/>
+    <rect x="56" y="10" width="20" height="7" rx="2" fill="#f4f1e6"/><rect x="56" y="27" width="20" height="7" rx="2" fill="#f4f1e6"/>
+    <path d="M8 70 C8 86 -6 92 -18 96" stroke="#2b1810" stroke-width="7" fill="none" stroke-linecap="round"/>
+  </g>
+  <text x="200" y="160" font-size="72" font-weight="900" fill="#2b1810" font-family="Arial Black, Arial, sans-serif" text-anchor="middle">I</text>
+  <text x="128" y="206" font-size="14" font-weight="700" fill="#2b1810" font-family="Arial, sans-serif" text-anchor="middle" letter-spacing="1">MEAT PROXY INTERFACE</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#c"/></svg></div>
+<b>В. «MPI» с вилкой</b><span>Логотип-надпись: буква P — штепсельная вилка с проводом, снизу расшифровка</span></div>
+
+<!-- D. Steak with an RJ45 port -->
+<div class="cell"><div class="row">
+<svg id="d" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <path d="M60 118 C54 76 98 52 140 58 C188 64 210 104 196 146 C184 184 140 204 104 194 C72 186 64 156 60 118 Z" fill="#b5373a" stroke="#f4d3c8" stroke-width="9"/>
+  <path d="M86 92 C100 86 108 98 122 92 M150 160 C160 154 170 162 180 156 M84 150 C92 146 98 154 106 150" stroke="#f4d3c8" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.8"/>
+  <rect x="112" y="104" width="52" height="44" rx="4" fill="#1e1f22" stroke="#c8ccd2" stroke-width="4"/>
+  <rect x="128" y="140" width="20" height="10" fill="#1e1f22"/>
+  <g fill="#ffcc33"><rect x="120" y="110" width="4" height="12"/><rect x="128" y="110" width="4" height="12"/><rect x="136" y="110" width="4" height="12"/><rect x="144" y="110" width="4" height="12"/><rect x="152" y="110" width="4" height="12"/></g>
+  <circle cx="176" cy="96" r="6" fill="#7CFF7C"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#d"/></svg></div>
+<b>Г. Стейк с сетевым портом</b><span>Стейк, в который встроен сетевой разъём RJ45 и зелёный индикатор «линк есть»</span></div>
+
+<!-- E. Butcher's price label -->
+<div class="cell"><div class="row">
+<svg id="e" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#f4f1e6"/>
+  <rect x="40" y="40" width="176" height="176" rx="38" fill="none" stroke="#b5373a" stroke-width="4"/>
+  <text x="128" y="112" font-size="62" font-weight="900" fill="#b5373a" font-family="Arial Black, Arial, sans-serif" text-anchor="middle">MPI</text>
+  <text x="128" y="136" font-size="13" font-weight="700" fill="#3a3d42" font-family="Arial, sans-serif" text-anchor="middle">MEAT PROXY INTERFACE</text>
+  <g fill="#1e1f22"><rect x="70" y="152" width="3" height="34"/><rect x="76" y="152" width="6" height="34"/><rect x="86" y="152" width="2" height="34"/><rect x="92" y="152" width="5" height="34"/><rect x="100" y="152" width="2" height="34"/><rect x="106" y="152" width="7" height="34"/><rect x="117" y="152" width="3" height="34"/><rect x="124" y="152" width="5" height="34"/><rect x="133" y="152" width="2" height="34"/><rect x="139" y="152" width="6" height="34"/><rect x="149" y="152" width="3" height="34"/><rect x="156" y="152" width="7" height="34"/><rect x="167" y="152" width="2" height="34"/><rect x="173" y="152" width="5" height="34"/><rect x="182" y="152" width="3" height="34"/></g>
+  <text x="128" y="202" font-size="10" fill="#3a3d42" font-family="Consolas, monospace" text-anchor="middle">СОРТ: ВЫСШИЙ · 1 ОПЕРАТОР</text>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#e"/></svg></div>
+<b>Д. Ценник с мясного прилавка</b><span>Этикетка: «MPI», штрихкод, «Сорт: высший · 1 оператор». Как наклейка на упаковке мяса</span></div>
+
+<!-- F. Network diagram: AI → hand → server -->
+<div class="cell"><div class="row">
+<svg id="f" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#16213a"/>
+  <g stroke="#4a9eff" stroke-width="4" stroke-dasharray="8 6" fill="none"><path d="M76 92 L112 124"/><path d="M144 124 L180 92"/></g>
+  <circle cx="64" cy="80" r="24" fill="#2b4a7a" stroke="#4a9eff" stroke-width="4"/>
+  <text x="64" y="88" font-size="22" font-weight="800" text-anchor="middle" fill="#e6edf3" font-family="Arial, sans-serif">AI</text>
+  <rect x="168" y="58" width="44" height="44" rx="8" fill="#2b4a7a" stroke="#4a9eff" stroke-width="4"/>
+  <g fill="#7CFF7C"><circle cx="180" cy="72" r="3"/><circle cx="180" cy="88" r="3"/></g><g fill="#9da0a8"><rect x="188" y="70" width="16" height="4"/><rect x="188" y="86" width="16" height="4"/></g>
+  <circle cx="128" cy="150" r="46" fill="#d97757"/>
+  <path d="M116 120 C116 110 130 110 130 120 L130 150 C132 142 144 142 144 152 L144 156 C146 148 158 150 156 160 L154 176 C152 188 142 194 130 194 C116 194 106 184 104 172 L100 156 C98 148 108 144 112 152 L116 160 Z" fill="#f4d3c8" stroke="#8b5a3c" stroke-width="4" stroke-linejoin="round"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#f"/></svg></div>
+<b>Е. Схема сети</b><span>Сетевая схема: ИИ → рука → сервер. Человек как узел-прокси между ИИ и машиной</span></div>
+
+</div>
+</body>
+</html>

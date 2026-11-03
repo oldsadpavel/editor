@@ -876,3 +876,24 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .sound-pop label { display: flex; flex-direction: column; gap: 4px; color: var(--fg2); }
 .sound-pop select, .sound-pop input[type='range'] { width: 100%; }
 .sound-row { display: flex; align-items: center; gap: 8px; }
+
+/* MPI logo (inline SVG) and its animated boot version */
+.logo-svg { display: inline-block; flex: none; line-height: 0; }
+.logo-svg svg { width: 100%; height: 100%; display: block; }
+.boot-logo { animation: boot-bounce .9s ease-in-out infinite alternate; filter: drop-shadow(0 8px 24px rgba(74, 158, 255, .25)); }
+.boot-shadow { animation-duration: .9s; }
+/* data runs along the wires: from the AI into the hand, from the other hand into the server */
+.logo-live .mpi-wire { stroke-dasharray: 6 7; animation: mpi-flow .7s linear infinite; }
+.logo-live .mpi-led { animation: mpi-blink 1s steps(1) infinite; }
+.logo-live .mpi-led2 { animation-delay: .5s; }
+.logo-live .mpi-ai { animation: mpi-pulse 1.4s ease-in-out infinite; }
+.logo-live .mpi-head { transform-box: view-box; transform-origin: 128px 136px; animation: mpi-sway 2.2s ease-in-out infinite alternate; }
+@keyframes mpi-flow { to { stroke-dashoffset: -26; } }
+@keyframes mpi-blink { 50% { opacity: .15; } }
+@keyframes mpi-pulse { 50% { stroke: #9fd0ff; stroke-width: 6; } }
+@keyframes mpi-sway { from { transform: rotate(-7deg); } to { transform: rotate(5deg); } }
+.brand { display: inline-flex; align-items: center; gap: 6px; }
+
+/* icon-only buttons in the question box bar (the tooltip says what they do) */
+.btn.icon-only { min-width: 30px; padding-left: 8px; padding-right: 8px; font-size: 14px; line-height: 1; justify-content: center; }
+.btn.send-btn { min-width: 40px; font-size: 15px; }

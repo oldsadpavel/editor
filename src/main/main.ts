@@ -22,8 +22,12 @@ import { attachTaskbar } from './taskbar';
 import * as settingsIo from './settings-io';
 import * as updates from './updates';
 import * as usage from './usage';
-import { flushAll, stateFile } from './store';
+import { USER_DATA, flushAll, stateFile } from './store';
 import { findTranscript, normalize } from './transcript';
+
+// Chromium keeps its own data (storage, caches) under userData, named after the product: pin it to the original
+// folder so renaming the app (Claude Editor → MPI) loses nothing.
+app.setPath('userData', USER_DATA());
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let win: BrowserWindow | null = null;
@@ -303,7 +307,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     backgroundColor: '#1e1f22',
-    title: 'Claude Editor',
+    title: 'MPI — Meat Proxy Interface',
     webPreferences: {
       preload: path.join(here, '../preload/preload.cjs'),
       contextIsolation: true,

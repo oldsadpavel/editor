@@ -17,9 +17,9 @@ export const editorContext: { activeFile?: string; line?: number; column?: numbe
  * and reports into them instead of only writing to the chat.
  */
 export const EDITOR_INSTRUCTIONS = `
-# Редактор Claude Editor
+# Редактор MPI
 
-Ты работаешь внутри редактора Claude Editor. Пользователь видит не только чат, но и панели редактора.
+Ты работаешь внутри редактора MPI (Meat Proxy Interface). Пользователь видит не только чат, но и панели редактора.
 Панели переключаются кнопками на верхней панели; когда в панели есть проблема, её кнопка подсвечивается.
 Настраивай панели и отчитывайся в них через MCP-инструменты сервера \`editor\`:
 

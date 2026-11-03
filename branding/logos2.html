@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin: 0; background: #1e1f22; color: #dfe1e5; font: 14px system-ui, sans-serif; }
+  .grid { display: grid; grid-template-columns: repeat(3, 300px); gap: 26px; padding: 28px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cell b { font-size: 15px; }
+  .cell span { color: #9da0a8; font-size: 12px; text-align: center; max-width: 260px; }
+  .row { display: flex; gap: 14px; align-items: flex-end; }
+</style>
+</head>
+<body>
+<div class="grid">
+
+<!-- 7. Sausage with a USB plug: the meat proxy -->
+<div class="cell"><div class="row">
+<svg id="a" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <g transform="rotate(-35 128 128)">
+    <rect x="44" y="104" width="128" height="48" rx="24" fill="#c0504d"/>
+    <path d="M66 112 q6 16 0 32 M92 112 q6 16 0 32 M118 112 q6 16 0 32 M144 112 q6 16 0 32" stroke="#e8857f" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M44 128 q-14 -6 -16 -16" stroke="#e8c09a" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <rect x="168" y="114" width="20" height="28" rx="4" fill="#9da0a8"/>
+    <rect x="186" y="118" width="34" height="20" rx="2" fill="#c8ccd2"/>
+    <rect x="196" y="123" width="6" height="5" fill="#45484d"/><rect x="206" y="123" width="6" height="5" fill="#45484d"/>
+  </g>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#a"/></svg></div>
+<b>7. Мясной штекер</b><span>Сосиска с USB-разъёмом — буквально «мясной прокси», который втыкают в ИИ</span></div>
+
+<!-- 8. Leather sack with a button -->
+<div class="cell"><div class="row">
+<svg id="b" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#d97757"/>
+  <path d="M96 84 C70 110 58 150 70 186 C80 214 176 214 186 186 C198 150 186 110 160 84 Z" fill="#8b5a3c" stroke="#3d2618" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M96 84 L88 58 C110 70 146 70 168 58 L160 84" fill="#a46a46" stroke="#3d2618" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M94 86 C116 96 140 96 162 86" stroke="#e8c09a" stroke-width="5" fill="none"/>
+  <path d="M80 150 C80 180 90 196 128 198 C166 196 176 180 176 150" stroke="#c8875e" stroke-width="3" stroke-dasharray="7 6" fill="none"/>
+  <circle cx="128" cy="146" r="22" fill="#ff6b4a" stroke="#3d2618" stroke-width="4"/>
+  <circle cx="121" cy="139" r="6" fill="#ffb199"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#b"/></svg></div>
+<b>8. Кожаный мешок</b><span>Тот самый «кожаный мешок» — с большой кнопкой посередине</span></div>
+
+<!-- 9. Puppeteer cross with strings to a finger -->
+<div class="cell"><div class="row">
+<svg id="c" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <g stroke="#e8c09a" stroke-width="10" stroke-linecap="round"><path d="M70 64 L186 64"/><path d="M128 44 L128 92"/></g>
+  <g stroke="#9da0a8" stroke-width="2"><path d="M76 64 L104 150"/><path d="M128 92 L128 132"/><path d="M180 64 L152 150"/></g>
+  <path d="M104 150 C100 136 118 132 120 144 L122 132 C122 118 136 118 136 132 L136 146 C138 136 154 136 152 150 L150 196 C150 210 138 218 124 218 C108 218 98 206 98 192 Z" fill="#c8875e" stroke="#8b5a3c" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="128" cy="64" r="9" fill="#d97757"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#c"/></svg></div>
+<b>9. Кукловод</b><span>Крестовина марионетки, на ниточках — рука кожаного. Кто кем управляет?</span></div>
+
+<!-- 10. Enter keycap pressed by a finger -->
+<div class="cell"><div class="row">
+<svg id="d" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#2b2d30"/>
+  <path d="M56 120 L56 196 L200 196 L200 84 L120 84 L120 120 Z" fill="#45484d" stroke="#1e1f22" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M64 124 L64 184 L192 184 L192 92 L128 92 L128 124 Z" fill="#d97757"/>
+  <path d="M170 116 L170 150 L104 150 M118 136 L104 150 L118 164" stroke="#fff4ea" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M150 34 C150 22 168 22 168 34 L170 98 C170 112 150 112 150 98 Z" fill="#c8875e" stroke="#8b5a3c" stroke-width="4"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#d"/></svg></div>
+<b>10. Клавиша Enter</b><span>Палец над Enter: главная работа кожаного — нажать и отправить</span></div>
+
+<!-- 11. Glove puppet with eyes -->
+<div class="cell"><div class="row">
+<svg id="e" width="160" height="160" viewBox="0 0 256 256">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#4a9eff"/>
+  <path d="M78 214 L78 120 C78 76 100 52 128 52 C156 52 178 76 178 120 L178 214 Z" fill="#8b5a3c" stroke="#3d2618" stroke-width="5"/>
+  <path d="M90 200 L90 122 C90 84 108 64 128 64 C148 64 166 84 166 122 L166 200" stroke="#c8875e" stroke-width="3" stroke-dasharray="7 6" fill="none"/>
+  <circle cx="108" cy="112" r="16" fill="#fff"/><circle cx="148" cy="112" r="16" fill="#fff"/>
+  <circle cx="112" cy="116" r="7" fill="#1e1f22"/><circle cx="152" cy="116" r="7" fill="#1e1f22"/>
+  <path d="M104 156 C116 170 140 170 152 156" stroke="#3d2618" stroke-width="6" fill="none" stroke-linecap="round"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#e"/></svg></div>
+<b>11. Перчатка-кукла</b><span>Кожаная перчаточная кукла с глазами: дружелюбный «кожаный»</span></div>
+
+<!-- 12. Pixel-art hand -->
+<div class="cell"><div class="row">
+<svg id="f" width="160" height="160" viewBox="0 0 256 256" shape-rendering="crispEdges">
+  <rect x="24" y="24" width="208" height="208" rx="52" fill="#1e1f22"/>
+  <g fill="#c8875e">
+    <rect x="96" y="48" width="16" height="96"/>
+    <rect x="112" y="96" width="16" height="48"/><rect x="128" y="104" width="16" height="40"/><rect x="144" y="112" width="16" height="32"/>
+    <rect x="64" y="128" width="16" height="16"/><rect x="80" y="144" width="16" height="16"/>
+    <rect x="80" y="144" width="96" height="48"/><rect x="96" y="192" width="64" height="16"/>
+  </g>
+  <g fill="#8b5a3c">
+    <rect x="80" y="48" width="16" height="96"/><rect x="96" y="32" width="16" height="16"/>
+    <rect x="160" y="112" width="16" height="32"/><rect x="48" y="128" width="16" height="16"/><rect x="64" y="144" width="16" height="16"/>
+    <rect x="80" y="192" width="16" height="16"/><rect x="160" y="192" width="16" height="16"/><rect x="96" y="208" width="64" height="16"/>
+  </g>
+  <rect x="176" y="48" width="16" height="16" fill="#d97757"/><rect x="192" y="64" width="16" height="16" fill="#d97757"/><rect x="176" y="80" width="16" height="16" fill="#d97757"/>
+</svg>
+<svg width="40" height="40" viewBox="0 0 256 256"><use href="#f"/></svg></div>
+<b>12. Пиксельная рука</b><span>8-битная рука-указатель, как в старых играх, с «искрой» нажатия</span></div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<style>
+  body { margin: 0; background: #26282c; color: #dfe1e5; font: 13px system-ui, sans-serif; }
+  table { border-collapse: separate; border-spacing: 18px 14px; margin: 10px 14px; }
+  th { color: #d97757; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-align: center; }
+  th.side { text-align: right; color: #dfe1e5; font-size: 13px; width: 130px; }
+  th.side span { display: block; color: #9da0a8; font-weight: 400; font-size: 11px; margin-top: 3px; }
+  td { text-align: center; }
+  .pair { display: inline-flex; gap: 8px; align-items: flex-end; }
+</style>
+</head>
+<body>
+<table id="t"></table>
+<script>
+// Palettes: background, line, nodes (fill/stroke), the person's circle, the person, ink on nodes
+const P = [
+  { name: 'Ночная сеть', bg: '#16213a', line: '#4a9eff', node: '#2b4a7a', nodeS: '#4a9eff', disk: '#d97757', man: '#f4d3c8', manS: '#8b5a3c', ink: '#e6edf3', led: '#7CFF7C' },
+  { name: 'Терминал', bg: '#0d1a12', line: '#3ddc84', node: '#12321f', nodeS: '#3ddc84', disk: '#ffb000', man: '#1a1a1a', manS: '#1a1a1a', ink: '#c9ffd9', led: '#ffb000' },
+  { name: 'Мясная лавка', bg: '#f4ede2', line: '#b5373a', node: '#ffffff', nodeS: '#3a3d42', disk: '#b5373a', man: '#f4ede2', manS: '#5a1a1c', ink: '#3a3d42', led: '#b5373a' },
+  { name: 'Неон', bg: '#2a1240', line: '#ff4fd8', node: '#3d1d63', nodeS: '#ff4fd8', disk: '#ffcc33', man: '#2a1240', manS: '#2a1240', ink: '#ffe9fb', led: '#7CFF7C' },
+];
+
+const nodes = (c) => `
+  <circle cx="62" cy="74" r="25" fill="${c.node}" stroke="${c.nodeS}" stroke-width="4"/>
+  <text x="62" y="82" font-size="21" font-weight="800" text-anchor="middle" fill="${c.ink}" font-family="Arial, sans-serif">AI</text>
+  <rect x="170" y="50" width="46" height="48" rx="8" fill="${c.node}" stroke="${c.nodeS}" stroke-width="4"/>
+  <circle cx="182" cy="64" r="3.5" fill="${c.led}"/><circle cx="182" cy="82" r="3.5" fill="${c.led}"/>
+  <rect x="190" y="62" width="16" height="4" fill="${c.ink}" opacity=".6"/><rect x="190" y="80" width="16" height="4" fill="${c.ink}" opacity=".6"/>`;
+
+// Three kinds of person
+const people = [
+  {
+    name: 'Пиктограмма', note: 'как на табличках',
+    draw: (c) => `
+      <g stroke="${c.line}" stroke-width="4" stroke-dasharray="8 6" fill="none"><path d="M80 92 L110 126"/><path d="M176 98 L146 126"/></g>
+      <circle cx="128" cy="160" r="50" fill="${c.disk}"/>
+      <circle cx="128" cy="138" r="13" fill="${c.man}" stroke="${c.manS}" stroke-width="3"/>
+      <path d="M104 196 C104 168 114 156 128 156 C142 156 152 168 152 196 Z" fill="${c.man}" stroke="${c.manS}" stroke-width="3"/>`,
+  },
+  {
+    name: 'Оператор', note: 'в гарнитуре, на связи',
+    draw: (c) => `
+      <g stroke="${c.line}" stroke-width="4" stroke-dasharray="8 6" fill="none"><path d="M80 92 L106 124"/><path d="M176 98 L150 124"/></g>
+      <circle cx="128" cy="160" r="50" fill="${c.disk}"/>
+      <circle cx="128" cy="140" r="14" fill="${c.man}" stroke="${c.manS}" stroke-width="3"/>
+      <path d="M110 140 A18 18 0 0 1 146 140" stroke="${c.manS}" stroke-width="5" fill="none"/>
+      <rect x="106" y="136" width="7" height="12" rx="3" fill="${c.manS}"/><rect x="143" y="136" width="7" height="12" rx="3" fill="${c.manS}"/>
+      <path d="M110 148 Q112 158 124 156" stroke="${c.manS}" stroke-width="3" fill="none"/><circle cx="125" cy="156" r="3" fill="${c.manS}"/>
+      <path d="M104 198 C104 170 114 158 128 158 C142 158 152 170 152 198 Z" fill="${c.man}" stroke="${c.manS}" stroke-width="3"/>`,
+  },
+  {
+    name: 'Держит связь', note: 'провода прямо в руках',
+    draw: (c) => `
+      <g stroke="${c.line}" stroke-width="4" fill="none" stroke-linecap="round"><path d="M80 90 C92 104 94 116 98 128"/><path d="M176 98 C166 108 162 118 158 128"/></g>
+      <circle cx="128" cy="164" r="48" fill="${c.disk}"/>
+      <circle cx="128" cy="148" r="12" fill="${c.man}" stroke="${c.manS}" stroke-width="3"/>
+      <path d="M128 162 L128 188 M128 166 L100 132 M128 166 L156 132 M128 188 L114 208 M128 188 L142 208" stroke="${c.manS}" stroke-width="7" stroke-linecap="round" fill="none"/>
+      <path d="M128 162 L128 188 M128 166 L100 132 M128 166 L156 132 M128 188 L114 208 M128 188 L142 208" stroke="${c.man}" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <circle cx="98" cy="128" r="5" fill="${c.line}"/><circle cx="158" cy="128" r="5" fill="${c.line}"/>`,
+  },
+];
+
+let n = 0;
+const svg = (c, p, size) => {
+  const id = `s${n++}`;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 256 256"><rect x="24" y="24" width="208" height="208" rx="52" fill="${c.bg}"/>${nodes(c)}${p.draw(c)}</svg>`;
+};
+
+let html = '<tr><th></th>' + P.map((c) => `<th>${c.name}</th>`).join('') + '</tr>';
+people.forEach((p, i) => {
+  html += `<tr><th class="side">${i + 1}. ${p.name}<span>${p.note}</span></th>` + P.map((c) => `<td><div class="pair">${svg(c, p, 150)}${svg(c, p, 32)}</div></td>`).join('') + '</tr>';
+});
+document.getElementById('t').innerHTML = html;
+</script>
+</body>
+</html>

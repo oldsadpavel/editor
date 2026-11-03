@@ -131,8 +131,8 @@ function loopback(): Promise<{ redirect: string; code: Promise<{ code: string; s
       const ok = !err && url.searchParams.get('code');
       res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(
-        `<!doctype html><meta charset="utf-8"><title>Claude Editor</title><body style="font:16px system-ui;background:#1e1f22;color:#dfe1e5;display:grid;place-items:center;height:90vh">` +
-          (ok ? '<div>✓ Вход выполнен. Вернитесь в Claude Editor — эту вкладку можно закрыть.</div>' : `<div>Вход не удался: ${String(err ?? 'нет кода').replace(/[<>&]/g, '')}</div>`) +
+        `<!doctype html><meta charset="utf-8"><title>MPI</title><body style="font:16px system-ui;background:#1e1f22;color:#dfe1e5;display:grid;place-items:center;height:90vh">` +
+          (ok ? '<div>✓ Вход выполнен. Вернитесь в MPI — эту вкладку можно закрыть.</div>' : `<div>Вход не удался: ${String(err ?? 'нет кода').replace(/[<>&]/g, '')}</div>`) +
           '</body>',
       );
       if (ok) done({ code: ok, state: url.searchParams.get('state') ?? '' });
@@ -166,7 +166,7 @@ export function login(server: string) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({
-            client_name: `Claude Editor (${os.hostname()})`,
+            client_name: `MPI (${os.hostname()})`,
             redirect_uris: [lb.redirect],
             token_endpoint_auth_method: 'none',
             grant_types: ['authorization_code', 'refresh_token'],

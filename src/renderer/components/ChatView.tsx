@@ -1286,20 +1286,25 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         {busy && (
           chat.turns[chat.turns.length - 1]?.more?.some((m) => m.pending) ? (
             <button
-              className="btn danger small"
+              className="btn danger small icon-only"
               onClick={() => call('chat:interrupt', chat.sessionId)}
-              title="Esc — бросить текущий ответ и сразу взяться за вопросы из очереди (серые)"
+              title="Стоп и к новому (Esc): бросить текущий ответ и сразу взяться за вопросы из очереди (серые)"
             >
-              ⏭ Стоп и к новому
+              ⏭
             </button>
           ) : (
-            <button className="btn danger small" onClick={() => call('chat:interrupt', chat.sessionId)} title="Esc">
-              ⛔ Стоп
+            <button className="btn danger small icon-only" onClick={() => call('chat:interrupt', chat.sessionId)} title="Стоп (Esc): остановить ответ">
+              ⏹
             </button>
           )
         )}
-        <button className="btn primary small" disabled={!text.trim() && !attachments.length} onClick={() => void submit()}>
-          Отправить ↵
+        <button
+          className="btn primary small icon-only send-btn"
+          disabled={!text.trim() && !attachments.length}
+          onClick={() => void submit()}
+          title={busy ? 'Отправить (Enter): вопрос встанет в очередь за текущим ответом' : 'Отправить (Enter)'}
+        >
+          ➤
         </button>
       </div>
     </div>
@@ -1326,11 +1331,11 @@ function RestartButton({ chat }: { chat: ChatSnapshot }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
-      className={`btn small ${stalled ? 'stalled' : ''}`}
+      className={`btn small icon-only ${stalled ? 'stalled' : ''}`}
       disabled={busy}
       title={
-        (stalled ? `От Claude ничего не приходит ${Math.round(quiet / 60_000)} мин.\n` : '') +
-        'Перезапустить: процесс Claude этого чата запускается заново (история сохраняется), зависший ответ закрывается, а вопросы, до которых Claude не дошёл (серые), отправляются снова. Вложения при повторе не прикладываются.'
+        (stalled ? `Похоже, завис: от Claude ничего не приходит ${Math.round(quiet / 60_000)} мин.\n` : '') +
+        'Перезапустить чат: процесс Claude этого чата запускается заново (история сохраняется), зависший ответ закрывается, а вопросы, до которых Claude не дошёл (серые), отправляются снова. Вложения при повторе не прикладываются.'
       }
       onClick={() => {
         setBusy(true);
@@ -1340,7 +1345,7 @@ function RestartButton({ chat }: { chat: ChatSnapshot }) {
           .finally(() => setBusy(false));
       }}
     >
-      ⟳ {stalled ? `Завис? ${Math.round(quiet / 60_000)} мин` : 'Перезапустить'}
+      ⟳
     </button>
   );
 }

@@ -3,15 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: efile:; media-src 'self' efile:; script-src 'self'" />
-    <title>Claude Editor</title>
+    <title>MPI — Meat Proxy Interface</title>
   </head>
   <body>
     <div id="root">
       <!-- shown until the app script mounts: the same startup screen, static -->
       <div class="boot" style="height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1e1f22;color:#dfe1e5;font:14px system-ui,sans-serif">
-        <div style="font-size:72px;color:#d97757;animation:s 2.4s linear infinite">✳</div>
-        <div style="margin-top:26px">Будим Claude… он просил ещё пять минут</div>
-        <style>@keyframes s{to{transform:rotate(360deg)}}html,body{margin:0;height:100%;background:#1e1f22}</style>
+        <img src="./assets/mpi-logo.svg" width="150" height="150" alt="" style="animation:s .9s ease-in-out infinite alternate" />
+        <div style="margin-top:44px">Подключаем мясной прокси…</div>
+        <style>@keyframes s{to{transform:translateY(-18px)}}html,body{margin:0;height:100%;background:#1e1f22}</style>
       </div>
     </div>
     <script type="module" src="./main.tsx"></script>

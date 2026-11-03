@@ -37,9 +37,12 @@ const DEFAULT_STATE: AppState = {
 };
 
 /** Directory for app data. A portable build keeps data next to the executable. */
+/** Settings and state live in %APPDATA%/claude-editor (the original name), so renaming the app keeps them. */
+export const USER_DATA = () => path.join(app.getPath('appData'), 'claude-editor');
+
 export function dataDir(): string {
   const portable = process.env.PORTABLE_EXECUTABLE_DIR;
-  const dir = process.env.CLAUDE_EDITOR_DATA || (portable ? path.join(portable, 'claude-editor-data') : app.getPath('userData'));
+  const dir = process.env.CLAUDE_EDITOR_DATA || (portable ? path.join(portable, 'claude-editor-data') : USER_DATA());
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

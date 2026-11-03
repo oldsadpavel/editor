@@ -19,7 +19,7 @@ export function exportable(): Partial<AppState> {
 
 export async function exportSettings(win: BrowserWindow | null): Promise<string | null> {
   const r = await dialog.showSaveDialog(win!, {
-    title: 'Экспорт настроек Claude Editor',
+    title: 'Экспорт настроек MPI',
     defaultPath: `claude-editor-settings-${new Date().toISOString().slice(0, 10)}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });
@@ -37,10 +37,10 @@ export function applySettings(settings: Partial<AppState>) {
 }
 
 export async function importSettings(win: BrowserWindow | null): Promise<string | null> {
-  const r = await dialog.showOpenDialog(win!, { title: 'Импорт настроек Claude Editor', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+  const r = await dialog.showOpenDialog(win!, { title: 'Импорт настроек MPI', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
   if (r.canceled || !r.filePaths[0]) return null;
   const data = JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8'));
-  if (data?.kind !== KIND || typeof data.settings !== 'object') throw new Error('Это не файл настроек Claude Editor');
+  if (data?.kind !== KIND || typeof data.settings !== 'object') throw new Error('Это не файл настроек MPI');
   applySettings(data.settings);
   return r.filePaths[0];
 }
