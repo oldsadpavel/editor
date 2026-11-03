@@ -440,6 +440,10 @@ export interface AppState {
   chatExpanded?: { id: string; turns: string[] }[];
   chatProject?: string;
   chatMeta: Record<string, ChatMeta>;
+  /** «Answer ready» sound: default for all chats ('none' | 'synth:<name>' | 'file:<path>') and volume 0…1. */
+  sound?: { default?: string; volume?: number };
+  /** A chat's own «answer ready» sound (absent — the default one). */
+  chatSounds?: Record<string, string>;
   deployTargets: Record<string, DeployTarget>;
   githubToken?: string;
   /** Opt-in: use the github.com credential git already stores (Credential Manager) for CI status. */

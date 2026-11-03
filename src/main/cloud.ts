@@ -301,7 +301,7 @@ export async function versions(): Promise<CloudVersion[]> {
  * expanded folders) — otherwise every click would make a new version and push real changes out of the last 10.
  */
 export function payload(): Partial<AppState> {
-  const { openChats: _a, activeChat: _b, chatProject: _c, openFiles: _d, activeFile: _e, chatModels: _f, cloud: _g, chatPanes: _h, chatExpanded: _i, ...rest } = exportable();
+  const { openChats: _a, activeChat: _b, chatProject: _c, openFiles: _d, activeFile: _e, chatModels: _f, cloud: _g, chatPanes: _h, chatExpanded: _i, chatSounds: _j, ...rest } = exportable();
   const ui = rest.ui ? { ...rest.ui, treeOpen: undefined, treeSelected: undefined, treeScroll: undefined } : undefined;
   const groups = rest.groups?.map(({ openChats: _1, activeChat: _2, chatProject: _3, openFiles: _4, activeFile: _5, treeOpen: _6, chatPanes: _7, ...g }) => g);
   // git origins go along, so a new machine can clone projects it doesn't have

@@ -7,6 +7,7 @@ import { PlanCard, ShellCard, TasksBar, ThinkingBlock, TodoCard, ToolDetails, op
 import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
+import { SoundButton } from './SoundButton';
 import { fileIcon } from './icons';
 
 const MODES = [
@@ -1571,6 +1572,7 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
           <button className="btn small" onClick={() => setExpanded(new Set(turns.map((t) => t.id)))} title="Развернуть все">
             ⊞
           </button>
+          <SoundButton sessionId={chat.sessionId} />
           <button className="btn small" onClick={() => setExpanded(new Set())} title="Свернуть все">
             ⊟
           </button>

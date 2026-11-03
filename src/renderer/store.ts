@@ -25,6 +25,7 @@ import type {
 } from '../shared/types';
 import { bridge, call } from './api';
 import { isImage } from './clipboard';
+import { playDone } from './sounds';
 
 export interface OpenFile {
   path: string;
@@ -712,6 +713,8 @@ function onEvent(e: MainEvent) {
       return;
     }
     case 'chatMeta':
+      // a fresh completion (not an old one re-sent): the chat's «answer ready» sound
+      if (e.meta.completedAt && e.meta.completedAt > Date.now() - 15_000 && e.meta.completedAt !== state.app?.chatMeta[e.sessionId]?.completedAt) playDone(e.sessionId);
       set((s) => ({ app: s.app && { ...s.app, chatMeta: { ...s.app.chatMeta, [e.sessionId]: e.meta } } }));
       if (chatIsVisible(e.sessionId)) markSeen(e.sessionId);
       else notifyDone(e.sessionId);
@@ -768,7 +771,7 @@ function onEvent(e: MainEvent) {
 function notifyDone(id: string) {
   const chat = state.chats[id];
   if (!chat || !('Notification' in window)) return;
-  const n = new Notification(chat.status === 'error' ? 'Чат завершился с ошибкой' : 'Claude закончил', { body: chat.title, silent: false });
+  const n = new Notification(chat.status === 'error' ? 'Чат завершился с ошибкой' : 'Claude закончил', { body: chat.title, silent: true });
   n.onclick = () => void openChat(id);
 }
 

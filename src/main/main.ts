@@ -134,6 +134,7 @@ handle('fs:write', (p: string, text: string) => {
   return fs.statSync(p).mtimeMs;
 });
 handle('fs:exists', (p: string) => fs.existsSync(p));
+handle('sounds:system', () => systemSounds());
 handle('fs:watch', (p: string) => watchFile(p));
 handle('fs:unwatch', (p: string) => unwatchFile(p));
 handle('fs:resolve', (base: string, rel: string) => files.resolvePath(base, rel, stateFile.data.projects.map((p) => p.path)));
@@ -272,6 +273,24 @@ handle('cache:delete', (p: string) => cache.deleteItem(p));
 handle('keys:scan', () => keys.scanKeys());
 handle('keys:last', () => keys.lastScan());
 handle('keys:setPatterns', (p: string[]) => keys.setPatterns(p));
+
+/** Notification sounds that come with the OS (short ones first; alarms and long rings left out). */
+function systemSounds() {
+  const out: { id: string; name: string }[] = [];
+  const add = (dir: string, re: RegExp, skip?: RegExp) => {
+    let names: string[] = [];
+    try {
+      names = fs.readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const n of names.sort()) if (re.test(n) && !skip?.test(n)) out.push({ id: `file:${path.join(dir, n)}`, name: n.replace(/\.(wav|aiff?)$/i, '') });
+  };
+  if (process.platform === 'win32') add(path.join(process.env.SystemRoot ?? 'C:\\Windows', 'Media'), /\.wav$/i, /^(Alarm|Ring\d|Speech|Windows (Shutdown|Startup|Logon|Logoff|Battery|Hardware|Critical|Error|User Account|Background|Foreground|Navigation|Menu|Minimize|Restore|Recycle|Pop-up)|recycle|ringout)/i);
+  else if (process.platform === 'darwin') add('/System/Library/Sounds', /\.aiff?$/i);
+  else add('/usr/share/sounds/freedesktop/stereo', /\.(oga|ogg|wav)$/i);
+  return out;
+}
 
 // --- window -------------------------------------------------------------------------------
 
