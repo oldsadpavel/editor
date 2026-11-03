@@ -8,6 +8,7 @@ import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpand
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { SoundButton } from './SoundButton';
+import { ModelPicker } from './Agents';
 import { fileIcon } from './icons';
 
 const MODES = [
@@ -1219,20 +1220,14 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         }}
       />
       <div className="composer-bar">
-        <select value={model} onChange={(e) => (setModel(e.target.value), void call('chat:options', chat.sessionId, { model: e.target.value }))} title="Какая модель отвечает (меняется на лету, история чата сохраняется)">
-          {MODELS.map((m) => (
-            <option key={m.id} value={m.id} title={m.label}>
-              {m.short}
-            </option>
-          ))}
-        </select>
-        <select value={effort} onChange={(e) => (setEffort(e.target.value), void call('chat:options', chat.sessionId, { effort: e.target.value }))} title="Качество ответа: сколько модель думает перед ответом">
+        <ModelPicker chat={chat} model={model} onModel={(m) => (setModel(m), void call('chat:options', chat.sessionId, { model: m }))} />
+        {!chat.agent && <select value={effort} onChange={(e) => (setEffort(e.target.value), void call('chat:options', chat.sessionId, { effort: e.target.value }))} title="Качество ответа: сколько модель думает перед ответом">
           {EFFORTS.map((m) => (
             <option key={m.id} value={m.id} title={m.label}>
               {m.short}
             </option>
           ))}
-        </select>
+        </select>}
         <select value={mode} onChange={(e) => (setMode(e.target.value), void call('chat:options', chat.sessionId, { permissionMode: e.target.value }))} title="Режим разрешений">
           {MODES.map((m) => (
             <option key={m.id} value={m.id} title={m.label}>
@@ -1251,6 +1246,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
           ⚡ Подтверждать всё
         </label>
+        {!chat.agent && (<>
         <label
           className={`auto-approve remote ${chat.remote ? 'on' : ''}`}
           title={
@@ -1269,6 +1265,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           <input type="checkbox" checked={!!chat.chrome} onChange={(e) => void call('chat:chrome', chat.sessionId, e.target.checked)} />
           🌐 Chrome
         </label>
+        </>)}
         {chat.remote && (
           <a className="small" href="https://claude.ai/code" target="_blank" title="Открыть список сессий на claude.ai/code">
             claude.ai/code ↗

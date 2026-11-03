@@ -4,6 +4,7 @@ import { call } from '../api';
 import { MAX_CHAT_PANES, closeChat, closePane, focusPane, newChatBeside, openChatBeside, setUi, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { ChatView, compactEstimateMs } from './ChatView';
+import { AGENT_NAME, AGENT_SHORT } from './Agents';
 import { BlockHandle } from './Layout';
 import { TabStrip, middleClose } from './Tabs';
 import { ContextMenu, type MenuItem } from './ContextMenu';
@@ -229,6 +230,7 @@ export function ChatPanel() {
             >
               <StatusDot id={id} status={c.status} />
               {panes.includes(id) && <span className="pane-badge">{panes.indexOf(id) + 1}</span>}
+              {c.agent && <span className={`agent-pill agent-${c.agent}`} title={AGENT_NAME[c.agent]}>{AGENT_SHORT[c.agent]}</span>}
               {editing === id ? (
                 <Rename
                   value={c.title}

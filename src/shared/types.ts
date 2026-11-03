@@ -55,6 +55,24 @@ export interface FavoriteAnswer {
 }
 export type TurnItem = TurnItemText | TurnItemThinking | TurnItemTool;
 
+/** The coding agent a chat runs with: Claude Code (the SDK) or another CLI agent run headless. */
+export type AgentId = 'claude' | 'codex' | 'gemini' | 'opencode' | 'aider';
+export interface AgentModel { id: string; name: string }
+export interface AgentInfo {
+  id: AgentId;
+  name: string;
+  installed: boolean;
+  version?: string;
+  /** Logged in / has a key. */
+  ready: boolean;
+  status: string;
+  models: AgentModel[];
+  install?: string;
+  login?: string;
+  /** Where its API keys go (Aider). */
+  keysFile?: string;
+}
+
 /** Claude's own task checklist (TodoWrite). */
 export interface TodoItem {
   content: string;
@@ -173,6 +191,8 @@ export interface ChatSnapshot {
   title: string;
   status: ChatStatus;
   turns: Turn[];
+  /** The coding agent the chat runs with (Claude Code unless set). */
+  agent?: AgentId;
   /**
    * Live updates carry only the last few turns: `turns` then starts at index turnsFrom of the whole list
    * (turnsTotal long); the renderer keeps the earlier ones it already has. Absent = the full list.
@@ -240,6 +260,8 @@ export interface PermissionAnswer {
 
 export interface SessionInfo {
   sessionId: string;
+  /** The agent of a chat that isn't Claude Code's. */
+  agent?: AgentId;
   cwd: string;
   title: string;
   lastModified: number;

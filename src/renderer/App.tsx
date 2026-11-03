@@ -15,6 +15,7 @@ import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { Switcher } from './components/Switcher';
+import { AgentSwitchModal, AgentsModal } from './components/Agents';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
 import { get, init, isUnread, set, setUi, toast, togglePanel, useStore } from './store';
@@ -354,6 +355,8 @@ export function App() {
       <CloudModal />
       <McpModal />
       <Switcher />
+      <AgentsModal />
+      <AgentSwitchModal />
       {customize && <TopbarCustomize {...customize} onClose={() => setCustomize(null)} />}
       <Toast />
     </div>

@@ -1,4 +1,5 @@
 import { useRef, useSyncExternalStore } from 'react';
+import type { AgentId, AgentInfo } from '../shared/types';
 import type {
   CloudStatus,
   ServerTestReport,
@@ -59,6 +60,11 @@ export interface LightboxItem {
 
 export interface Store {
   app: AppState | null;
+  /** Coding agents besides Claude Code (installed, logged in, models). */
+  agents: AgentInfo[];
+  showAgents?: boolean;
+  /** A model of another agent was picked in a chat: the confirmation dialog. */
+  agentSwitch?: { sessionId: string; cwd: string; agent: AgentId; model: string };
   auth: AuthStatus | null;
   files: OpenFile[];
   activeFile?: string;
@@ -98,6 +104,7 @@ export interface Store {
 }
 
 let state: Store = {
+  agents: [],
   app: null,
   auth: null,
   files: [],
@@ -491,8 +498,16 @@ export function focusPane(id: string) {
   markSeen(id);
 }
 
-export async function newChat(cwd: string) {
-  const snap = await guard(call<ChatSnapshot>('chat:new', cwd));
+let agentsLoad: Promise<void> | null = null;
+/** The other coding agents (cached in the main process; `refresh` re-checks installs and logins). */
+export function loadAgents(refresh = false) {
+  if (agentsLoad && !refresh) return agentsLoad;
+  agentsLoad = call<AgentInfo[]>('agents:list', refresh).then((agents) => set({ agents }), () => {});
+  return agentsLoad;
+}
+
+export async function newChat(cwd: string, agent?: AgentId, model?: string) {
+  const snap = await guard(call<ChatSnapshot>('chat:new', cwd, agent, model));
   if (!snap) return;
   set((s) => ({ chats: { ...s.chats, [snap.sessionId]: snap } }));
   await saveApp({ openChats: [...state.app!.openChats, snap.sessionId], activeChat: snap.sessionId, chatPanes: panesWith(snap.sessionId) });

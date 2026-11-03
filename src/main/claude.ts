@@ -4,7 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { forkSession, query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { BgTask, CompactState, ShellRun } from '../shared/types';
+import type { AgentId, BgTask, CompactState, ShellRun } from '../shared/types';
+import type { ChildProcess } from 'node:child_process';
+import { AGENT_NAMES } from './agents';
+import { listAgentChats, loadAgentChat, renameAgentChat, runAgentTurn, saveAgentChat, stopAgent } from './agent-run';
 import type { ApprovalEntry, AuthStatus, ChatSnapshot, ChatStatus, PermissionAnswer, PermissionRequest, SendOptions, SessionInfo, TurnAttachment } from '../shared/types';
 import * as approvals from './approvals';
 import { emit } from './bus';
@@ -173,6 +176,12 @@ class ChatSession {
   /** The `system/init` message of the running process: model, version, MCP servers, commands. */
   init: any = null;
   approvals: ApprovalEntry[] = [];
+  /** The coding agent: Claude Code (the SDK below) or another CLI agent run per question (agent-run.ts). */
+  agent: AgentId = 'claude';
+  /** The other agent's own session id, to resume it. */
+  agentSession?: string;
+  /** The other agent's process while it answers. */
+  agentProc: ChildProcess | null = null;
   /** Cumulative cost reported by the current Claude process (reset when a new process starts). */
   costSoFar = 0;
   q: Query | null = null;
@@ -198,6 +207,7 @@ class ChatSession {
     const turns = tail && all.length > tail ? all.slice(-tail) : all;
     return {
       sessionId: this.id,
+      ...(this.agent !== 'claude' ? { agent: this.agent } : {}),
       cwd: this.cwd,
       title: this.title,
       status: this.status,
@@ -267,6 +277,7 @@ export async function listProjectSessions(cwd: string): Promise<SessionInfo[]> {
     createdAt: s.createdAt,
     gitBranch: s.gitBranch,
   }));
+  for (const a of listAgentChats(cwd)) if (!out.some((o) => o.sessionId === a.sessionId)) out.push(a);
   // Chats created here but not yet written to disk still belong in the list.
   for (const s of sessions.values()) {
     if (!out.some((o) => o.sessionId === s.id) && samePath(s.cwd, cwd)) {
@@ -291,6 +302,19 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
   }
   const file = findTranscript(sessionId);
   s = new ChatSession(sessionId, cwdHint ?? os.homedir());
+  const saved0 = file ? null : loadAgentChat(sessionId);
+  if (saved0) {
+    s.agent = saved0.agent;
+    s.agentSession = saved0.agentSession;
+    s.cwd = saved0.cwd;
+    s.title = saved0.title;
+    s.model = saved0.model;
+    s.builder.turns = saved0.turns;
+    s.autoApprove = !!stateFile.data.chatModels?.[sessionId]?.autoApprove;
+    s.approvals = approvals.forChat(sessionId);
+    sessions.set(sessionId, s);
+    return s.snapshot();
+  }
   if (file) {
     const { builder, cwd } = await loadTranscript(file);
     s.builder = builder;
@@ -339,13 +363,19 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
  */
 export async function ensureSession(sessionId: string) {
   if (sessions.has(sessionId)) return;
-  if (!findTranscript(sessionId)) throw new Error('Чат не открыт: у него ещё нет истории на диске — создайте новый чат');
+  if (!findTranscript(sessionId) && !loadAgentChat(sessionId)) throw new Error('Чат не открыт: у него ещё нет истории на диске — создайте новый чат');
   await openChat(sessionId);
 }
 
-export function newChat(cwd: string): ChatSnapshot {
+export function newChat(cwd: string, agent: AgentId = 'claude', model?: string): ChatSnapshot {
   const s = new ChatSession(randomUUID(), cwd);
-  s.model = stateFile.data.defaultModel;
+  s.agent = agent;
+  s.model = agent === 'claude' ? (model ?? stateFile.data.defaultModel) : model || undefined;
+  if (agent !== 'claude') {
+    s.autoApprove = !!stateFile.data.defaultAutoApprove;
+    sessions.set(s.id, s);
+    return s.snapshot();
+  }
   s.effort = stateFile.data.defaultEffort;
   s.autoApprove = !!stateFile.data.defaultAutoApprove;
   s.chrome = stateFile.data.defaultChrome ?? true;
@@ -359,6 +389,7 @@ export async function rename(sessionId: string, title: string) {
     s.title = title;
     s.publish(true);
   }
+  if (s && s.agent !== 'claude') return renameAgentChat(sessionId, title);
   // Written to Claude Code's own transcript, so the name also shows in `claude --resume` and the IDE plugins.
   if (findTranscript(sessionId)) await renameSession(sessionId, title, s ? { dir: s.cwd } : undefined);
 }
@@ -404,6 +435,7 @@ function rememberChatModel(s: ChatSession) {
 export async function send(sessionId: string, text: string, opts: SendOptions) {
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Чат не открыт');
+  if (s.agent !== 'claude') return sendToAgent(s, text, opts);
   const attachments = opts.attachments ?? [];
   if (s.remote) {
     if (!s.remoteProc || s.remoteProc.exited !== undefined) throw new Error('Удалённый процесс Claude не запущен — выключите и снова включите /RC');
@@ -462,6 +494,37 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     parent_tool_use_id: null,
     session_id: s.id,
   } as SDKUserMessage);
+}
+
+/** A question to a chat with another agent: one headless run of that agent (agent-run.ts). */
+function sendToAgent(s: ChatSession, text: string, opts: SendOptions) {
+  if (s.agentProc) throw new Error(`${AGENT_NAMES[s.agent]} ещё отвечает — дождитесь ответа или нажмите «Стоп»`);
+  if (opts.model !== undefined) s.model = opts.model || undefined;
+  if (opts.permissionMode !== undefined) s.permissionMode = opts.permissionMode || undefined;
+  const attachments = opts.attachments ?? [];
+  const images = attachments.filter((p) => IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()));
+  const ctx = s.shellContext.splice(0);
+  let body = attachments.length ? [text, '', ATTACHMENTS_HEADER, ...attachments.map((p) => `- ${p}`)].join('\n') : text;
+  if (ctx.length) body = `${ctx.join('\n')}\n\n${body}`;
+  const turn = s.builder.startTurn(
+    text,
+    Date.now(),
+    randomUUID(),
+    attachments.map((p) => ({ kind: IMAGE_EXT.has(path.extname(p).slice(1).toLowerCase()) ? ('image' as const) : ('file' as const), path: p })),
+  );
+  turn.live = true;
+  if (s.title === 'Новый чат') s.title = (text || path.basename(attachments[0] ?? '')).slice(0, 60);
+  s.suggestion = undefined;
+  s.setStatus('running');
+  runAgentTurn(s, body, turn, s.agent === 'codex' || s.agent === 'opencode' ? images : [], (err) => {
+    turn.live = false;
+    s.builder.closeTurn();
+    if (err) turn.error = err;
+    s.setStatus(err ? 'error' : 'idle');
+    saveAgentChat(s);
+    markCompleted(s, err);
+    s.publish(true);
+  });
 }
 
 /** Bash-mode output goes in front of the question, the way Claude Code itself records it. */
@@ -895,6 +958,7 @@ function stopProcess(s: ChatSession) {
 export function setRemote(sessionId: string, on: boolean) {
   const s = sessions.get(sessionId);
   if (!s) return;
+  if (s.agent !== 'claude') throw new Error(`/RC есть только у Claude Code, а этот чат — с ${AGENT_NAMES[s.agent]}`);
   if (on) {
     if (s.status === 'running' || s.status === 'waiting') throw new Error('Дождитесь конца ответа или нажмите «Стоп», затем включите удалённый режим');
     const cli = claudeExecutable();
@@ -1067,6 +1131,7 @@ export async function chatStatus(sessionId: string) {
 /** Slash commands of the chat's session (from the running process), for the `/` menu. */
 export async function chatCommands(sessionId: string): Promise<{ name: string; description: string; argumentHint?: string }[]> {
   const s = sessions.get(sessionId);
+  if (s && s.agent !== 'claude') return [];
   if (s?.q) {
     const list = await s.q.supportedCommands().catch(() => null);
     if (list) return list.map((c) => ({ name: c.name, description: c.description, argumentHint: c.argumentHint }));
@@ -1115,6 +1180,7 @@ export function setAutoApprove(sessionId: string, on: boolean) {
 
 export async function interrupt(sessionId: string) {
   const s = sessions.get(sessionId);
+  if (s && s.agent !== 'claude') return stopAgent(s);
   if (s?.remote && s.remoteProc) {
     remote.interrupt(s.remoteProc);
     finishLiveTurns(s);
@@ -1155,6 +1221,10 @@ export async function interrupt(sessionId: string) {
 export async function restart(sessionId: string) {
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Чат не открыт');
+  if (s.agent !== 'claude') {
+    stopAgent(s);
+    return 0;
+  }
   const last = s.builder.turns[s.builder.turns.length - 1];
   const resend: string[] = [];
   if (last?.live) {
@@ -1202,6 +1272,7 @@ export function closeChat(sessionId: string) {
   const s = sessions.get(sessionId);
   if (!s) return;
   if (s.status === 'running' || s.status === 'waiting') return; // keep working in the background
+  if (s.agent !== 'claude') return void sessions.delete(sessionId);
   if (!s.existsOnDisk && !findTranscript(sessionId)) return; // a new chat without history: nothing to reopen it from
   s.input?.close();
   s.q = null;
@@ -1225,6 +1296,7 @@ export function fileChanges(sessionId: string, turnIds: string[], file: string) 
 
 /** A Claude process for control requests (rewind, MCP) even when no question is running. */
 function ensureProcess(s: ChatSession) {
+  if (s.agent !== 'claude') throw new Error(`Это есть только у Claude Code, а этот чат — с ${AGENT_NAMES[s.agent]}`);
   if (s.remote) throw new Error('В режиме /RC это недоступно — выключите /RC');
   if (!s.q) start(s);
   return s.q!;

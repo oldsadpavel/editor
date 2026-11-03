@@ -2,10 +2,11 @@ import { BrowserWindow, Menu, clipboard, app, dialog, ipcMain, net, protocol, sh
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import type { AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer, SendOptions } from '../shared/types';
+import type { AgentId, AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer, SendOptions } from '../shared/types';
 import { setSink } from './bus';
 import * as cache from './cache';
 import * as claude from './claude';
+import * as agents from './agents';
 import * as cloud from './cloud';
 import * as deploy from './deploy';
 import { openDiffWindow } from './diff';
@@ -138,6 +139,9 @@ handle('fs:write', (p: string, text: string) => {
   return fs.statSync(p).mtimeMs;
 });
 handle('fs:exists', (p: string) => fs.existsSync(p));
+handle('agents:list', (refresh?: boolean) => agents.listAgents(refresh));
+handle('agents:install', (id: AgentId) => agents.installAgent(id));
+handle('agents:login', (id: AgentId) => agents.openLogin(id));
 handle('sounds:system', () => systemSounds());
 handle('fs:watch', (p: string) => watchFile(p));
 handle('fs:unwatch', (p: string) => unwatchFile(p));
@@ -172,7 +176,7 @@ handle('claude:install', () => claude.installClaude());
 
 handle('chat:list', (cwd: string) => claude.listProjectSessions(cwd));
 handle('chat:open', (id: string, cwd?: string) => claude.openChat(id, cwd));
-handle('chat:new', (cwd: string) => claude.newChat(cwd));
+handle('chat:new', (cwd: string, agent?: AgentId, model?: string) => claude.newChat(cwd, agent, model));
 // A chat the UI still shows may have been closed here (e.g. its group was switched away): reopen it on demand.
 const ensure = (id: string) => claude.ensureSession(id);
 handle('chat:send', async (id: string, text: string, opts?: SendOptions) => (await ensure(id), claude.send(id, text, opts ?? {})));

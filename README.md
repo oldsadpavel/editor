@@ -4,17 +4,22 @@
 
 <p align="center"><i>Редактор кода вокруг чатов с ИИ: ИИ думает, кожаный нажимает кнопки.</i></p>
 
-MPI — десктопный редактор кода, построенный вокруг чатов с ИИ-агентом (сейчас это Claude Code). В нём одновременно
-идут несколько чатов по каждому проекту, рядом открыты файлы, а панели следят за тем, что происходит дальше: пуши, деплои, тесты,
+MPI — десктопный редактор кода, построенный вокруг чатов с ИИ-агентами: Claude Code, Codex, Gemini CLI, OpenCode и Aider.
+В нём одновременно идут несколько чатов по каждому проекту, рядом открыты файлы, а панели следят за тем, что происходит дальше: пуши, деплои, тесты,
 ключи и ошибки. Название — шутка: ИИ всё придумывает, а человек служит ему «мясным прокси» — запускает команды,
 жмёт кнопки, проверяет результат и присылает скриншоты. MPI делает эту работу удобной.
 
-*A desktop code editor built around AI agent chats (currently Claude Code): several chats per project, files next to them,
+*A desktop code editor built around AI agent chats (Claude Code, Codex, Gemini CLI, OpenCode, Aider): several chats per project, files next to them,
 and panels that follow pushes, deploys, tests, keys and problems. The UI is in Russian.*
 
 ![Главное окно](docs/screenshots/main.png)
 
 ## Что умеет
+
+**Агенты**
+- Claude Code, Codex (OpenAI), Gemini CLI (Google), OpenCode и Aider — модели всех установленных агентов в одном списке.
+- DeepSeek и другие модели — через OpenCode (есть бесплатные) или Aider по своему ключу.
+- Окно «⚙ Агенты»: что установлено, установка в один клик, вход, ключи.
 
 **Чаты**
 - Несколько чатов на проект, у каждого своя история; память проекта (CLAUDE.md, memory) общая.
@@ -48,8 +53,9 @@ and panels that follow pushes, deploys, tests, keys and problems. The UI is in R
 - **macOS** — `MPI-<версия>-arm64-mac.zip` (Apple Silicon) или `MPI-<версия>-mac.zip` (Intel). Сборка не подписана:
   при первом запуске правый клик → «Открыть», либо `xattr -cr /Applications/MPI.app`.
 
-Нужен установленный [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) с выполненным входом.
-Если его нет, MPI предложит установить; вход (`claude auth login`) тоже запускается из редактора.
+Основной агент — [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) с выполненным входом;
+если его нет, MPI предложит установить. Остальные агенты (Codex, Gemini CLI, OpenCode, Aider) необязательны —
+их можно поставить и войти в окне «⚙ Агенты» (пункт в выборе модели).
 
 ## Сборка из исходников
 
