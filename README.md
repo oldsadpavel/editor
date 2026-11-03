@@ -50,7 +50,7 @@ and panels that follow pushes, deploys, tests, keys and problems. The UI is in R
 Готовые сборки — на странице [Releases](https://github.com/oldsadpavel/editor/releases):
 
 - **Windows** — `MPI-<версия>-portable.exe`, установка не нужна.
-- **macOS** — `MPI-<версия>-arm64-mac.zip` (Apple Silicon) или `MPI-<версия>-mac.zip` (Intel). Сборка не подписана:
+- **macOS** — `MPI-<версия>-arm64-mac.zip` (Apple Silicon) или `MPI-<версия>-x64-mac.zip` (Intel). Сборка не подписана:
   при первом запуске правый клик → «Открыть», либо `xattr -cr /Applications/MPI.app`.
 
 Основной агент — [Claude Code](https://docs.claude.com/en/docs/claude-code) (`claude`) с выполненным входом;
