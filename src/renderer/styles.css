@@ -908,3 +908,4 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .tb-customize label { display: flex; align-items: center; gap: 7px; cursor: pointer; padding: 2px 0; }
 .tb-customize-note { color: var(--muted); font-size: 11px; margin-top: 4px; }
 .tb-customize .btn { align-self: flex-start; margin-top: 4px; }
+.tb-more { display: inline-flex; align-items: center; gap: 3px; }

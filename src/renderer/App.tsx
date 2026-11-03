@@ -65,7 +65,8 @@ function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: 
   const todo = useStore((s) => (id === 'setup' ? s.setup.filter((i) => i.level === 'todo').length : 0));
   const waiting = useStore((s) => (id === 'chat' ? Object.values(s.chats).some((c) => c.status === 'waiting') : false));
   const hidden = useStore((s) => !!s.app!.ui.hiddenButtons?.includes(id));
-  if (hidden && !visible && !alerts && !waiting) return null;
+  // hidden stays hidden (its problems are counted on ⋯); only an open panel keeps its button, to be able to close it
+  if (hidden && !visible) return null;
   const cls = ['tb-btn', visible ? 'on' : '', alerts ? (visible ? 'alert-open' : 'alert') : '', waiting && !visible ? 'alert' : '', todo && !visible ? 'attn' : ''].join(' ');
   return (
     <button className={cls} onClick={() => togglePanel(id)} title={`${visible ? 'Скрыть' : 'Показать'}: ${label}`}>
@@ -276,7 +277,7 @@ function TopbarCustomize({ x, y, onClose }: { x: number; y: number; onClose: () 
           {b.label}
         </label>
       ))}
-      <div className="tb-customize-note">Скрытая кнопка всё равно появится, если её панель открыта или в ней ошибка.</div>
+      <div className="tb-customize-note">Проблемы в скрытых панелях считаются на кнопке ⋯ (красная цифра).</div>
       {hidden.length > 0 && (
         <button className="btn small" onClick={() => setUi({ hiddenButtons: [] })}>
           Показать все
@@ -292,6 +293,8 @@ export function App() {
   const [, rerender] = useState(0);
   const [customize, setCustomize] = useState<{ x: number; y: number } | null>(null);
   const hiddenButtons = useStore((s) => s.app?.ui.hiddenButtons ?? NO_HIDDEN);
+  // problems in panels whose buttons are hidden: shown on ⋯ so they aren't missed
+  const hiddenAlerts = useStore((s) => (s.app ? TOOLBAR.filter((b) => s.app!.ui.hiddenButtons?.includes(b.id)).reduce((n, b) => n + panelAlerts(s, b.id), 0) : 0));
 
   useEffect(() => {
     init().then(() => setReady(true));
@@ -331,8 +334,13 @@ export function App() {
         {!hiddenButtons.includes('meters') && <UsageMeters />}
         {!hiddenButtons.includes('layout') && <LayoutButton />}
         <AuthButton />
-        <button className="icon-btn" title="Какие кнопки показывать на верхней панели (или правый клик по панели)" onClick={(e) => setCustomize({ x: e.clientX - 230, y: e.clientY + 14 })}>
-          ⋯
+        <button
+          className="icon-btn tb-more"
+          title={`Какие кнопки показывать на верхней панели (или правый клик по панели)${hiddenAlerts ? `
+В скрытых панелях проблем: ${hiddenAlerts}` : ''}`}
+          onClick={(e) => setCustomize({ x: e.clientX - 230, y: e.clientY + 14 })}
+        >
+          ⋯{hiddenAlerts > 0 && <span className="badge red">{hiddenAlerts}</span>}
         </button>
         <button className="icon-btn help-btn" title="Инструкция" onClick={() => set({ help: 'general' })}>
           ?
