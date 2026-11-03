@@ -534,13 +534,30 @@ function tokenHistory(turn: Turn): string[] {
   ];
 }
 
+/** «12 с», «3 мин 05 с», «2 ч 14 мин». */
+function agoText(sec: number) {
+  if (sec < 60) return `${sec} с`;
+  if (sec < 3600) return `${Math.floor(sec / 60)} мин ${String(sec % 60).padStart(2, '0')} с`;
+  return `${Math.floor(sec / 3600)} ч ${Math.floor((sec % 3600) / 60)} мин`;
+}
+
 function TokensBadge({ turn }: { turn: Turn }) {
+  // the «last change» line is computed when the pointer comes over the badge, so it's never stale
+  const [now, setNow] = useState(Date.now);
   const t = turn.tokens;
   if (!t) return null;
   const main = t.input + t.cacheWrite + t.output;
+  const lastAt = Math.max(turn.startedAt, turn.answeredAt ?? 0, ...(turn.tokenLog?.map((e) => e.at) ?? []));
+  const ago = Math.max(0, Math.round((now - lastAt) / 1000));
+  const when = new Date(lastAt).toLocaleTimeString('ru-RU');
+  const lastLine = turn.live
+    ? `⏱ Последнее изменение: ${agoText(ago)} назад (${when})${ago >= 120 ? ' — похоже, завис: ⟳ под полем ввода перезапустит чат' : ''}`
+    : `⏱ Ответ закончен ${agoText(ago)} назад (${when})`;
   // Subagents (Agent/Task tool) did part of the work in their own context.
   const agents = turn.items.filter((i) => i.kind === 'tool' && (i.name === 'Agent' || i.name === 'Task')).map((i) => (i as TurnItemTool).summary).filter(Boolean);
   const tip = [
+    lastLine,
+    '',
     turn.models?.length ? `Отвечал: ${turn.models.map((m) => `${modelName(m)} (${m})`).join(', ')}` : 'Модель: нет данных',
     ...(turn.fallbacks?.length
       ? turn.fallbacks.map((f) => `Защитный фильтр ${modelName(f.from ?? '?')} остановил ответ${f.category ? ` [${f.category}]` : ''} → ответил ${modelName(f.to ?? '?')}`)
@@ -565,7 +582,7 @@ function TokensBadge({ turn }: { turn: Turn }) {
       : []),
   ].join('\n');
   return (
-    <span className="turn-tokens" title={tip}>
+    <span className="turn-tokens" title={tip} onMouseEnter={() => setNow(Date.now())}>
       {turn.fallbacks?.length ? (
         <span className="turn-model fallback">
           {modelName(turn.fallbacks[0].from ?? '').split(' ')[0]}→{modelName(turn.fallbacks[turn.fallbacks.length - 1].to ?? turn.models?.[turn.models.length - 1] ?? '').split(' ')[0]}

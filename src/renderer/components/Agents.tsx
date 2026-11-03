@@ -30,7 +30,9 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
   useEffect(() => void loadAgents(), []);
   const agent = chat.agent ?? 'claude';
   const value = `${agent}|${model}`;
-  const usable = agents.filter((a) => a.installed);
+  // only agents that can answer now (logged in / have a key); the rest are one line pointing to ⚙ Агенты
+  const usable = agents.filter((a) => a.installed && a.ready);
+  const waiting = agents.filter((a) => a.installed && !a.ready);
   return (
     <select
       className="model-picker"
@@ -56,7 +58,7 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
         ))}
       </optgroup>
       {usable.map((a) => (
-        <optgroup key={a.id} label={`${a.name}${a.ready ? '' : ' — ' + a.status}`}>
+        <optgroup key={a.id} label={a.name}>
           <option value={`${a.id}|`}>{AGENT_SHORT[a.id]}: по умолчанию</option>
           {a.models.map((m) => (
             <option key={m.id} value={`${a.id}|${m.id}`}>
@@ -65,7 +67,7 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
           ))}
         </optgroup>
       ))}
-      <option value="__agents">⚙ Агенты…</option>
+      <option value="__agents">⚙ Агенты…{waiting.length ? ` (нужен вход: ${waiting.map((a) => AGENT_SHORT[a.id]).join(', ')})` : ''}</option>
     </select>
   );
 }
