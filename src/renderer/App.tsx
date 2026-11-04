@@ -16,7 +16,7 @@ import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { Switcher } from './components/Switcher';
 import { AccountsPopover, AgentSwitchModal, AgentsModal } from './components/Agents';
-import { TaskDraftModal, TasksButton, useTaskReminders } from './components/Tasks';
+import { TaskDraftModal, TaskModal, TasksButton, useTaskReminders } from './components/Tasks';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
 import { get, init, isUnread, loadAgents, set, setUi, toast, togglePanel, useStore } from './store';
@@ -361,6 +361,7 @@ export function App() {
       <Switcher />
       <AgentsModal />
       <TaskDraftModal />
+      <TaskModal />
       <AgentSwitchModal />
       {customize && <TopbarCustomize {...customize} onClose={() => setCustomize(null)} />}
       <Toast />

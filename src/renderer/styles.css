@@ -944,7 +944,7 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 
 /* ✅ Задачи (in place of the editor) */
 .tasks-view { flex: 1; display: flex; min-height: 0; min-width: 0; background: var(--bg); }
-.tasks-list { width: 300px; flex: none; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow: auto; }
+.tasks-list { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow: auto; }
 .tasks-head { display: flex; align-items: center; gap: 6px; }
 .tasks-filter { margin: 4px 0; }
 .task-item { display: flex; align-items: flex-start; gap: 7px; padding: 6px 8px; border-radius: 6px; cursor: pointer; border: 1px solid transparent; }
@@ -975,6 +975,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .task-body-input { width: 100%; min-height: 220px; resize: vertical; font: inherit; }
 .task-body { padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; min-height: 60px; }
 .md img.md-img { max-width: 100%; border-radius: 6px; margin: 4px 0; }
+.task-modal { position: relative; width: min(860px, 94vw); max-height: 88vh; padding-top: 18px; }
+.task-modal-x { position: absolute; top: 8px; right: 10px; font-size: 18px; }
+.task-modal .task-top { padding-right: 30px; }
 .task-draft { width: min(620px, 92vw); display: flex; flex-direction: column; gap: 8px; }
 .md .sec-remind { margin: 2px 0 4px; font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--claude); background: transparent; color: #ffb08f; cursor: pointer; }
 .md .sec-remind:hover { background: rgba(217, 119, 87, 0.2); }

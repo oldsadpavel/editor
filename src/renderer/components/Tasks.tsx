@@ -157,6 +157,7 @@ export async function runTaskCommand(task: Task) {
   if (!task.command) return;
   if (!src) return toast('Выполнить нельзя: задача не из чата', 'error');
   if (!(await call<boolean>('chat:exists', src.sessionId).catch(() => false))) return toast(`Выполнить нельзя: чата «${src.chatTitle}» больше нет (закрыт без истории или удалён)`, 'error');
+  closeTask();
   await openChat(src.sessionId, src.cwd);
   const chat = get().chats[src.sessionId];
   if (!chat) return toast(`Выполнить нельзя: чат «${src.chatTitle}» закрыт или удалён`, 'error');
@@ -321,7 +322,6 @@ export function TasksView() {
     const l = tasks.filter((t) => (filter === 'all' ? true : filter === 'done' ? t.done : !t.done));
     return [...l].sort((a, b) => (a.done !== b.done ? (a.done ? 1 : -1) : (a.due ?? Infinity) - (b.due ?? Infinity) || b.createdAt - a.createdAt));
   }, [tasks, filter]);
-  const current = tasks.find((t) => t.id === selected) ?? list[0];
   const add = () => {
     const t: Task = { id: crypto.randomUUID(), title: 'Новая задача', body: '', subtasks: [], done: false, createdAt: Date.now() };
     saveTask(t);
@@ -349,7 +349,7 @@ export function TasksView() {
           ))}
         </div>
         {list.map((t) => (
-          <div key={t.id} className={`task-item ${current?.id === t.id ? 'on' : ''} ${t.done ? 'done' : ''} due-${dueState(t)}`} onClick={() => set({ taskSelected: t.id })}>
+          <div key={t.id} className={`task-item ${selected === t.id ? 'on' : ''} ${t.done ? 'done' : ''} due-${dueState(t)}`} onClick={() => set({ taskSelected: t.id })}>
             <input type="checkbox" checked={t.done} onClick={(e) => e.stopPropagation()} onChange={(e) => saveTask({ ...t, done: e.target.checked, doneAt: e.target.checked ? Date.now() : undefined })} />
             <div className="task-item-main">
               <span className="task-item-title">{t.title}</span>
@@ -364,9 +364,37 @@ export function TasksView() {
         ))}
         {!list.length && <div className="empty">{filter === 'done' ? 'Выполненных пока нет' : 'Задач нет. «＋ Задача» или ⏰ в ответе чата.'}</div>}
       </div>
-      <div className="task-detail">{current ? <TaskEditor key={current.id} task={current} /> : <div className="empty big">Выберите или создайте задачу</div>}</div>
     </div>
   );
+}
+
+/** The open task, in a modal over everything (opened from the list, a reminder or a notification). */
+export function TaskModal() {
+  const id = useStore((s) => s.taskSelected);
+  // not inside the selector: useStore caches by store state, a selector closing over id would go stale
+  const tasks = useStore((s) => s.app?.tasks);
+  const task = id ? tasks?.find((t) => t.id === id) : undefined;
+  useEffect(() => {
+    if (!task) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && closeTask();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [!!task]);
+  if (!task) return null;
+  return (
+    <div className="modal-bg" onMouseDown={closeTask}>
+      <div className="modal task-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="icon-btn task-modal-x" title="Закрыть (Esc)" onClick={closeTask}>
+          ×
+        </button>
+        <TaskEditor key={task.id} task={task} />
+      </div>
+    </div>
+  );
+}
+
+export function closeTask() {
+  set({ taskSelected: undefined });
 }
 
 function TaskEditor({ task }: { task: Task }) {
@@ -380,6 +408,15 @@ function TaskEditor({ task }: { task: Task }) {
     const t = setTimeout(() => update({ body }), 500);
     return () => clearTimeout(t);
   }, [body]);
+  const latest = useRef(body);
+  latest.current = body;
+  useEffect(
+    () => () => {
+      const cur = get().app?.tasks?.find((x) => x.id === task.id);
+      if (cur && cur.body !== latest.current) saveTask({ ...cur, body: latest.current });
+    },
+    [],
+  );
   const insertAtCursor = (text: string) => {
     const el = area.current;
     const at = el?.selectionStart ?? body.length;
@@ -401,7 +438,7 @@ function TaskEditor({ task }: { task: Task }) {
       <div className="task-top">
         <input type="checkbox" checked={task.done} onChange={(e) => update({ done: e.target.checked, doneAt: e.target.checked ? Date.now() : undefined })} title="Выполнено" />
         <input className="task-title-input" value={task.title} onChange={(e) => update({ title: e.target.value })} />
-        <button className="btn small danger" onClick={() => confirm(`Удалить задачу «${task.title}»?`) && removeTask(task.id)}>
+        <button className="btn small danger" onClick={() => confirm(`Удалить задачу «${task.title}»?`) && (closeTask(), removeTask(task.id))}>
           Удалить
         </button>
       </div>
@@ -435,6 +472,7 @@ function TaskEditor({ task }: { task: Task }) {
             className="path-link"
             onClick={() => {
               const src = task.source!;
+              closeTask();
               void openChat(src.sessionId, src.cwd).then(() => focusChatTurn(src.sessionId, src.turnStartedAt));
             }}
           >
