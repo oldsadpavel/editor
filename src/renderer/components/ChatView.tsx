@@ -9,6 +9,7 @@ import { Markdown, basename, formatDuration, formatTime, plural, relPath } from 
 import { DeployCard } from './Panels';
 import { SoundButton } from './SoundButton';
 import { ModelPicker } from './Agents';
+import { RemindButton, TurnContext } from './Tasks';
 import { fileIcon } from './icons';
 
 const MODES = [
@@ -651,6 +652,7 @@ function TurnRow({
     setBodyTab(t);
     if (!open) onToggle();
   };
+  const chatTitle = useStore((s) => s.chats[sessionId]?.title);
   return (
     <div className={`turn ${open ? 'open' : ''} ${turn.live ? 'live' : ''} ${turn.error ? 'failed' : ''} ${highlight ? 'flash' : ''}`} ref={ref}>
       <div className="turn-head" onClick={onToggle}>
@@ -694,6 +696,7 @@ function TurnRow({
         )}
         <TokensBadge turn={turn} />
         {!turn.live && <FavStar sessionId={sessionId} turn={turn} />}
+        {!turn.live && <RemindButton ctx={{ sessionId, cwd, chatTitle: chatTitle ?? '', turn }} />}
         {!turn.live && !turn.shell && (
           <span
             className="rewind-btn"
@@ -712,7 +715,11 @@ function TurnRow({
           {dur > 0 && !turn.live && <span className="muted"> · {formatDuration(dur)}</span>}
         </span>
       </div>
-      {open && <TurnBody turn={turn} cwd={cwd} partial={partial} partialThinking={partialThinking} sessionId={sessionId} approvals={approvals} tab={bodyTab} setTab={setBodyTab} />}
+      {open && (
+        <TurnContext.Provider value={{ sessionId, cwd, chatTitle: chatTitle ?? '', turn }}>
+          <TurnBody turn={turn} cwd={cwd} partial={partial} partialThinking={partialThinking} sessionId={sessionId} approvals={approvals} tab={bodyTab} setTab={setBodyTab} />
+        </TurnContext.Provider>
+      )}
     </div>
   );
 }

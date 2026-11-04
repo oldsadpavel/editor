@@ -16,6 +16,7 @@ import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { Switcher } from './components/Switcher';
 import { AccountsPopover, AgentSwitchModal, AgentsModal } from './components/Agents';
+import { TaskDraftModal, TasksButton, useTaskReminders } from './components/Tasks';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
 import { get, init, isUnread, loadAgents, set, setUi, toast, togglePanel, useStore } from './store';
@@ -250,7 +251,7 @@ const NO_HIDDEN: string[] = [];
 
 /** Every top-bar button the user can hide; «Настройка» first since that's where people look for it. */
 const CUSTOMIZABLE: { id: string; label: string }[] = [
-  ...TOOLBAR.flatMap((b) => (b.id === 'chat' ? [{ id: b.id, label: `${b.icon} ${b.label}` }, { id: 'editor', label: '📝 Редактор' }] : [{ id: b.id, label: `${b.icon} ${b.label}` }])),
+  ...TOOLBAR.flatMap((b) => (b.id === 'chat' ? [{ id: b.id, label: `${b.icon} ${b.label}` }, { id: 'editor', label: '📝 Редактор' }, { id: 'tasks', label: '✅ Задачи' }] : [{ id: b.id, label: `${b.icon} ${b.label}` }])),
   { id: 'meters', label: '▤ Лимиты (Сессия / Неделя)' },
   { id: 'layout', label: '▦ Раскладка' },
 ];
@@ -294,6 +295,7 @@ export function App() {
   const [ready, setReady] = useState(false);
   const [, rerender] = useState(0);
   const [customize, setCustomize] = useState<{ x: number; y: number } | null>(null);
+  useTaskReminders();
   const hiddenButtons = useStore((s) => s.app?.ui.hiddenButtons ?? NO_HIDDEN);
   // problems in panels whose buttons are hidden: shown on ⋯ so they aren't missed
   const hiddenAlerts = useStore((s) => (s.app ? TOOLBAR.filter((b) => s.app!.ui.hiddenButtons?.includes(b.id)).reduce((n, b) => n + panelAlerts(s, b.id), 0) : 0));
@@ -328,6 +330,7 @@ export function App() {
             <Fragment key={b.id}>
               <ToolbarButton {...b} />
               {b.id === 'chat' && <EditorButton />}
+              {b.id === 'chat' && <TasksButton />}
             </Fragment>
           ))}
         </div>
@@ -357,6 +360,7 @@ export function App() {
       <McpModal />
       <Switcher />
       <AgentsModal />
+      <TaskDraftModal />
       <AgentSwitchModal />
       {customize && <TopbarCustomize {...customize} onClose={() => setCustomize(null)} />}
       <Toast />

@@ -1,5 +1,5 @@
 import { useRef, useSyncExternalStore } from 'react';
-import type { AgentId, AgentInfo } from '../shared/types';
+import type { AgentId, AgentInfo, Task } from '../shared/types';
 import type {
   CloudStatus,
   ServerTestReport,
@@ -65,6 +65,9 @@ export interface Store {
   showAgents?: boolean;
   /** A model of another agent was picked in a chat: the confirmation dialog. */
   agentSwitch?: { sessionId: string; cwd: string; agent: AgentId; model: string };
+  /** Задачи: the task shown on the right; the «new task» dialog (from a chat answer). */
+  taskSelected?: string;
+  taskDraft?: Partial<Task>;
   auth: AuthStatus | null;
   files: OpenFile[];
   activeFile?: string;
@@ -498,6 +501,12 @@ export function focusPane(id: string) {
   markSeen(id);
 }
 
+/** Scrolls a chat to the answer that started at `startedAt` (a task's link back to its answer). */
+export function focusChatTurn(sessionId: string, startedAt: number) {
+  const turn = state.chats[sessionId]?.turns.find((t) => t.startedAt === startedAt);
+  if (turn) set({ focusTurn: { sessionId, turnId: turn.id, nonce: Date.now() } });
+}
+
 let agentsLoad: Promise<void> | null = null;
 /** The other coding agents (cached in the main process; `refresh` re-checks installs and logins). */
 export function loadAgents(refresh = false) {
@@ -736,6 +745,10 @@ function onEvent(e: MainEvent) {
       return;
     case 'openChat':
       void openChat(e.sessionId);
+      return;
+    case 'openTask':
+      set({ taskSelected: e.id });
+      setUi({ tasksOpen: true, editorHidden: false });
       return;
     case 'sessionsChanged':
       void loadSessions(e.cwd);

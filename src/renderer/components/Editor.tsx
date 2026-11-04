@@ -31,6 +31,7 @@ import { closeFile, editFile, get, reloadFile, saveFile, set, setUi, toast, useS
 import { basename, dirname } from '../util';
 import { fileIcon } from './icons';
 import { ImageTab } from './ImageViewer';
+import { TasksView } from './Tasks';
 import { BlockHandle } from './Layout';
 import { TabStrip, middleClose } from './Tabs';
 
@@ -183,6 +184,8 @@ export function EditorArea() {
   const files = useStore((s) => s.files);
   const active = useStore((s) => s.activeFile);
   const file = files.find((f) => f.path === active);
+  const tasks = useStore((s) => !!s.app?.ui.tasksOpen);
+  if (tasks) return <TasksView />;
 
   return (
     <div className="editor-area">

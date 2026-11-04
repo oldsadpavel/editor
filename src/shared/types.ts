@@ -55,6 +55,23 @@ export interface FavoriteAnswer {
 }
 export type TurnItem = TurnItemText | TurnItemThinking | TurnItemTool;
 
+/** A task (Задачи): title, description with pictures (Markdown), subtasks, a due date with a reminder. */
+export interface Task {
+  id: string;
+  title: string;
+  body: string;
+  subtasks: { id: string; text: string; done: boolean }[];
+  /** When to remind (ms). */
+  due?: number;
+  done: boolean;
+  createdAt: number;
+  doneAt?: number;
+  /** The reminder for this due date was shown. */
+  notifiedAt?: number;
+  /** The chat answer it was made from. */
+  source?: { sessionId: string; cwd: string; chatTitle: string; turnStartedAt: number; prompt: string };
+}
+
 /** The coding agent a chat runs with: Claude Code (the SDK) or another CLI agent run headless. */
 export type AgentId = 'claude' | 'codex' | 'gemini' | 'opencode' | 'aider';
 export interface AgentModel { id: string; name: string }
@@ -468,6 +485,8 @@ export interface AppState {
   sound?: { default?: string; volume?: number };
   /** Windows / macOS pop-up when an answer is ready while the window is away (default on). */
   notifications?: boolean;
+  /** Задачи: to-dos with due dates and reminders, made by hand or from a chat answer. */
+  tasks?: Task[];
   /** A chat's own «answer ready» sound (absent — the default one). */
   chatSounds?: Record<string, string>;
   deployTargets: Record<string, DeployTarget>;
@@ -522,6 +541,8 @@ export interface AppState {
     editorHidden?: boolean;
     /** After `!` commands finish, send their output to Claude by itself (after a short countdown). Default on. */
     autoSendShell?: boolean;
+    /** Задачи are shown in place of the code editor. */
+    tasksOpen?: boolean;
     /** Top-bar buttons the user hid (panel ids, 'editor', 'meters', 'layout'). */
     hiddenButtons?: string[];
     /** Project tree: the selected row and the scroll position, restored after a restart. */
@@ -570,6 +591,7 @@ export type MainEvent =
   | { type: 'fileChanged'; path: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'openChat'; sessionId: string }
+  | { type: 'openTask'; id: string }
   | { type: 'sessionsChanged'; cwd: string }
   | { type: 'cloud'; status: CloudStatus }
   | { type: 'serverTests'; reports: Record<string, ServerTestReport> };

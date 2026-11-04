@@ -1,5 +1,6 @@
 import { marked } from 'marked';
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
+import { TurnContext, remindFrom } from './components/Tasks';
 import { call } from './api';
 import { openFile, set, toast } from './store';
 
@@ -104,6 +105,16 @@ marked.use({
       if (isPath(raw)) return `<code class="path-link" data-path="${escapeHtml(raw)}">${text}</code>${copyButton(escapeHtml(raw))}`;
       return raw.trim().length >= 3 ? `<code>${text}</code>${copyTextButton(escapeHtml(raw))}` : `<code>${text}</code>`;
     },
+    image: ({ href, text }) => {
+      let path = href;
+      try {
+        path = decodeURIComponent(href);
+      } catch {
+        /* as is */
+      }
+      const src = /^(?:[A-Za-z]:[\\/]|\/)/.test(path) ? `efile:///${encodeURIComponent(path)}` : href;
+      return `<img class="md-img" src="${escapeHtml(src)}" alt="${escapeHtml(text)}">`;
+    },
     link: ({ href, text }) => `<a href="${escapeHtml(href)}" target="_blank">${text}</a>`,
     // like marked's own text renderer (nested tokens, escaping) plus clickable absolute paths
     text(this: any, t: any) {
@@ -183,6 +194,15 @@ function markSections(html: string) {
         box.className = `md-sec sec-${kind}`;
         el.replaceWith(box);
         box.appendChild(el);
+        // what the user has to do can become a task with a reminder
+        if (kind === 'action') {
+          const b = doc.createElement('button');
+          b.className = 'sec-remind';
+          b.dataset.remind = '1';
+          b.title = 'Создать задачу с напоминанием из этого блока';
+          b.textContent = '⏰ Напомнить';
+          box.appendChild(b);
+        }
         found = true;
       }
       continue;
@@ -193,12 +213,19 @@ function markSections(html: string) {
 }
 
 export function Markdown({ text, cwd }: { text: string; cwd: string }) {
+  const turnCtx = useContext(TurnContext);
   const html = useMemo(() => markSections(marked.parse(text, { async: false }) as string), [text]);
   return (
     <div
       className="md"
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={(e) => {
+        const remind = (e.target as HTMLElement).closest('[data-remind]') as HTMLElement | null;
+        if (remind) {
+          const box = remind.closest('.md-sec')!.cloneNode(true) as HTMLElement;
+          box.querySelectorAll('button').forEach((b) => b.remove());
+          return remindFrom(turnCtx, box.innerText);
+        }
         const copyText = (e.target as HTMLElement).closest('[data-copy-text]') as HTMLElement | null;
         if (copyText) return void navigator.clipboard.writeText(copyText.dataset.copyText!).then(() => toast(`Скопировано: ${copyText.dataset.copyText!.slice(0, 60)}`));
         const copy = (e.target as HTMLElement).closest('[data-copy]') as HTMLElement | null;

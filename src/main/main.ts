@@ -140,6 +140,17 @@ handle('fs:write', (p: string, text: string) => {
 });
 handle('fs:exists', (p: string) => fs.existsSync(p));
 handle('agents:list', (refresh?: boolean) => agents.listAgents(refresh));
+handle('notify:task', (id: string, title: string, body: string) => {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body, silent: true });
+  n.on('click', () => {
+    if (win?.isMinimized()) win.restore();
+    win?.show();
+    win?.focus();
+    win?.webContents.send('event', { type: 'openTask', id });
+  });
+  n.show();
+});
 handle('notify:done', (sessionId: string, title: string, body: string) => {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body, silent: true });
