@@ -140,6 +140,7 @@ handle('fs:write', (p: string, text: string) => {
 });
 handle('fs:exists', (p: string) => fs.existsSync(p));
 handle('agents:list', (refresh?: boolean) => agents.listAgents(refresh));
+handle('chat:exists', (id: string) => claude.chatExists(id));
 handle('notify:task', (id: string, title: string, body: string) => {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body, silent: true });
@@ -249,7 +250,6 @@ handle('chat:seen', (id: string) => {
   stateFile.save();
   return meta;
 });
-handle('chat:exists', (id: string) => !!findTranscript(id));
 
 handle('problems:list', () => problems.list());
 handle('problems:ack', (id?: string) => problems.acknowledge(id));

@@ -65,9 +65,13 @@ export interface Task {
   due?: number;
   done: boolean;
   createdAt: number;
+  /** Last edit (merging with the cloud copy: the newer edit wins). */
+  updatedAt?: number;
   doneAt?: number;
   /** The reminder for this due date was shown. */
   notifiedAt?: number;
+  /** A message to send to the source chat («▶ Выполнить в чате и закрыть»); `!…` is a bash-mode command. */
+  command?: string;
   /** The chat answer it was made from. */
   source?: { sessionId: string; cwd: string; chatTitle: string; turnStartedAt: number; prompt: string };
 }
@@ -487,6 +491,8 @@ export interface AppState {
   notifications?: boolean;
   /** Задачи: to-dos with due dates and reminders, made by hand or from a chat answer. */
   tasks?: Task[];
+  /** Ids of deleted tasks, so a cloud copy doesn't bring them back. */
+  tasksDeleted?: string[];
   /** A chat's own «answer ready» sound (absent — the default one). */
   chatSounds?: Record<string, string>;
   deployTargets: Record<string, DeployTarget>;

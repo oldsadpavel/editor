@@ -8,6 +8,7 @@ import type { AppState, CloudStatus, CloudVersion } from '../shared/types';
 import { emit } from './bus';
 import { applySettings, exportable } from './settings-io';
 import { withGitOrigins } from './git-info';
+import { mergeTasks, taskImages } from './task-sync';
 import { dataDir, stateFile } from './store';
 
 /**
@@ -304,8 +305,9 @@ export function payload(): Partial<AppState> {
   const { openChats: _a, activeChat: _b, chatProject: _c, openFiles: _d, activeFile: _e, chatModels: _f, cloud: _g, chatPanes: _h, chatExpanded: _i, chatSounds: _j, ...rest } = exportable();
   const ui = rest.ui ? { ...rest.ui, treeOpen: undefined, treeSelected: undefined, treeScroll: undefined } : undefined;
   const groups = rest.groups?.map(({ openChats: _1, activeChat: _2, chatProject: _3, openFiles: _4, activeFile: _5, treeOpen: _6, chatPanes: _7, ...g }) => g);
-  // git origins go along, so a new machine can clone projects it doesn't have
-  return withGitOrigins({ ...rest, ui, groups } as Partial<AppState>);
+  // git origins go along, so a new machine can clone projects it doesn't have; task pictures go as data
+  const images = taskImages(rest.tasks);
+  return withGitOrigins({ ...rest, ui, groups, ...(Object.keys(images).length ? { taskImages: images } : {}) } as Partial<AppState>);
 }
 
 const hashOf = (p: unknown) => createHash('md5').update(JSON.stringify(p)).digest('hex');
@@ -338,7 +340,10 @@ export function download(id?: number | string) {
       return { ...g, openChats: [] as string[], ...(mine ? { openChats: mine.openChats, activeChat: mine.activeChat, chatProject: mine.chatProject, openFiles: mine.openFiles, activeFile: mine.activeFile, treeOpen: mine.treeOpen, chatPanes: mine.chatPanes } : {}) };
     });
     const cloud = local.cloud;
-    applySettings({ ...incoming, ...(groups ? { groups } : {}), ui: { ...incoming.ui!, treeOpen: local.ui.treeOpen, treeSelected: local.ui.treeSelected, treeScroll: local.ui.treeScroll } } as Partial<AppState>);
+    // tasks are merged, not replaced (ones made here since the last upload stay); pictures come back as files
+    const { taskImages: _img, ...settings } = incoming as Partial<AppState> & { taskImages?: Record<string, string> };
+    const merged = mergeTasks(local, incoming);
+    applySettings({ ...settings, ...merged, ...(groups ? { groups } : {}), ui: { ...incoming.ui!, treeOpen: local.ui.treeOpen, treeSelected: local.ui.treeSelected, treeScroll: local.ui.treeScroll } } as Partial<AppState>);
     stateFile.data.cloud = cloud;
     const c = cfg();
     c.hash = hashOf(payload());

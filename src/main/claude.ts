@@ -361,6 +361,11 @@ export async function openChat(sessionId: string, cwdHint?: string): Promise<Cha
  * The session of a chat the UI shows, reopened if it was closed here meanwhile (group switch, closed tab). A chat that
  * never got a transcript has nothing to reopen from and stays an error.
  */
+/** A chat that can be reopened: open now, or has its history on disk. */
+export function chatExists(sessionId: string) {
+  return sessions.has(sessionId) || !!findTranscript(sessionId) || !!loadAgentChat(sessionId);
+}
+
 export async function ensureSession(sessionId: string) {
   if (sessions.has(sessionId)) return;
   if (!findTranscript(sessionId) && !loadAgentChat(sessionId)) throw new Error('Чат не открыт: у него ещё нет истории на диске — создайте новый чат');

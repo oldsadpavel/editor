@@ -222,9 +222,9 @@ export function Markdown({ text, cwd }: { text: string; cwd: string }) {
       onClick={(e) => {
         const remind = (e.target as HTMLElement).closest('[data-remind]') as HTMLElement | null;
         if (remind) {
-          const box = remind.closest('.md-sec')!.cloneNode(true) as HTMLElement;
-          box.querySelectorAll('button').forEach((b) => b.remove());
-          return remindFrom(turnCtx, box.innerText);
+          // the block on screen (a detached copy would lose its line breaks in innerText)
+          const sec = remind.closest('.md-sec') as HTMLElement;
+          return remindFrom(turnCtx, sec.innerText.replace('⏰ Напомнить', '').replace(/\n{3,}/g, '\n\n').trim(), sec);
         }
         const copyText = (e.target as HTMLElement).closest('[data-copy-text]') as HTMLElement | null;
         if (copyText) return void navigator.clipboard.writeText(copyText.dataset.copyText!).then(() => toast(`Скопировано: ${copyText.dataset.copyText!.slice(0, 60)}`));

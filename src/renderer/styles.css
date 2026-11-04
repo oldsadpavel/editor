@@ -979,3 +979,6 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .md .sec-remind { margin: 2px 0 4px; font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--claude); background: transparent; color: #ffb08f; cursor: pointer; }
 .md .sec-remind:hover { background: rgba(217, 119, 87, 0.2); }
 .remind-btn { font-size: 12px; }
+.task-command { display: flex; align-items: center; gap: 8px; }
+.task-command input { flex: 1; min-width: 0; }
+.task-item-main .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
