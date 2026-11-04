@@ -1,6 +1,6 @@
 import { marked } from 'marked';
 import { useContext, useMemo } from 'react';
-import { TurnContext, remindFrom } from './components/Tasks';
+import { TurnContext, parseDue, remindFrom } from './components/Tasks';
 import { call } from './api';
 import { openFile, set, toast } from './store';
 
@@ -209,6 +209,11 @@ function markSections(html: string) {
     }
     if (box) box.appendChild(el);
   }
+  // «⏰ Напомнить» only where the block names a time («завтра», «05.11», «в 18:00»): the heading and the first lines
+  root.querySelectorAll('.sec-action').forEach((sec) => {
+    const lines = [...sec.children].filter((c) => !c.classList.contains('sec-remind')).slice(0, 2).map((c) => c.textContent ?? '');
+    if (!parseDue(lines.join(' '))) sec.querySelector('.sec-remind')?.remove();
+  });
   return found ? root.innerHTML : html;
 }
 
