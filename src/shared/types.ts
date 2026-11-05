@@ -598,6 +598,7 @@ export type MainEvent =
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'openChat'; sessionId: string }
   | { type: 'openTask'; id: string }
+  | { type: 'toast'; text: string; kind?: 'error' }
   | { type: 'sessionsChanged'; cwd: string }
   | { type: 'cloud'; status: CloudStatus }
   | { type: 'serverTests'; reports: Record<string, ServerTestReport> };

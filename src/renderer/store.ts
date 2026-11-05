@@ -746,6 +746,9 @@ function onEvent(e: MainEvent) {
     case 'openChat':
       void openChat(e.sessionId);
       return;
+    case 'toast':
+      toast(e.text, e.kind);
+      return;
     case 'openTask':
       set({ taskSelected: e.id });
       setUi({ tasksOpen: true, editorHidden: false });

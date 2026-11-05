@@ -184,6 +184,10 @@ class ChatSession {
   agentProc: ChildProcess | null = null;
   /** Cumulative cost reported by the current Claude process (reset when a new process starts). */
   costSoFar = 0;
+  /** When Claude last sent anything (a stream chunk, a tool call, a status) — the stall watchdog looks at it. */
+  lastActivity = Date.now();
+  /** Automatic restarts of the current answer (stalled with nothing coming), so it doesn't loop forever. */
+  stallRestarts = 0;
   q: Query | null = null;
   input: InputQueue | null = null;
   pending = new Map<string, PendingPermission>();
@@ -248,6 +252,7 @@ class ChatSession {
   setStatus(s: ChatStatus) {
     const was = this.status;
     this.status = s;
+    this.lastActivity = Date.now();
     this.publish(true);
     // taskbar: progress while any chat works; a check when an answer ends (or needs you) while the window is away
     const finished = was === 'running' && s !== 'running';
@@ -438,6 +443,8 @@ function rememberChatModel(s: ChatSession) {
 }
 
 export async function send(sessionId: string, text: string, opts: SendOptions) {
+  const stalled = sessions.get(sessionId);
+  if (stalled) stalled.stallRestarts = 0; // a new question: the watchdog may restart it again
   const s = sessions.get(sessionId);
   if (!s) throw new Error('Чат не открыт');
   if (s.agent !== 'claude') return sendToAgent(s, text, opts);
@@ -582,6 +589,7 @@ async function pump(s: ChatSession) {
   const q = s.q!;
   try {
     for await (const m of q) {
+      s.lastActivity = Date.now();
       if (process.env.CLAUDE_EDITOR_TRACE && m.type !== "stream_event") fs.appendFileSync(process.env.CLAUDE_EDITOR_TRACE, `${m.type} ${(m as any).subtype ?? ""} ${(m as any).suggestion ?? ""}
 `);
       handleMessage(s, m);
@@ -1271,6 +1279,40 @@ export async function restart(sessionId: string) {
   }
   return resend.length;
 }
+
+/**
+ * Stall watchdog: an answer that is «running» but gets nothing from Claude for 2 minutes (no tokens, no tool call) is
+ * restarted — the same as ⟳. Not while a tool runs (a long build / test is fine), a permission waits, history is
+ * compacted, or under /RC. If nothing had come yet the question is re-sent; otherwise Claude is asked to go on.
+ * At most twice per answer.
+ */
+const STALL_MS = Number(process.env.CLAUDE_EDITOR_STALL_MS) || 120_000;
+setInterval(() => {
+  const now = Date.now();
+  for (const s of sessions.values()) {
+    if (s.agent !== 'claude' || s.remote || !s.q || s.status !== 'running' || s.pending.size || s.compacting) continue;
+    if (now - s.lastActivity < STALL_MS) continue;
+    const last = s.builder.turns[s.builder.turns.length - 1];
+    if (!last?.live) continue;
+    if (last.items.some((i) => i.kind === 'tool' && !i.done)) continue;
+    s.lastActivity = now;
+    if (s.stallRestarts >= 2) continue;
+    const started = last.items.length > 0;
+    const id = s.id;
+    const count = ++s.stallRestarts;
+    emit({ type: 'toast', text: `«${s.title}»: 2 минуты без ответа — перезапускаю${started ? ' и прошу продолжить' : ' и отправляю вопрос заново'}` });
+    void restart(id)
+      .then(() => {
+        const cur = sessions.get(id);
+        if (started && cur) return send(id, 'Ответ прервался: 2 минуты не было никакой активности, чат перезапущен автоматически. Продолжи с того места, где остановился.', { model: cur.model, effort: cur.effort, permissionMode: cur.permissionMode });
+      })
+      .then(() => {
+        const cur = sessions.get(id);
+        if (cur) cur.stallRestarts = count; // the new answer still counts the earlier restarts
+      })
+      .catch((e) => emit({ type: 'toast', text: `Перезапуск «${s.title}» не удался: ${e?.message ?? e}`, kind: 'error' }));
+  }
+}, Math.min(15_000, STALL_MS / 2)).unref();
 
 /** Ends the background Claude process of a chat that was closed in the UI (history stays on disk). */
 export function closeChat(sessionId: string) {
