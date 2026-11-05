@@ -171,6 +171,7 @@ class ChatSession {
    * when it takes it). They stay on screen — grey while queued — across transcript reloads. */
   remoteQueue: { text: string; at: number; id: string; attachments: TurnAttachment[] }[] = [];
   transcriptTick: NodeJS.Timeout | null = null;
+  transcriptPoll: NodeJS.Timeout | null = null;
   /** Transcript watcher while queued questions wait to be taken by Claude. */
   queueWatch: fs.FSWatcher | null = null;
   /** The `system/init` message of the running process: model, version, MCP servers, commands. */
@@ -1068,14 +1069,34 @@ function watchTranscript(s: ChatSession) {
       /* file being written */
     }
   };
+  // at most every 400 ms while Claude writes (a debounce that restarts on every write would wait for the end)
+  let seen = '';
+  const stamp = () => {
+    try {
+      const st = fs.statSync(file);
+      return `${st.size}:${st.mtimeMs}`;
+    } catch {
+      return '';
+    }
+  };
+  const schedule = () => {
+    if (timer) return;
+    timer = setTimeout(() => {
+      timer = null;
+      seen = stamp();
+      void reload();
+    }, 400);
+  };
   try {
-    s.transcriptWatch = fs.watch(file, () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void reload(), 400);
-    });
+    s.transcriptWatch = fs.watch(file, schedule);
   } catch {
     /* transcript vanished */
   }
+  // fs.watch on Windows misses changes now and then: the file is also checked every 2 s
+  const poll = setInterval(() => {
+    if (stamp() !== seen) schedule();
+  }, 2000);
+  s.transcriptPoll = poll;
   // An answer someone else was writing (terminal, IDE) that went silent for long: that process is gone. Not for /RC,
   // whose process we see, nor for our own SDK process (a long command can run without writing anything).
   s.transcriptTick = setInterval(() => {
@@ -1095,6 +1116,8 @@ function watchTranscript(s: ChatSession) {
 function unwatchTranscript(s: ChatSession) {
   if (s.transcriptTick) clearInterval(s.transcriptTick);
   s.transcriptTick = null;
+  if (s.transcriptPoll) clearInterval(s.transcriptPoll);
+  s.transcriptPoll = null;
   s.transcriptWatch?.close();
   s.transcriptWatch = null;
 }

@@ -128,13 +128,23 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
   return proc;
 }
 
-/** Types a prompt into the TUI; multi-line text goes as a bracketed paste so newlines don't submit early. */
+/**
+ * Types a prompt into the TUI. Always as a bracketed paste: typed raw, a burst of characters is taken for a paste by
+ * the TUI and an Enter right after it can land inside that paste — the text stays in the input and the next question
+ * gets glued to it («пробуйпробуй»). Prompts are sent one after another, each Enter well after its paste.
+ */
+let typing: Promise<void> = Promise.resolve();
 export function send(proc: RemoteProc, text: string) {
   const stdin = proc.child.stdin;
   if (!stdin || proc.exited !== undefined) throw new Error('Удалённый процесс Claude не запущен');
-  const body = text.includes('\n') ? `\x1b[200~${text}\x1b[201~` : text;
-  stdin.write(body);
-  setTimeout(() => stdin.write('\r'), 250);
+  const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  typing = typing.then(async () => {
+    if (proc.exited !== undefined) return;
+    stdin.write(`\x1b[200~${text}\x1b[201~`);
+    await wait(600);
+    stdin.write('\r');
+    await wait(400);
+  });
 }
 
 export function interrupt(proc: RemoteProc) {
