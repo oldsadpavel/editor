@@ -16,7 +16,7 @@ import * as problems from './problems';
 import * as remote from './remote';
 import { dataDir, stateFile } from './store';
 import * as taskbar from './taskbar';
-import { ATTACHMENTS_HEADER, TurnBuilder, compactInfo, findTranscript, loadTranscript } from './transcript';
+import { ATTACHMENTS_HEADER, TurnBuilder, compactInfo, findTranscript, loadTranscript, readTranscriptInto } from './transcript';
 import * as usage from './usage';
 import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
 
@@ -464,6 +464,7 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     return;
   }
   if (opts.permissionMode) s.permissionMode = opts.permissionMode;
+  s.builder.loadedBytes = undefined; // our own process adds to the builder from here on
   const modelChanged = (opts.model || undefined) !== s.model;
   const effortChanged = (opts.effort || undefined) !== s.effort;
   s.model = opts.model || undefined;
@@ -591,6 +592,7 @@ async function pump(s: ChatSession) {
   try {
     for await (const m of q) {
       s.lastActivity = Date.now();
+      s.builder.loadedBytes = undefined;
       if (process.env.CLAUDE_EDITOR_TRACE && m.type !== "stream_event") fs.appendFileSync(process.env.CLAUDE_EDITOR_TRACE, `${m.type} ${(m as any).subtype ?? ""} ${(m as any).suggestion ?? ""}
 `);
       handleMessage(s, m);
@@ -1036,21 +1038,35 @@ function watchTranscript(s: ChatSession) {
     const t = b.turns[b.turns.length - 1];
     return `${b.turns.length}:${t?.items.length ?? 0}:${t?.more?.length ?? 0}`;
   };
-  const reload = async () => {
+  // one read at a time; changes meanwhile → one more read after it
+  let reading = false;
+  let again = false;
+  const reload = async (): Promise<void> => {
     // Our own SDK process writes this file too; its messages already arrive live.
     if (!s.remote && s.q) return;
+    if (reading) return void (again = true);
+    reading = true;
     try {
-      const { builder } = await loadTranscript(file);
-      const changed = shape(builder) !== shape(s.builder);
+      const before = shape(s.builder);
+      // only what was appended (the file can be hundreds of MB); the whole file when it's new, shrank or replaced
+      let builder = s.builder;
+      const size = fs.statSync(file).size;
+      if (builder.loadedBytes === undefined || size < builder.loadedBytes) builder = (await loadTranscript(file)).builder;
+      else {
+        builder.dropOverlay();
+        await readTranscriptInto(file, builder, builder.loadedBytes);
+      }
+      for (const t of builder.turns.slice(-6)) t.live = false;
+      const changed = shape(builder) !== before;
       s.builder = builder;
       // context size follows the transcript (compactions, the latest request) in /RC and other external runs
       if (builder.lastContext) s.contextTokens = builder.lastContext;
       if (s.compacting && builder.turns.some((t) => t.compacts?.some((m) => m.at >= s.compacting!.since - 5000))) s.compacting = undefined;
       // Questions typed here that Claude hasn't written yet stay on screen (grey while queued behind an answer).
-      const recent = builder.turns.slice(-4).flatMap((t) => [t.prompt, ...(t.more?.map((m) => m.prompt) ?? [])]).map((p) => p.trim());
+      const recent = builder.turns.slice(-4).flatMap((t) => [t.prompt, ...(t.more?.map((m) => m.prompt) ?? [])]).map(sameText);
       // a /command typed here shows up as a <command-name> entry, not as a prompt
       const ranCommand = (q: { text: string; at: number }) => q.text.startsWith('/') && builder.commands.some((c) => c.name === q.text.split(/\s/)[0] && c.at >= q.at - 10_000);
-      s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(q.text) && !ranCommand(q) && Date.now() - q.at < 5 * 60_000);
+      s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(sameText(q.text)) && !ranCommand(q) && Date.now() - q.at < 5 * 60_000);
       for (const q of s.remoteQueue) addRemoteQueued(s, q);
       const last = builder.turns[builder.turns.length - 1];
       // A question (from here or the phone) without a finished answer keeps the chat "working".
@@ -1067,6 +1083,12 @@ function watchTranscript(s: ChatSession) {
       s.publish(true);
     } catch {
       /* file being written */
+    } finally {
+      reading = false;
+      if (again) {
+        again = false;
+        void reload();
+      }
     }
   };
   // at most every 400 ms while Claude writes (a debounce that restarts on every write would wait for the end)
@@ -1123,11 +1145,17 @@ function unwatchTranscript(s: ChatSession) {
 }
 
 /** Shows a question typed into /RC: its own running turn, or grey ("not taken yet") inside the running answer. */
+/** Text as the TUI writes it to the transcript (tabs become spaces, …): compared without whitespace differences. */
+const sameText = (t: string) => t.replace(/\s+/g, ' ').trim();
+
 function addRemoteQueued(s: ChatSession, q: ChatSession['remoteQueue'][number]) {
-  const turn = s.builder.startTurn(q.text, q.at, q.id, q.attachments);
-  turn.live = true;
-  const more = turn.more?.find((m) => m.prompt === q.text && m.at === q.at);
-  if (more) more.pending = true;
+  // undone before the transcript is read further (the real question comes from there)
+  s.builder.withOverlay(() => {
+    const turn = s.builder.startTurn(q.text, q.at, q.id, q.attachments);
+    turn.live = true;
+    const more = turn.more?.find((m) => m.prompt === q.text && m.at === q.at);
+    if (more) more.pending = true;
+  });
 }
 
 /** Everything `/status` shows; live details only when the chat has a running process. */

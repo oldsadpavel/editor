@@ -140,7 +140,8 @@ export function send(proc: RemoteProc, text: string) {
   const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   typing = typing.then(async () => {
     if (proc.exited !== undefined) return;
-    stdin.write(`\x1b[200~${text}\x1b[201~`);
+    // the TUI turns tabs into spaces anyway
+    stdin.write(`\x1b[200~${text.replace(/\t/g, '    ')}\x1b[201~`);
     await wait(600);
     stdin.write('\r');
     await wait(400);

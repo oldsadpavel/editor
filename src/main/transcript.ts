@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import readline from 'node:readline';
 import type { CompactMark, FileChange, FileEdit, Turn, TurnAttachment, TurnItemTool } from '../shared/types';
 
 /** compact_boundary metadata (SDK message or transcript entry) → mark fields. */
@@ -168,6 +167,34 @@ export class TurnBuilder {
    * A question that arrives while a turn is open is answered by Claude Code together with it, so it joins that turn.
    */
   private turnOpen = false;
+
+  /** Bytes of the transcript file read into this builder (to read only what's appended); undefined when the
+   * builder also got live messages from our own process. */
+  loadedBytes: number | undefined;
+  /** Questions typed here that the transcript doesn't have yet: undone before more of the transcript is read. */
+  private overlay: (() => void)[] = [];
+  withOverlay(fn: () => void) {
+    const turnsLen = this.turns.length;
+    const last = this.turns[this.turns.length - 1];
+    const moreLen = last?.more?.length;
+    const images = last?.images;
+    const live = last?.live;
+    const open = this.turnOpen;
+    fn();
+    this.overlay.push(() => {
+      this.turns.length = turnsLen;
+      if (last) {
+        if (moreLen === undefined) delete last.more;
+        else if (last.more) last.more.length = moreLen;
+        last.images = images!;
+        last.live = live;
+      }
+      this.turnOpen = open;
+    });
+  }
+  dropOverlay() {
+    while (this.overlay.length) this.overlay.pop()!();
+  }
 
   startTurn(prompt: string, at: number, id: string, attachments?: TurnAttachment[]): Turn {
     const last = this.turns[this.turns.length - 1];
@@ -496,19 +523,46 @@ const STALE_MS = 3 * 60_000;
 export async function loadTranscript(file: string): Promise<{ builder: TurnBuilder; cwd?: string }> {
   const st = fs.statSync(file);
   const builder = new TurnBuilder();
+  const cwd = await readTranscriptInto(file, builder, 0);
+  if (Date.now() - st.mtimeMs > STALE_MS) builder.markInterrupted();
+  return { builder, cwd };
+}
+
+/** Lines of other kinds, recognisable by their start: Claude Code writes copies of whole API requests into the
+ * transcript (hundreds of MB); they contain "type":"user" inside, so the check below alone would parse them all. */
+const SKIP_RE = /^\{"type":"(?!user"|assistant"|system")/;
+
+/**
+ * Reads the transcript from byte `from` to its end into `builder` — complete lines only (the line being written
+ * is read next time); sets builder.loadedBytes. Returns the project folder seen in the entries.
+ */
+export async function readTranscriptInto(file: string, builder: TurnBuilder, from: number): Promise<string | undefined> {
   let cwd: string | undefined;
-  const rl = readline.createInterface({ input: fs.createReadStream(file, 'utf8'), crlfDelay: Infinity });
-  for await (const line of rl) {
-    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"') && !line.includes('"compact_boundary"') && !line.includes('"model_refusal_fallback"')) continue;
+  let pos = from;
+  let rest: Buffer = Buffer.alloc(0);
+  const take = (line: string) => {
+    if (SKIP_RE.test(line)) return;
+    if (!line.includes('"type":"user"') && !line.includes('"type":"assistant"') && !line.includes('"queued_command"') && !line.includes('"compact_boundary"') && !line.includes('"model_refusal_fallback"')) return;
     let entry: any;
     try {
       entry = JSON.parse(line);
     } catch {
-      continue;
+      return;
     }
     if (!cwd && entry.cwd) cwd = entry.cwd;
     builder.ingest(entry);
+  };
+  for await (const chunk of fs.createReadStream(file, { start: from, highWaterMark: 1 << 20 })) {
+    let buf = rest.length ? Buffer.concat([rest, chunk as Buffer]) : (chunk as Buffer);
+    let start = 0;
+    for (let nl = buf.indexOf(10, start); nl !== -1; nl = buf.indexOf(10, start)) {
+      const line = buf.toString('utf8', start, nl).replace(/\r$/, '');
+      pos += nl + 1 - start;
+      start = nl + 1;
+      if (line) take(line);
+    }
+    rest = buf.subarray(start);
   }
-  if (Date.now() - st.mtimeMs > STALE_MS) builder.markInterrupted();
-  return { builder, cwd };
+  builder.loadedBytes = pos;
+  return cwd;
 }
