@@ -1,5 +1,5 @@
 import { marked } from 'marked';
-import { useContext, useMemo } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import { TurnContext, parseDue, remindFrom } from './components/Tasks';
 import { call } from './api';
 import { openFile, set, toast } from './store';
@@ -125,19 +125,41 @@ marked.use({
 });
 
 /** The whole text of a file from an answer's link goes to the clipboard. */
-export async function copyFileText(raw: string, cwd: string) {
+export async function copyFileText(raw: string, cwd: string): Promise<boolean> {
   const rel = raw.replace(/:\d+$/, '');
   const found = await call<string | null>('fs:resolve', cwd, rel);
-  if (!found) return toast(`Файл не найден: ${rel}`, 'error');
+  if (!found) return (toast(`Файл не найден: ${rel}`, 'error'), false);
   try {
     const f = await call<{ text: string; binary: boolean }>('fs:read', found);
-    if (f.binary) return toast(`${basename(found)} — не текстовый файл, скопировать текст нельзя`, 'error');
+    if (f.binary) return (toast(`${basename(found)} — не текстовый файл, скопировать текст нельзя`, 'error'), false);
     await navigator.clipboard.writeText(f.text);
     const lines = f.text ? f.text.split('\n').length : 0;
     toast(`Скопировано в буфер: ${basename(found)} — ${lines} ${plural(lines, 'строка', 'строки', 'строк')}`);
+    return true;
   } catch (e: any) {
     toast(e.message, 'error');
+    return false;
   }
+}
+
+/**
+ * ⧉ already pressed: remembered per answer (the same file asked for again in a new answer starts unmarked), kept
+ * across restarts. The button turns into a green ✓ and can be pressed again.
+ */
+const COPIED_KEY = 'mpi.copied';
+let copiedSet: Set<string> | null = null;
+const copied = () => (copiedSet ??= new Set(JSON.parse(localStorage.getItem(COPIED_KEY) ?? '[]') as string[]));
+const copyKey = (scope: string, b: HTMLElement) => `${scope}|${b.dataset.copy !== undefined ? 'f:' + b.dataset.copy : 't:' + b.dataset.copyText}`;
+function markCopied(b: HTMLElement) {
+  b.classList.add('copied');
+  b.textContent = '✓';
+  b.title = 'Уже скопировано (клик — скопировать ещё раз)';
+}
+function rememberCopied(scope: string, b: HTMLElement) {
+  const s = copied();
+  s.add(copyKey(scope, b));
+  localStorage.setItem(COPIED_KEY, JSON.stringify([...s].slice(-3000)));
+  markCopied(b);
 }
 
 /** Opens `path` or `path:line` relative to the chat's project. */
@@ -220,8 +242,15 @@ function markSections(html: string) {
 export function Markdown({ text, cwd }: { text: string; cwd: string }) {
   const turnCtx = useContext(TurnContext);
   const html = useMemo(() => markSections(marked.parse(text, { async: false }) as string), [text]);
+  const box = useRef<HTMLDivElement>(null);
+  const scope = turnCtx ? `${turnCtx.sessionId}:${turnCtx.turn.startedAt}` : 'md';
+  useLayoutEffect(() => {
+    const s = copied();
+    box.current?.querySelectorAll<HTMLElement>('[data-copy], [data-copy-text]').forEach((b) => s.has(copyKey(scope, b)) && markCopied(b));
+  }, [html, scope]);
   return (
     <div
+      ref={box}
       className="md"
       dangerouslySetInnerHTML={{ __html: html }}
       onClick={(e) => {
@@ -232,9 +261,13 @@ export function Markdown({ text, cwd }: { text: string; cwd: string }) {
           return remindFrom(turnCtx, sec.innerText.replace('⏰ Напомнить', '').replace(/\n{3,}/g, '\n\n').trim(), sec);
         }
         const copyText = (e.target as HTMLElement).closest('[data-copy-text]') as HTMLElement | null;
-        if (copyText) return void navigator.clipboard.writeText(copyText.dataset.copyText!).then(() => toast(`Скопировано: ${copyText.dataset.copyText!.slice(0, 60)}`));
+        if (copyText)
+          return void navigator.clipboard.writeText(copyText.dataset.copyText!).then(() => {
+            rememberCopied(scope, copyText);
+            toast(`Скопировано: ${copyText.dataset.copyText!.slice(0, 60)}`);
+          });
         const copy = (e.target as HTMLElement).closest('[data-copy]') as HTMLElement | null;
-        if (copy) return void copyFileText(copy.dataset.copy!, cwd);
+        if (copy) return void copyFileText(copy.dataset.copy!, cwd).then((ok) => ok && rememberCopied(scope, copy));
         const run = (e.target as HTMLElement).closest('[data-run]') as HTMLElement | null;
         if (run) return void window.dispatchEvent(new CustomEvent('chat-run', { detail: run.dataset.run }));
         const el = (e.target as HTMLElement).closest('[data-path]') as HTMLElement | null;
