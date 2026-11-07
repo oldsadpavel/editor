@@ -83,6 +83,8 @@ export interface Store {
   ping: PingResult[];
   /** Project whose settings dialog is open. */
   projectSettings?: string;
+  /** The «Новый проект» dialog is open. */
+  newProject?: boolean;
   /** Turn to scroll to inside a chat (from the Files tab or a problem link). */
   focusTurn?: { sessionId: string; turnId: string; nonce: number };
   help?: string;

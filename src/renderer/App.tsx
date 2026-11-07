@@ -10,6 +10,7 @@ import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
+import { NewProjectModal } from './components/NewProject';
 import { StatusModal } from './components/StatusModal';
 import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
@@ -354,6 +355,7 @@ export function App() {
       <Workspace />
       <HelpModal />
       <ProjectSettings />
+      <NewProjectModal />
       <ImageLightbox />
       <StatusModal />
       <CloudModal />

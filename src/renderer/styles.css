@@ -986,3 +986,10 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .task-command input { flex: 1; min-width: 0; }
 .task-item-main .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .copy-file.copied { color: #5fb36b; opacity: 1; font-weight: 700; }
+.new-project { width: min(560px, 92vw); display: flex; flex-direction: column; gap: 10px; }
+.new-project h3 { margin: 0 0 4px; }
+.new-project label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg2); }
+.new-project label.check { flex-direction: row; align-items: center; gap: 6px; color: var(--fg); }
+.new-project input:not([type=checkbox]), .new-project textarea { width: 100%; box-sizing: border-box; }
+.new-project .row { display: flex; gap: 6px; }
+.new-project .row input { flex: 1; }

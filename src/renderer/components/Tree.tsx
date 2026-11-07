@@ -328,7 +328,8 @@ export function TreePanel() {
       { label: fav ? 'Убрать из избранного' : 'В избранное ★', action: () => toggleFavorite(entry.path) },
       { label: 'Вставить путь в чат', action: () => insertIntoChat(entry.path) },
       { label: 'Копировать путь', action: () => navigator.clipboard.writeText(entry.path) },
-      { label: 'Показать в проводнике', action: () => call('shell:reveal', entry.path) },
+      ...(entry.dir ? [{ label: '📂 Открыть папку в проводнике', action: () => call('shell:openPath', entry.path) }] : []),
+      { label: entry.dir ? 'Показать в проводнике (в родительской папке)' : 'Показать в проводнике', action: () => call('shell:reveal', entry.path) },
       ...(entry.dir ? [...sortMenu(entry.path), { label: 'Обновить', action: () => refreshDir(entry.path) }] : []),
       ...(root && tab === 'projects'
         ? [
@@ -394,7 +395,21 @@ export function TreePanel() {
           </button>
         </div>
         <div className="grow" />
-        <button className="icon-btn" title="Добавить проект" onClick={() => addProjects()}>
+        <button
+          className="icon-btn"
+          title="Новый проект или существующая папка"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenu({
+              x: r.left,
+              y: r.bottom + 2,
+              items: [
+                { label: '＋ Создать новый проект…', action: () => set({ newProject: true }) },
+                { label: '📂 Добавить существующую папку…', action: () => addProjects() },
+              ],
+            });
+          }}
+        >
           ＋
         </button>
         <Help id="tree" />
@@ -408,7 +423,10 @@ export function TreePanel() {
             {tab === 'projects' ? (
               <>
                 Нет открытых проектов.
-                <button className="btn primary" onClick={() => addProjects()}>
+                <button className="btn primary" onClick={() => set({ newProject: true })}>
+                  Создать проект
+                </button>
+                <button className="btn" onClick={() => addProjects()}>
                   Открыть папку проекта
                 </button>
               </>

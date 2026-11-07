@@ -175,6 +175,7 @@ handle('dialog:folder', async () => {
   return r.canceled ? [] : r.filePaths;
 });
 handle('shell:reveal', (p: string) => shell.showItemInFolder(p));
+handle('project:create', (parent: string, name: string, git: boolean) => files.createProject(parent, name, git));
 handle('shell:open', (url: string) => shell.openExternal(url));
 handle('shell:openPath', (p: string) => files.openPath(p));
 

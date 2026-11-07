@@ -254,3 +254,18 @@ export function resolvePath(base: string, rel: string, roots: string[]): string 
   }
   return null;
 }
+
+/** «Новый проект»: an empty folder (a new one, or an existing empty one), optionally `git init -b main`. */
+export async function createProject(parent: string, name: string, git: boolean): Promise<string> {
+  name = name.trim();
+  if (!name || /[<>:"/\\|?*\x00-\x1f]/.test(name) || /^\.+$/.test(name) || /[. ]$/.test(name)) throw new Error(`Недопустимое имя папки: «${name}»`);
+  if (!parent || !fs.existsSync(parent) || !fs.statSync(parent).isDirectory()) throw new Error(`Нет папки ${parent}`);
+  const dir = path.join(parent, name);
+  if (fs.existsSync(dir) && (!fs.statSync(dir).isDirectory() || fs.readdirSync(dir).length)) throw new Error(`${dir} уже есть и не пустая — добавьте её как существующую папку`);
+  fs.mkdirSync(dir, { recursive: true });
+  if (git)
+    await new Promise<void>((resolve, reject) =>
+      execFile('git', ['init', '-b', 'main'], { cwd: dir, windowsHide: true }, (err, _out, stderr) => (err ? reject(new Error(`git init: ${stderr || err.message}`)) : resolve())),
+    );
+  return dir;
+}
