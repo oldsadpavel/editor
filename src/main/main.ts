@@ -15,6 +15,7 @@ import * as serverTests from './server-tests';
 import { editorContext } from './editor-mcp';
 import { claudeConfigFiles } from './claude-config';
 import * as files from './files';
+import * as gitOps from './git';
 import * as keys from './keys';
 import * as ping from './ping';
 import * as problems from './problems';
@@ -175,6 +176,11 @@ handle('dialog:folder', async () => {
   return r.canceled ? [] : r.filePaths;
 });
 handle('shell:reveal', (p: string) => shell.showItemInFolder(p));
+const GIT_OPS = ['repoRoot', 'status', 'commit', 'add', 'diff', 'log', 'show', 'rollback', 'push', 'pull', 'fetch', 'branches', 'checkout', 'newBranch', 'stash', 'unstash', 'stashList'] as const;
+handle('git', (op: (typeof GIT_OPS)[number], ...args: unknown[]) => {
+  if (!GIT_OPS.includes(op)) throw new Error(`Неизвестная git-операция: ${op}`);
+  return (gitOps[op] as (...a: unknown[]) => unknown)(...args);
+});
 handle('project:create', (parent: string, name: string, git: boolean) => files.createProject(parent, name, git));
 handle('shell:open', (url: string) => shell.openExternal(url));
 handle('shell:openPath', (p: string) => files.openPath(p));

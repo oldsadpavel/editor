@@ -85,6 +85,10 @@ export interface Store {
   projectSettings?: string;
   /** The «Новый проект» dialog is open. */
   newProject?: boolean;
+  /** Git status of the projects' files (lower-case path → code) and each project's branch, for the tree. */
+  gitFiles: Record<string, import('./components/Git').GitCode>;
+  gitBranches: Record<string, string>;
+  gitDialog?: import('./components/Git').GitDialog;
   /** Turn to scroll to inside a chat (from the Files tab or a problem link). */
   focusTurn?: { sessionId: string; turnId: string; nonce: number };
   help?: string;
@@ -110,6 +114,8 @@ export interface Store {
 
 let state: Store = {
   agents: [],
+  gitFiles: {},
+  gitBranches: {},
   app: null,
   auth: null,
   files: [],

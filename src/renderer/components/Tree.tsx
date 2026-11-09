@@ -4,6 +4,7 @@ import { call } from '../api';
 import { addProjects, isUnread, createGroup, deleteGroup, get, openFile, renameGroup, saveApp, set, setTreeOpen, setUi, switchGroup, toggleFavorite, toast, useStore } from '../store';
 import { Help, basename, dirname } from '../util';
 import { ContextMenu, type MenuItem } from './ContextMenu';
+import { gitMenu, repoOf, useGitRefresh } from './Git';
 import { BlockHandle } from './Layout';
 import { fileIcon } from './icons';
 
@@ -127,6 +128,8 @@ function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; 
   const active = useStore((s) => s.activeFile === entry.path);
   const selected = useStore((s) => s.treeSelected === entry.path);
   const favorite = useStore((s) => s.app?.favorites.includes(entry.path));
+  const gitCode = useStore((s) => s.gitFiles[entry.path.toLowerCase().replace(/[\\/]+$/, '')]);
+  const branch = useStore((s) => (root ? s.gitBranches[entry.path.toLowerCase().replace(/[\\/]+$/, '')] : undefined));
   const sort = useSort(entry.path);
   const sorted = useMemo(() => (kids ? sortEntries(kids, sort) : null), [kids, sort]);
 
@@ -180,7 +183,8 @@ function Node({ entry, depth, root, onMenu }: { entry: DirEntry; depth: number; 
       >
         <span className="twisty">{entry.dir ? (open ? '▾' : '▸') : ''}</span>
         <span className="ficon">{entry.dir ? (open ? '📂' : '📁') : fileIcon(entry.name)}</span>
-        <span className="tname">{entry.name}</span>
+        <span className={`tname ${gitCode ? 'git-' + gitCode : ''}`}>{entry.name}</span>
+        {branch && <span className="troot-branch" title="Ветка git (↑ не отправлено, ↓ не забрано)">⎇ {branch}</span>}
         {favorite && !root && <span className="fav-star">★</span>}
         {entry.dir && open && (sort.by !== 'name' || sort.desc) && (
           <span className="sort-mark" title={`Сортировка ${SORT_LABEL[sort.by]}, ${sort.desc ? 'по убыванию' : 'по возрастанию'}`}>
@@ -309,6 +313,7 @@ export function TreePanel() {
   const app = useStore((s) => s.app!);
   const tab = app.ui.leftTab === 'favorites' ? 'favorites' : 'projects';
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
+  useGitRefresh();
   // the selected row survives restarts
   const selected = useStore((s) => s.treeSelected);
   useEffect(() => {
@@ -319,11 +324,14 @@ export function TreePanel() {
     if (selected && selected !== get().app!.ui.treeSelected) setUi({ treeSelected: selected });
   }, [selected]);
 
-  function onMenu(e: React.MouseEvent, entry: DirEntry, root?: boolean) {
+  async function onMenu(e: React.MouseEvent, entry: DirEntry, root?: boolean) {
     e.preventDefault();
+    const { clientX, clientY } = e;
+    const repo = await repoOf(entry.path);
     const fav = get().app!.favorites.includes(entry.path);
     const items: MenuItem[] = [
       ...(entry.dir ? [] : [{ label: 'Открыть', action: () => openFile(entry.path) }]),
+      ...(repo ? [{ label: 'Git', action: () => {}, sub: gitMenu(repo, entry.path, !!entry.dir) }, { label: '—', sep: true, action: () => {} }] : []),
       { label: `Вставить из буфера в «${basename(targetDir(entry))}» (Ctrl+V)`, action: () => pasteInto(targetDir(entry)) },
       { label: fav ? 'Убрать из избранного' : 'В избранное ★', action: () => toggleFavorite(entry.path) },
       { label: 'Вставить путь в чат', action: () => insertIntoChat(entry.path) },
@@ -339,7 +347,7 @@ export function TreePanel() {
           ]
         : []),
     ];
-    setMenu({ x: e.clientX, y: e.clientY, items });
+    setMenu({ x: clientX, y: clientY, items });
   }
 
   const roots: DirEntry[] =

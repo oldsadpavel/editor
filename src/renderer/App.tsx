@@ -11,6 +11,7 @@ import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { ProjectSettings } from './components/ProjectSettings';
 import { NewProjectModal } from './components/NewProject';
+import { GitDialogHost } from './components/Git';
 import { StatusModal } from './components/StatusModal';
 import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
@@ -356,6 +357,7 @@ export function App() {
       <HelpModal />
       <ProjectSettings />
       <NewProjectModal />
+      <GitDialogHost />
       <ImageLightbox />
       <StatusModal />
       <CloudModal />
