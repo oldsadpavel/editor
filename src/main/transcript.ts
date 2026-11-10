@@ -468,6 +468,12 @@ export class TurnBuilder {
     }
   }
 
+  /** A question to the user (AskUserQuestion) that has no answer yet in the transcript. */
+  pendingQuestion(): { id: string; input: any } | undefined {
+    for (const [id, p] of this.pendingTools) if (p.tool.name === 'AskUserQuestion') return { id, input: p.input };
+    return undefined;
+  }
+
   markInterrupted() {
     this.closeTurn();
     for (const { tool } of this.pendingTools.values()) {

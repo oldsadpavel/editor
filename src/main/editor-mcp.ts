@@ -42,6 +42,9 @@ export const EDITOR_INSTRUCTIONS = `
 - **Открыть файл** у пользователя в редакторе — \`mcp__editor__open_file\`.
 - **Тесты на сервере после деплоя** — если деплой проекта сам прогоняет тесты, привяжи их отчёт: \`mcp__editor__set_tests_report\`
   (URL с JSON {commit, status, tests, failures, errors, skipped, failed:[{name, message}]}). Редактор опрашивает его после каждого деплоя.
+- **Другие чаты редактора** (отладка: почему чат завис, что он делал, ждёт ли ответа) — \`mcp__editor__list_chats\`
+  (открытые чаты: статус, режим /RC, ожидающий вопрос, последняя активность) и \`mcp__editor__read_chat\`
+  (последние вопросы и ответы чата по id или части названия, с вызовами инструментов). Только чтение.
 - **Что у пользователя в редакторе** (открытый файл, строка курсора, выделенный текст, открытые вкладки) — \`mcp__editor__get_editor_context\`.
   Когда пользователь пишет «этот файл», «здесь», «выделенное», «эта функция» — сначала посмотри туда.
 
@@ -50,6 +53,12 @@ export const EDITOR_INSTRUCTIONS = `
 `;
 
 const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
+
+/** Other chats of the editor, read-only (for debugging one chat from another); filled in by claude.ts. */
+export const chatAccess: {
+  list?: () => unknown;
+  read?: (query: string, turns: number, full: boolean) => Promise<unknown>;
+} = {};
 
 export function editorMcp(sessionId: string, cwd: string) {
   return createSdkMcpServer({
@@ -198,6 +207,22 @@ export function editorMcp(sessionId: string, cwd: string) {
           emit({ type: 'openFile', path: a.path, line: a.line });
           return ok('Открыто');
         },
+      ),
+      tool(
+        'list_chats',
+        'Чаты, открытые в редакторе: id, название, проект, статус (running / waiting / idle / error), режим /RC, ожидающий вопрос пользователю, последняя активность, последний вопрос, очередь. Для отладки других чатов.',
+        {},
+        async () => ok(JSON.stringify(chatAccess.list?.() ?? [], null, 1)),
+      ),
+      tool(
+        'read_chat',
+        'Последние ходы другого чата: вопросы, ответы, вызовы инструментов (с ошибками), ожидающие запросы, файл истории. chat — id (можно начало) или часть названия вкладки. Только чтение.',
+        {
+          chat: z.string().describe('id чата (или его начало) или часть названия вкладки'),
+          turns: z.number().int().min(1).max(30).default(3).describe('Сколько последних ходов'),
+          full: z.boolean().default(false).describe('Полные тексты и выводы инструментов (длиннее)'),
+        },
+        async (a) => ok(JSON.stringify((await chatAccess.read?.(a.chat, a.turns, a.full)) ?? null, null, 1)),
       ),
       tool(
         'get_editor_state',

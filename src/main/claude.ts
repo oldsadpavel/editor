@@ -18,7 +18,7 @@ import { dataDir, stateFile } from './store';
 import * as taskbar from './taskbar';
 import { ATTACHMENTS_HEADER, TurnBuilder, compactInfo, findTranscript, loadTranscript, readTranscriptInto } from './transcript';
 import * as usage from './usage';
-import { EDITOR_INSTRUCTIONS, editorMcp } from './editor-mcp';
+import { EDITOR_INSTRUCTIONS, chatAccess, editorMcp } from './editor-mcp';
 
 /** Prefers the user's installed Claude Code so login, settings and version match the terminal. */
 /**
@@ -1068,13 +1068,16 @@ function watchTranscript(s: ChatSession) {
       const ranCommand = (q: { text: string; at: number }) => q.text.startsWith('/') && builder.commands.some((c) => c.name === q.text.split(/\s/)[0] && c.at >= q.at - 10_000);
       s.remoteQueue = s.remoteQueue.filter((q) => !recent.includes(sameText(q.text)) && !ranCommand(q) && Date.now() - q.at < 5 * 60_000);
       for (const q of s.remoteQueue) addRemoteQueued(s, q);
+      if (s.remote) syncRemoteQuestion(s);
       const last = builder.turns[builder.turns.length - 1];
       // A question (from here or the phone) without a finished answer keeps the chat "working".
       const open = !!last && builder.isTurnOpen();
       if (open) {
         last.live = true;
-        if (s.status !== 'running') s.setStatus('running');
-      } else if (s.status === 'running') {
+        // a question waiting for you is «waiting», not «working»
+        const want = s.pending.size ? 'waiting' : 'running';
+        if (s.status !== want) s.setStatus(want);
+      } else if (s.status === 'running' || s.status === 'waiting') {
         s.setStatus('idle');
         markCompleted(s);
       } else if (changed) {
@@ -1145,6 +1148,33 @@ function unwatchTranscript(s: ChatSession) {
 }
 
 /** Shows a question typed into /RC: its own running turn, or grey ("not taken yet") inside the running answer. */
+/**
+ * /RC: Claude's AskUserQuestion is a dialog inside the hidden interactive Claude (and on claude.ai) — invisible here,
+ * so the chat looked stuck until restarted. It is shown as the usual «Claude спрашивает» card; an answer closes the
+ * dialog (Esc) and is sent as the next message. Answered elsewhere (phone) → the card goes away.
+ */
+function syncRemoteQuestion(s: ChatSession) {
+  const q = s.builder.pendingQuestion();
+  const cardId = q ? `rc-${q.id}` : undefined;
+  for (const [id] of s.pending) if (id.startsWith('rc-') && id !== cardId) s.pending.delete(id);
+  if (!q || s.pending.has(cardId!)) return;
+  const req: PermissionRequest = { id: cardId!, sessionId: s.id, toolName: 'AskUserQuestion', input: q.input, hasSuggestions: false };
+  s.pending.set(cardId!, {
+    req,
+    resolve: (r: any) => {
+      const proc = s.remoteProc;
+      if (!proc || proc.exited !== undefined) return;
+      remote.interrupt(proc);
+      const answers: Record<string, string> = r?.behavior === 'allow' ? (r.updatedInput?.answers ?? {}) : {};
+      const lines = Object.entries(answers).map(([question, a]) => `- «${question}»: ${a}`);
+      if (!lines.length) return;
+      // the dialog closes first, then the answer goes as a message
+      setTimeout(() => void send(s.id, ['Ответ на твой вопрос (окно вопроса закрыто):', ...lines].join('\n'), {}).catch(() => {}), 1500);
+    },
+  });
+  s.setStatus('waiting');
+}
+
 /** Text as the TUI writes it to the transcript (tabs become spaces, …): compared without whitespace differences. */
 const sameText = (t: string) => t.replace(/\s+/g, ' ').trim();
 
@@ -1583,3 +1613,60 @@ export async function setOptions(sessionId: string, o: { model?: string; effort?
   rememberChatModel(s);
   s.publish(true);
 }
+
+// --- other chats, read-only, for the editor MCP tools (debugging one chat from another) ---------------------------
+
+function chatInfo(s: ChatSession) {
+  const last = s.builder.turns[s.builder.turns.length - 1];
+  return {
+    id: s.id,
+    title: s.title,
+    cwd: s.cwd,
+    agent: s.agent,
+    model: s.model ?? null,
+    status: s.status,
+    remoteControl: s.remote,
+    processRunning: !!s.q || !!(s.remoteProc && s.remoteProc.exited === undefined),
+    waitingFor: [...s.pending.values()].map((p) => p.req.toolName),
+    lastActivity: new Date(s.lastActivity).toISOString(),
+    stallRestarts: s.stallRestarts,
+    turns: s.builder.turns.length,
+    lastPrompt: last?.prompt.slice(0, 300),
+    lastTurnLive: !!last?.live,
+    queuedHere: s.remoteQueue.map((q) => q.text.slice(0, 200)),
+    transcript: findTranscript(s.id),
+  };
+}
+
+chatAccess.list = () => [...sessions.values()].map(chatInfo);
+
+chatAccess.read = async (query: string, n: number, full: boolean) => {
+  const q = query.trim().toLowerCase();
+  let s = [...sessions.values()].find((x) => x.id.startsWith(q)) ?? [...sessions.values()].find((x) => x.title.toLowerCase() === q) ?? [...sessions.values()].find((x) => x.title.toLowerCase().includes(q));
+  let builder = s?.builder;
+  let file = s ? findTranscript(s.id) : null;
+  if (!s) {
+    // a chat that isn't open: by its full id, from the history on disk
+    file = /^[0-9a-f-]{36}$/.test(q) ? findTranscript(q) : null;
+    if (!file) return { error: `Чат «${query}» не найден среди открытых (${[...sessions.values()].map((x) => x.title).join(', ')}); закрытый — укажите полный id` };
+    builder = (await loadTranscript(file)).builder;
+  }
+  const cut = (t: string | undefined, len: number) => (t && t.length > len ? t.slice(0, len) + `… (+${t.length - len})` : t);
+  const turns = builder!.turns.slice(-n).map((t: any) => ({
+    startedAt: new Date(t.startedAt).toISOString(),
+    prompt: cut(t.prompt, full ? 4000 : 600),
+    more: t.more?.map((x: any) => ({ prompt: cut(x.prompt, 600), at: new Date(x.at).toISOString(), queuedNotTaken: !!x.pending })),
+    live: !!t.live,
+    error: t.error,
+    items: t.items.map((i: any) =>
+      i.kind === 'tool'
+        ? { tool: i.name, summary: i.summary, done: !!i.done, error: i.error || undefined, errorText: cut(i.errorText, 1000), ...(full ? { detail: cut(i.detail, 2000), output: cut(i.output, 2000) } : {}) }
+        : { [i.kind]: cut(i.text, full ? 6000 : 800) },
+    ),
+  }));
+  return {
+    ...(s ? chatInfo(s) : { id: q, open: false, transcript: file }),
+    pendingRequests: s ? [...s.pending.values()].map((p) => ({ tool: p.req.toolName, input: p.req.input })) : [],
+    turns,
+  };
+};
