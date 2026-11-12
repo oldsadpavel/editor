@@ -263,11 +263,13 @@ class ChatSession {
     this.publish(true);
     // taskbar: progress while any chat works; a check when an answer ends (or needs you) while the window is away
     const finished = was === 'running' && s !== 'running';
-    taskbar.chatsChanged([...sessions.values()].some((x) => x.status === 'running'), finished);
+    taskbar.chatsChanged(anyBusy(), finished);
   }
 }
 
 const sessions = new Map<string, ChatSession>();
+/** Some chat works: Claude answers, or a background task (subagent, background command) still runs. */
+const anyBusy = () => [...sessions.values()].some((x) => x.status === 'running' || x.tasks.some((t) => t.status === 'running'));
 /** Turns sent with each live update; earlier ones don't change once answered. */
 const LIVE_TAIL = 4;
 
@@ -611,6 +613,8 @@ async function pump(s: ChatSession) {
     if (s.q === q) {
       s.q = null;
       s.input = null;
+      // the process is gone: its background tasks with it
+      for (const t of s.tasks) if (t.status === 'running') t.status = 'stopped';
       s.builder.markInterrupted();
       finishLiveTurns(s);
       if (s.status === 'running' || s.status === 'waiting') s.setStatus('idle');
@@ -829,6 +833,7 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       if (sm.subtype === 'task_started') {
         s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type }];
         s.publish(true);
+        taskbar.chatsChanged(anyBusy(), false);
       }
       if (sm.subtype === 'task_progress') {
         const t = s.tasks.find((x) => x.id === sm.task_id);
@@ -842,6 +847,7 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
         Object.assign(t, { status: sm.status, summary: sm.summary, outputFile: sm.output_file });
         s.tasks = [...s.tasks.filter((x) => x.id !== t.id), t].filter((x) => x.status === 'running' || Date.now() - x.startedAt < 30 * 60_000).slice(-20);
         s.publish(true);
+        taskbar.chatsChanged(anyBusy(), false);
       }
       // History compaction: 'status: compacting' starts it, a compact_boundary (or the status clearing) ends it.
       if (sm.subtype === 'status') {

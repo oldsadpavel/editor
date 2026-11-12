@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DirEntry, TreeSort, TreeSortBy } from '../../shared/types';
 import { call } from '../api';
-import { addProjects, isUnread, createGroup, deleteGroup, get, openFile, renameGroup, saveApp, set, setTreeOpen, setUi, switchGroup, toggleFavorite, toast, useStore } from '../store';
+import { addProjects, isUnread, createGroup, deleteGroup, get, openFile, renameGroup, saveApp, set, setTreeOpen, setUi, shownStatus, switchGroup, toggleFavorite, toast, useStore } from '../store';
 import { Help, basename, dirname } from '../util';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { gitMenu, repoOf, useGitRefresh } from './Git';
@@ -77,7 +77,7 @@ const inProject = (cwd: string, root: string) => {
 /** 'waiting' | 'running' | 'unread:N' | '' for a set of chats. */
 function activityOf(s: ReturnType<typeof get>, ids: string[]) {
   if (ids.some((id) => s.chats[id]?.status === 'waiting')) return 'waiting';
-  if (ids.some((id) => s.chats[id]?.status === 'running')) return 'running';
+  if (ids.some((id) => shownStatus(s.chats[id]) === 'running')) return 'running';
   const unread = ids.filter((id) => isUnread(id, s)).length;
   return unread ? `unread:${unread}` : '';
 }
@@ -114,7 +114,7 @@ function GroupActivity({ groupId }: { groupId: string }) {
     const projects = isActive ? a.projects : g.projects;
     const open = isActive ? a.openChats : g.openChats;
     const ids = new Set(open);
-    for (const [id, c] of Object.entries(s.chats)) if (projects.some((p) => inProject(c.cwd, p.path))) if (c.status === 'running' || c.status === 'waiting') ids.add(id);
+    for (const [id, c] of Object.entries(s.chats)) if (projects.some((p) => inProject(c.cwd, p.path))) if (shownStatus(c) === 'running' || c.status === 'waiting') ids.add(id);
     return activityOf(s, [...ids]);
   });
   return <ActivityMark state={state} what="этой группе" />;

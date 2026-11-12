@@ -21,7 +21,7 @@ import { AccountsPopover, AgentSwitchModal, AgentsModal } from './components/Age
 import { TaskDraftModal, TaskModal, TasksButton, useTaskReminders } from './components/Tasks';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
-import { get, init, isUnread, loadAgents, set, setUi, toast, togglePanel, useStore } from './store';
+import { get, init, isUnread, loadAgents, set, setUi, shownStatus, toast, togglePanel, useStore } from './store';
 import { Markdown } from './util';
 
 const TOOLBAR: { id: PanelId; label: string; icon: string }[] = [
@@ -61,7 +61,7 @@ function ToolbarButton({ id, label, icon }: { id: PanelId; label: string; icon: 
   const unread = useStore((s) => (id === 'chat' ? Object.keys(s.app!.chatMeta).filter((k) => isUnread(k, s)).length : 0));
   const running = useStore((s) =>
     id === 'chat'
-      ? Object.values(s.chats).filter((c) => c.status === 'running' || c.status === 'waiting').length
+      ? Object.values(s.chats).filter((c) => shownStatus(c) === 'running' || c.status === 'waiting').length
       : id === 'deploys'
         ? s.deploys.filter((d) => d.state === 'building' || d.state === 'deploying').length
         : 0,

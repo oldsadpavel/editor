@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatSnapshot, SessionInfo } from '../../shared/types';
 import { call } from '../api';
-import { MAX_CHAT_PANES, closeChat, closePane, focusPane, newChatBeside, openChatBeside, setUi, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, useStore } from '../store';
+import { MAX_CHAT_PANES, closeChat, closePane, focusPane, newChatBeside, openChatBeside, setUi, toast, isUnread, loadSessions, newChat, openChat, renameChat, saveApp, shownStatus, useStore } from '../store';
 import { Help, basename, formatTime } from '../util';
 import { ChatView, compactEstimateMs } from './ChatView';
 import { AGENT_NAME, AGENT_SHORT } from './Agents';
@@ -64,7 +64,7 @@ function History({ cwd, onClose }: { cwd: string; onClose: () => void }) {
               onClose();
             }}
           >
-            <StatusDot id={s.sessionId} status={chats[s.sessionId]?.status} />
+            <StatusDot id={s.sessionId} status={shownStatus(chats[s.sessionId])} />
             {editing === s.sessionId ? (
               <Rename
                 value={s.title}
@@ -194,7 +194,7 @@ export function ChatPanel() {
           <ProjectGroup key={g.cwd} cwd={g.cwd}>
             {g.ids.map((id) => {
           const c = chats[id];
-          const mark = c.status === 'running' ? '  — работает' : c.status === 'waiting' ? '  — ждёт ответа' : c.status === 'error' ? '  — ошибка' : '';
+          const mark = c.status === 'running' ? '  — работает' : shownStatus(c) === 'running' ? '  — фоновые задачи' : c.status === 'waiting' ? '  — ждёт ответа' : c.status === 'error' ? '  — ошибка' : '';
           return (
             <div
               key={id}
@@ -228,7 +228,7 @@ export function ChatPanel() {
               }}
               {...middleClose(() => closeChat(id))}
             >
-              <StatusDot id={id} status={c.status} />
+              <StatusDot id={id} status={shownStatus(c)} />
               {panes.includes(id) && <span className="pane-badge">{panes.indexOf(id) + 1}</span>}
               {c.agent && <span className={`agent-pill agent-${c.agent}`} title={AGENT_NAME[c.agent]}>{AGENT_SHORT[c.agent]}</span>}
               {editing === id ? (
@@ -309,7 +309,7 @@ function ChatSplit({ panes, active, mode }: { panes: string[]; active?: string; 
           <div key={id} className={`chat-pane ${id === active ? 'focused' : ''}`} onMouseDownCapture={() => focusPane(id)}>
             <div className="pane-head" title={c.cwd}>
               <span className="pane-num">{i + 1}</span>
-              <StatusDot id={id} status={c.status} />
+              <StatusDot id={id} status={shownStatus(c)} />
               <span className="pane-title">{c.title}</span>
               <span className="pane-proj">{basename(c.cwd)}</span>
               <button className="icon-btn" title="Оставить только этот чат" onClick={() => void saveApp({ chatPanes: [], activeChat: id })}>

@@ -847,3 +847,11 @@ export async function init() {
     for (const id of [state.app?.activeChat, ...(state.app?.chatPanes ?? [])]) if (id && chatIsVisible(id)) markSeen(id);
   });
 }
+
+/** The status shown for a chat: an idle one with background tasks still running (subagents, background commands)
+ * shows as working — the spinner stays everywhere until they finish. */
+export function shownStatus(c: ChatSnapshot | undefined): ChatSnapshot['status'] | undefined {
+  if (!c) return undefined;
+  if (c.status !== 'running' && c.status !== 'waiting' && c.tasks?.some((t) => t.status === 'running')) return 'running';
+  return c.status;
+}
