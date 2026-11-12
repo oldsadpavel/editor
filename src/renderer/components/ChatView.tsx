@@ -4,7 +4,7 @@ import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
 import { isFavorite, openFavorite, removeFavorite, toggleFavorite } from '../favorites';
 import { PlanCard, ShellCard, TasksBar, ThinkingBlock, TodoCard, ToolDetails, openClaudeConfig, rewindTo } from './ChatExtras';
-import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, sendPrompt, set, setAutoApprove, setUi, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
+import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, saveApp, sendPrompt, set, setAutoApprove, setUi, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { SoundButton } from './SoundButton';
@@ -1270,6 +1270,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           <input type="checkbox" checked={!!chat.autoApprove} onChange={(e) => setAutoApprove(chat.sessionId, e.target.checked)} />
           ⚡ Подтверждать всё
         </label>
+        <LimitResume chat={chat} />
         {!chat.agent && (<>
         <label
           className={`auto-approve remote ${chat.remote ? 'on' : ''}`}
@@ -1944,3 +1945,21 @@ function FavoritesTab({ chat, onOpen }: { chat: ChatSnapshot; onOpen: () => void
 }
 
 const NO_FAVS: FavoriteAnswer[] = [];
+
+/** ⏳ An answer cut off by the usage limit goes on by itself after the reset (all chats); the time when it will. */
+function LimitResume({ chat }: { chat: ChatSnapshot }) {
+  const on = useStore((s) => s.app?.limitResume !== false);
+  const at = chat.limitResumeAt;
+  return (
+    <label
+      className={`auto-approve limit-resume ${on ? 'on' : ''} ${at ? 'armed' : ''}`}
+      title={
+        (at ? `Ответ оборвался из-за лимита. Продолжу сам в ${new Date(at).toLocaleString('ru-RU')} (через минуту после сброса). ` : '') +
+        'После лимита продолжить: если ответ оборвался на «You\'ve hit your … limit · resets …», чат сам напишет «продолжай» через минуту после сброса. Для всех чатов.'
+      }
+    >
+      <input type="checkbox" checked={on} onChange={(e) => void saveApp({ limitResume: e.target.checked })} />
+      ⏳ {at ? `продолжу в ${new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'После лимита'}
+    </label>
+  );
+}

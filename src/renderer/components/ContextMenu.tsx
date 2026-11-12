@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export interface MenuItem {
   label: string;
@@ -32,10 +33,12 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
     };
   }, [onClose]);
 
-  return (
+  // into <body>: inside a zoomed block (Ctrl+wheel) fixed coordinates would be scaled and the menu would drift
+  return createPortal(
     <div className="ctx-menu" ref={ref} style={{ left: pos.x, top: pos.y }}>
       <Items items={items} onClose={onClose} />
-    </div>
+    </div>,
+    document.body,
   );
 }
 

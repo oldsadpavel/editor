@@ -19,6 +19,7 @@ import * as taskbar from './taskbar';
 import { ATTACHMENTS_HEADER, TurnBuilder, compactInfo, findTranscript, loadTranscript, readTranscriptInto } from './transcript';
 import * as usage from './usage';
 import { EDITOR_INSTRUCTIONS, chatAccess, editorMcp } from './editor-mcp';
+import { limitResetAt } from './limit-reset';
 
 /** Prefers the user's installed Claude Code so login, settings and version match the terminal. */
 /**
@@ -189,6 +190,8 @@ class ChatSession {
   lastActivity = Date.now();
   /** Automatic restarts of the current answer (stalled with nothing coming), so it doesn't loop forever. */
   stallRestarts = 0;
+  /** An answer cut off by the usage limit: the turn and when to go on (see the limit watch). */
+  limitResume: { key: string; at: number; done: boolean } | null = null;
   q: Query | null = null;
   input: InputQueue | null = null;
   pending = new Map<string, PendingPermission>();
@@ -226,6 +229,7 @@ class ChatSession {
       autoApprove: this.autoApprove,
       remote: this.remote,
       chrome: this.chrome,
+      limitResumeAt: this.limitResume && !this.limitResume.done ? this.limitResume.at : undefined,
       compacting: this.compacting,
       tasks: this.tasks.length ? this.tasks : undefined,
       suggestion: this.suggestion,
@@ -1670,3 +1674,46 @@ chatAccess.read = async (query: string, n: number, full: boolean) => {
     turns,
   };
 };
+
+// --- usage limit: an answer cut off by «You've hit your … limit · resets 6:30pm» goes on after the reset -----------
+
+const LIMIT_GRACE = 60_000;
+setInterval(() => {
+  const now = Date.now();
+  const on = stateFile.data.limitResume !== false;
+  for (const s of sessions.values()) {
+    if (s.agent !== 'claude') continue;
+    const last = s.builder.turns[s.builder.turns.length - 1];
+    if (!last || s.status === 'running' || s.status === 'waiting') continue;
+    const texts = last.items.filter((i) => i.kind === 'text').slice(-2).map((i: any) => i.text as string);
+    const text = [last.error ?? '', ...texts].join('\n');
+    const key = `${last.id}:${last.items.length}`;
+    if (s.limitResume?.key === key) {
+      if (!on && !s.limitResume.done) {
+        s.limitResume = null;
+        s.publish(true);
+      } else if (on && !s.limitResume.done && now >= s.limitResume.at) {
+        s.limitResume.done = true;
+        s.publish(true);
+        emit({ type: 'toast', text: `«${s.title}»: лимит сбросился — продолжаю` });
+        void send(s.id, 'Лимит сбросился. Продолжай с того места, где остановился (ответ оборвался из-за лимита).', { model: s.model, effort: s.effort, permissionMode: s.permissionMode }).catch((e) =>
+          emit({ type: 'toast', text: `«${s.title}»: продолжить после лимита не вышло — ${e?.message ?? e}`, kind: 'error' }),
+        );
+      }
+      continue;
+    }
+    if (!on) continue;
+    const reset = /limit/i.test(text) ? limitResetAt(text, last.startedAt) : undefined;
+    if (!reset) {
+      if (s.limitResume) {
+        s.limitResume = null;
+        s.publish(true);
+      }
+      continue;
+    }
+    // an old cut-off (the reset was long ago, the app was closed meanwhile) is not picked up again
+    if (now > reset + 3 * 3600_000) continue;
+    s.limitResume = { key, at: reset + LIMIT_GRACE, done: false };
+    s.publish(true);
+  }
+}, 20_000).unref();

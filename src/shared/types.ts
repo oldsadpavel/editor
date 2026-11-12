@@ -235,6 +235,8 @@ export interface ChatSnapshot {
   remote?: boolean;
   /** Claude in Chrome: the browser extension's tools (open pages, click, read, fill forms) — `claude --chrome`. */
   chrome?: boolean;
+  /** The answer stopped at a usage limit: when the chat goes on by itself (ms). */
+  limitResumeAt?: number;
   /** Permission decisions in this chat, oldest first. */
   approvals: ApprovalEntry[];
   pending: PermissionRequest[];
@@ -491,6 +493,8 @@ export interface AppState {
   notifications?: boolean;
   /** Задачи: to-dos with due dates and reminders, made by hand or from a chat answer. */
   tasks?: Task[];
+  /** An answer cut off by the usage limit goes on by itself after the reset (default on). */
+  limitResume?: boolean;
   /** Ids of deleted tasks, so a cloud copy doesn't bring them back. */
   tasksDeleted?: string[];
   /** A chat's own «answer ready» sound (absent — the default one). */
