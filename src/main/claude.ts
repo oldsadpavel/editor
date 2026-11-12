@@ -192,6 +192,8 @@ class ChatSession {
   stallRestarts = 0;
   /** An answer cut off by the usage limit: the turn and when to go on (see the limit watch). */
   limitResume: { key: string; at: number; done: boolean } | null = null;
+  limitResumedAt: number | undefined;
+  limitRetries: number | undefined;
   q: Query | null = null;
   input: InputQueue | null = null;
   pending = new Map<string, PendingPermission>();
@@ -1677,7 +1679,7 @@ chatAccess.read = async (query: string, n: number, full: boolean) => {
 
 // --- usage limit: an answer cut off by «You've hit your … limit · resets 6:30pm» goes on after the reset -----------
 
-const LIMIT_GRACE = 60_000;
+const LIMIT_GRACE = 15_000;
 setInterval(() => {
   const now = Date.now();
   const on = stateFile.data.limitResume !== false;
@@ -1694,6 +1696,7 @@ setInterval(() => {
         s.publish(true);
       } else if (on && !s.limitResume.done && now >= s.limitResume.at) {
         s.limitResume.done = true;
+        s.limitResumedAt = now;
         s.publish(true);
         emit({ type: 'toast', text: `«${s.title}»: лимит сбросился — продолжаю` });
         void send(s.id, 'Лимит сбросился. Продолжай с того места, где остановился (ответ оборвался из-за лимита).', { model: s.model, effort: s.effort, permissionMode: s.permissionMode }).catch((e) =>
@@ -1713,7 +1716,13 @@ setInterval(() => {
     }
     // an old cut-off (the reset was long ago, the app was closed meanwhile) is not picked up again
     if (now > reset + 3 * 3600_000) continue;
-    s.limitResume = { key, at: reset + LIMIT_GRACE, done: false };
+    // the limit hit again right after going on (not reset yet): «resets 11:30pm» now reads as tomorrow — retry soon
+    let at = reset + LIMIT_GRACE;
+    if (s.limitResumedAt && now - s.limitResumedAt < 15 * 60_000 && at - now > 3600_000) {
+      if ((s.limitRetries = (s.limitRetries ?? 0) + 1) > 3) continue;
+      at = now + 2 * 60_000;
+    } else s.limitRetries = 0;
+    s.limitResume = { key, at, done: false };
     s.publish(true);
   }
-}, 20_000).unref();
+}, 5_000).unref();

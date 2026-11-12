@@ -1954,8 +1954,8 @@ function LimitResume({ chat }: { chat: ChatSnapshot }) {
     <label
       className={`auto-approve limit-resume ${on ? 'on' : ''} ${at ? 'armed' : ''}`}
       title={
-        (at ? `Ответ оборвался из-за лимита. Продолжу сам в ${new Date(at).toLocaleString('ru-RU')} (через минуту после сброса). ` : '') +
-        'После лимита продолжить: если ответ оборвался на «You\'ve hit your … limit · resets …», чат сам напишет «продолжай» через минуту после сброса. Для всех чатов.'
+        (at ? `Ответ оборвался из-за лимита. Продолжу сам в ${new Date(at).toLocaleString('ru-RU')} (через 15 секунд после сброса). ` : '') +
+        'После лимита продолжить: если ответ оборвался на «You\'ve hit your … limit · resets …», чат сам напишет «продолжай» через 15 секунд после сброса. Для всех чатов.'
       }
     >
       <input type="checkbox" checked={on} onChange={(e) => void saveApp({ limitResume: e.target.checked })} />
