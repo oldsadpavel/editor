@@ -1836,10 +1836,14 @@ const estOf = (e: { input: number; output: number; cacheRead: number; cacheWrite
   return (e.input * i + e.output * o + e.cacheRead * i * 0.1 + e.cacheWrite * i * 1.25) / 1e6;
 };
 
+/** The 5-hour window split into 15-minute buckets for the spending timeline. */
+const SPEND_BUCKET_MS = 15 * 60_000;
+const SPEND_BUCKETS = 20;
+
 export function usageStats(since: number): ChatSpend[] {
   const out: ChatSpend[] = [];
   for (const s of sessions.values()) {
-    const chat: ChatSpend = { id: s.id, title: s.title, cwd: s.cwd, est: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, models: {}, tools: {}, turns: [] };
+    const chat: ChatSpend = { id: s.id, title: s.title, cwd: s.cwd, est: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, models: {}, tools: {}, turns: [], timeline: new Array(SPEND_BUCKETS).fill(0) };
     for (const t of s.builder.turns) {
       const entries = t.tokenLog?.length ? t.tokenLog.filter((e) => e.at >= since) : t.startedAt >= since && t.tokens ? [{ ...t.tokens, at: t.startedAt, model: t.models?.[0] }] : [];
       if (!entries.length) continue;
@@ -1849,6 +1853,8 @@ export function usageStats(since: number): ChatSpend[] {
         const model = e.model ?? t.models?.[0];
         const x = estOf(e, model);
         est += x;
+        const b = Math.floor((e.at - since) / SPEND_BUCKET_MS);
+        chat.timeline[Math.max(0, Math.min(SPEND_BUCKETS - 1, b))] += x;
         tok += e.input + e.output + e.cacheRead + e.cacheWrite;
         const short = (model ?? 'по умолчанию').replace(/^claude-/, '').replace(/-\d{8}$/, '');
         chat.models[short] = (chat.models[short] ?? 0) + x;

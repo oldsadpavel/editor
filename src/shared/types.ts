@@ -724,6 +724,8 @@ export interface ChatSpend {
   models: Record<string, number>;
   tools: Record<string, number>;
   turns: { startedAt: number; prompt: string; est: number; tokens: number; tools: number; model?: string }[];
+  /** Estimated cost per 15 minutes of the window, from its start. */
+  timeline: number[];
 }
 
 /** A scheduled prompt of a chat (CronCreate / ScheduleWakeup): what, when, still alive or not. */

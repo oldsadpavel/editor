@@ -59,6 +59,7 @@ export function StatsModal() {
               <div className="empty">В этом окне открытые чаты ничего не тратили</div>
             ) : (
               <div className="stats-list">
+                <SpendTimeline spend={spend} since={since} share={share} />
                 {spend.map((c) => (
                   <div key={c.id} className="stats-chat">
                     <div className="stats-row" onClick={() => setOpen(open === c.id ? null : c.id)}>
@@ -98,6 +99,7 @@ export function StatsModal() {
                               .join(' · ')}
                           </div>
                         )}
+                        <SpendTimeline spend={[c]} since={since} share={share} small />
                         <div>
                           <b>Самые дорогие ответы:</b>
                         </div>
@@ -150,6 +152,85 @@ export function StatsModal() {
                 ))}
               </div>
             )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const SERIES = ['#4e8fd6', '#d08a3a', '#5aa36a', '#b065c0', '#c9b440'];
+const OTHER = '#808080';
+const hm = (t: number) => new Date(t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+/** Spending over the window by 15 minutes, stacked by chat (the 5 biggest, the rest grey); hover shows the breakdown. */
+function SpendTimeline({ spend, since, share, small }: { spend: ChatSpend[]; since: number; share: (est: number) => number; small?: boolean }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const n = spend[0]?.timeline?.length ?? 0;
+  if (!n) return null;
+  const top = spend.slice(0, SERIES.length);
+  const rest = spend.slice(SERIES.length);
+  const step = (5 * 3600_000) / n;
+  const cols = Array.from({ length: n }, (_, i) => {
+    const parts = top.map((c, k) => ({ title: c.title, color: SERIES[k], v: c.timeline[i] ?? 0 }));
+    const other = rest.reduce((a, c) => a + (c.timeline[i] ?? 0), 0);
+    if (other) parts.push({ title: `другие (${rest.length})`, color: OTHER, v: other });
+    return { at: since + i * step, parts, sum: parts.reduce((a, x) => a + x.v, 0) };
+  });
+  const max = Math.max(...cols.map((c) => c.sum)) || 1;
+  const now = Math.floor((Date.now() - since) / step);
+  const h = cols[hover ?? -1];
+  return (
+    <div className={`spend-tl ${small ? 'small' : ''}`}>
+      <div className="spend-tl-cols" onMouseLeave={() => setHover(null)}>
+        {cols.map((c, i) => (
+          <div key={i} className={`spend-tl-col ${i > now ? 'future' : ''} ${hover === i ? 'hover' : ''}`} onMouseEnter={() => setHover(i)}>
+            {c.parts.map((x, k) =>
+              x.v ? <span key={k} style={{ height: `${(x.v / max) * 100}%`, background: x.color }} /> : null,
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="spend-tl-axis muted small">
+        {cols.map((c, i) => (
+          <span key={i}>{i % 4 === 0 ? hm(c.at) : ''}</span>
+        ))}
+      </div>
+      <div className="spend-tl-info small">
+        {h ? (
+          <>
+            <b>
+              {hm(h.at)}–{hm(h.at + step)}
+            </b>{' '}
+            · {pct(share(h.sum))} · ≈${h.sum.toFixed(2)}
+            {!small &&
+              h.parts
+                .filter((x) => x.v)
+                .sort((a, b) => b.v - a.v)
+                .map((x, k) => (
+                  <span key={k} className="spend-tl-leg">
+                    <i style={{ background: x.color }} />
+                    {x.title} {pct(share(x.v))}
+                  </span>
+                ))}
+          </>
+        ) : small ? (
+          <span className="muted">Наведите на столбик — расход за эти 15 минут</span>
+        ) : (
+          <>
+            {top.map((c, k) => (
+              <span key={k} className="spend-tl-leg">
+                <i style={{ background: SERIES[k] }} />
+                {c.title}
+              </span>
+            ))}
+            {rest.length > 0 && (
+              <span className="spend-tl-leg">
+                <i style={{ background: OTHER }} />
+                другие ({rest.length})
+              </span>
+            )}
+            <span className="muted"> · по 15 минут, наведите на столбик</span>
           </>
         )}
       </div>

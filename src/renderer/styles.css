@@ -1057,3 +1057,15 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .cron-state.active { background: rgba(98, 151, 85, 0.35); }
 .cron-prompt { white-space: pre-wrap; max-height: 3.2em; overflow: hidden; }
 .tb-btn.economy.on { background: rgba(184, 137, 47, 0.25); }
+.spend-tl { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px 8px; flex: none; }
+.spend-tl-cols { display: flex; align-items: flex-end; gap: 2px; height: 90px; border-bottom: 1px solid var(--line); }
+.spend-tl.small .spend-tl-cols { height: 44px; }
+.spend-tl-col { flex: 1; height: 100%; display: flex; flex-direction: column-reverse; justify-content: flex-start; border-radius: 2px 2px 0 0; overflow: hidden; }
+.spend-tl-col > span { display: block; flex: none; }
+.spend-tl-col.future { background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(128, 128, 128, 0.08) 4px 8px); }
+.spend-tl-col.hover { background-color: rgba(128, 128, 128, 0.15); }
+.spend-tl-axis { display: flex; gap: 2px; }
+.spend-tl-axis > span { flex: 1; white-space: nowrap; overflow: visible; }
+.spend-tl-info { min-height: 18px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.spend-tl-leg { display: inline-flex; align-items: center; gap: 4px; }
+.spend-tl-leg > i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
