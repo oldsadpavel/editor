@@ -245,6 +245,7 @@ handle('chat:options', async (id: string, o: { model?: string; effort?: string; 
 handle('git:clone', (remote: string, root: string, branch?: string) => cloneProject(remote, root, branch));
 handle('serverTests:list', () => serverTests.listReports());
 handle('serverTests:refresh', (repo: string) => serverTests.refresh(repo));
+handle('mcp:login', (id: string, name: string) => claude.mcpLogin(id, name));
 handle('chat:chrome', async (id: string, on: boolean) => (await ensure(id), claude.setChrome(id, on)));
 handle('chat:status', async (id: string) => (await ensure(id), claude.chatStatus(id)));
 handle('chat:commands', async (id: string) => (await ensure(id), claude.chatCommands(id)));

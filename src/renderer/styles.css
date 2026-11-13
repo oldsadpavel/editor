@@ -1036,3 +1036,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .tree-row.root .tname { flex-shrink: 0; }
 .troot-path { flex-shrink: 1; min-width: 0; }
 .troot-branch { flex-shrink: 0; }
+.mcp-auth { display: flex; flex-direction: column; gap: 4px; margin: 4px 8px; padding: 6px 10px; border: 1px solid #b8892f; border-radius: 6px; background: rgba(184, 137, 47, 0.12); }
+.mcp-auth-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+.mcp-auth.quiet { border-color: var(--line); background: transparent; padding: 2px 10px; }
+.mcp-auth-more { cursor: pointer; font-size: 12px; color: var(--fg2); }
+.mcp-auth-row.small { font-size: 12px; padding-left: 14px; }
+.mcp-auth-acts { display: flex; gap: 6px; align-items: center; }

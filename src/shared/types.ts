@@ -237,6 +237,8 @@ export interface ChatSnapshot {
   chrome?: boolean;
   /** The answer stopped at a usage limit: when the chat goes on by itself (ms). */
   limitResumeAt?: number;
+  /** MCP connectors of this chat that need a sign-in (or failed); `waiting` — signing in now, checked every 10 s. */
+  mcpAuth?: { name: string; status: string; waiting?: boolean; asked?: boolean }[];
   /** Permission decisions in this chat, oldest first. */
   approvals: ApprovalEntry[];
   pending: PermissionRequest[];
@@ -495,6 +497,8 @@ export interface AppState {
   tasks?: Task[];
   /** An answer cut off by the usage limit goes on by itself after the reset (default on). */
   limitResume?: boolean;
+  /** Connectors without a sign-in that the user hid from the «Войти» card. */
+  mcpAuthHidden?: string[];
   /** Ids of deleted tasks, so a cloud copy doesn't bring them back. */
   tasksDeleted?: string[];
   /** A chat's own «answer ready» sound (absent — the default one). */

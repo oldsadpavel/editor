@@ -1,3 +1,4 @@
+import { shell } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -193,6 +194,8 @@ class ChatSession {
   /** An answer cut off by the usage limit: the turn and when to go on (see the limit watch). */
   limitResume: { key: string; at: number; done: boolean } | null = null;
   limitResumedAt: number | undefined;
+  /** Connectors that need a sign-in (shown as a «Войти» card above the input). */
+  mcpAuth: { name: string; status: string; waiting?: boolean; asked?: boolean }[] = [];
   limitRetries: number | undefined;
   q: Query | null = null;
   input: InputQueue | null = null;
@@ -232,6 +235,7 @@ class ChatSession {
       remote: this.remote,
       chrome: this.chrome,
       limitResumeAt: this.limitResume && !this.limitResume.done ? this.limitResume.at : undefined,
+      mcpAuth: this.mcpAuth.length ? this.mcpAuth : undefined,
       compacting: this.compacting,
       tasks: this.tasks.length ? this.tasks : undefined,
       suggestion: this.suggestion,
@@ -829,7 +833,11 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
     }
     case 'system': {
       const sm: any = m;
-      if (sm.subtype === 'init') s.init = sm;
+      if (sm.subtype === 'init') {
+        s.init = sm;
+        // connectors still connecting at start: look a bit later
+        setTimeout(() => void refreshMcpAuth(s), 8000);
+      }
       if (sm.subtype === 'task_started') {
         s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type }];
         s.publish(true);
@@ -1651,6 +1659,7 @@ function chatInfo(s: ChatSession) {
 }
 
 chatAccess.list = () => [...sessions.values()].map(chatInfo);
+chatAccess.query = (id: string) => sessions.get(id)?.q ?? null;
 
 chatAccess.read = async (query: string, n: number, full: boolean) => {
   const q = query.trim().toLowerCase();
@@ -1732,3 +1741,73 @@ setInterval(() => {
     s.publish(true);
   }
 }, 5_000).unref();
+
+// --- connectors that need a sign-in: a «Войти» card in the chat; after the browser sign-in the chat reconnects ------
+
+const CONNECTORS_URL = 'https://claude.ai/settings/connectors';
+
+async function refreshMcpAuth(s: ChatSession) {
+  const q = s.q;
+  if (!q) return;
+  const list: any[] | null = await q.mcpServerStatus().catch(() => null);
+  if (!list) return;
+  const bad = list
+    .filter((x) => x.status === 'needs-auth' || (x.status === 'failed' && (x.scope === 'claudeai' || x.source === 'claudeai')))
+    .map((x) => {
+      const was = s.mcpAuth.find((a) => a.name === x.name);
+      return { name: x.name as string, status: x.status as string, waiting: was?.waiting, asked: was?.asked };
+    });
+  if (JSON.stringify(bad) !== JSON.stringify(s.mcpAuth)) {
+    s.mcpAuth = bad;
+    s.publish(true);
+  }
+}
+
+setInterval(() => {
+  for (const s of sessions.values()) if (s.q && s.agent === 'claude') void refreshMcpAuth(s);
+}, 120_000).unref();
+
+/** «Войти»: the connectors page of claude.ai in the browser, then reconnect every 10 s (5 min) until it's connected. */
+export async function mcpLogin(sessionId: string, name: string) {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  await shell.openExternal(CONNECTORS_URL);
+  const mark = (waiting: boolean) => {
+    const e = s.mcpAuth.find((a) => a.name === name);
+    if (e) e.waiting = waiting;
+    else s.mcpAuth.push({ name, status: 'needs-auth', waiting });
+    s.publish(true);
+  };
+  mark(true);
+  const until = Date.now() + 5 * 60_000;
+  while (Date.now() < until && sessions.has(sessionId)) {
+    await new Promise((r) => setTimeout(r, 10_000));
+    const q = s.q;
+    if (!q) continue;
+    await q.reconnectMcpServer(name).catch(() => {});
+    const st: any = ((await q.mcpServerStatus().catch(() => [])) as any[]).find((x) => x.name === name);
+    if (st?.status === 'connected') {
+      s.mcpAuth = s.mcpAuth.filter((a) => a.name !== name);
+      s.publish(true);
+      emit({ type: 'toast', text: `«${name}» подключён` });
+      // the chat was waiting for it: go on without «готово»
+      if (s.status === 'idle') await send(s.id, `Коннектор «${name}» подключён (вход выполнен). Продолжай с того места, где остановился.`, { model: s.model, effort: s.effort, permissionMode: s.permissionMode }).catch(() => {});
+      return true;
+    }
+  }
+  mark(false);
+  emit({ type: 'toast', text: `«${name}» так и не подключился за 5 минут — нажмите «Войти» ещё раз`, kind: 'error' });
+  return false;
+}
+
+/** Claude asked (open_connector_settings): the card shows up in that chat too. */
+chatAccess.needsLogin = (sessionId: string, name: string) => {
+  const s = sessions.get(sessionId);
+  if (!s) return;
+  // Claude names it loosely («Wiki OutLine»); the server is «claude.ai Wiki OutLine»
+  const norm = (x: string) => x.toLowerCase().replace(/^claude\.ai\s+/, '').trim();
+  const e = s.mcpAuth.find((a) => norm(a.name) === norm(name));
+  if (e) e.asked = true;
+  else s.mcpAuth.push({ name, status: 'needs-auth', asked: true });
+  s.publish(true);
+};

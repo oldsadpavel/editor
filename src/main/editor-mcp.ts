@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { shell } from 'electron';
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import { emit } from './bus';
@@ -45,6 +46,10 @@ export const EDITOR_INSTRUCTIONS = `
 - **Другие чаты редактора** (отладка: почему чат завис, что он делал, ждёт ли ответа) — \`mcp__editor__list_chats\`
   (открытые чаты: статус, режим /RC, ожидающий вопрос, последняя активность) и \`mcp__editor__read_chat\`
   (последние вопросы и ответы чата по id или части названия, с вызовами инструментов). Только чтение.
+- **MCP-подключения этого чата** (коннекторы claude.ai, свои серверы) — \`mcp__editor__mcp_servers\` (статус каждого),
+  \`mcp__editor__mcp_reconnect\` (переподключить без перезапуска чата). Коннектор «needs-auth» / слетел вход:
+  \`mcp__editor__open_connector_settings\` (откроет пользователю страницу коннекторов claude.ai — вход делает он сам),
+  затем \`mcp__editor__mcp_wait_connected\` — дождаться подключения и продолжить работу, не прося писать «готово».
 - **Что у пользователя в редакторе** (открытый файл, строка курсора, выделенный текст, открытые вкладки) — \`mcp__editor__get_editor_context\`.
   Когда пользователь пишет «этот файл», «здесь», «выделенное», «эта функция» — сначала посмотри туда.
 
@@ -58,7 +63,20 @@ const ok = (text: string) => ({ content: [{ type: 'text' as const, text }] });
 export const chatAccess: {
   list?: () => unknown;
   read?: (query: string, turns: number, full: boolean) => Promise<unknown>;
+  /** The chat's own Claude process (its MCP servers: status, reconnect). */
+  query?: (sessionId: string) => any;
+  /** Show the «Войти» card for a connector in that chat. */
+  needsLogin?: (sessionId: string, name: string) => void;
 } = {};
+
+const CONNECTORS_URL = 'https://claude.ai/settings/connectors';
+
+async function mcpList(sessionId: string) {
+  const q = chatAccess.query?.(sessionId);
+  if (!q) throw new Error('У этого чата сейчас нет своего процесса Claude (режим /RC или процесс не запущен)');
+  const list: any[] = await q.mcpServerStatus();
+  return list.map((s) => ({ name: s.name, status: s.status, scope: s.scope ?? s.source, error: s.error }));
+}
 
 export function editorMcp(sessionId: string, cwd: string) {
   return createSdkMcpServer({
@@ -206,6 +224,54 @@ export function editorMcp(sessionId: string, cwd: string) {
         async (a) => {
           emit({ type: 'openFile', path: a.path, line: a.line });
           return ok('Открыто');
+        },
+      ),
+      tool(
+        'mcp_servers',
+        'MCP-серверы этого чата и их статус: connected / needs-auth (нужен вход) / failed / pending / disabled, источник (claudeai — коннектор claude.ai) и ошибка.',
+        {},
+        async () => ok(JSON.stringify(await mcpList(sessionId), null, 1)),
+      ),
+      tool(
+        'mcp_reconnect',
+        'Переподключить MCP-сервер этого чата по имени (как в mcp_servers) без перезапуска чата; возвращает новый статус.',
+        { name: z.string() },
+        async (a) => {
+          const q = chatAccess.query?.(sessionId);
+          if (!q) return ok('Нет процесса Claude у этого чата');
+          let err = '';
+          await q.reconnectMcpServer(a.name).catch((e: any) => (err = e?.message ?? String(e)));
+          const st = (await mcpList(sessionId)).find((s) => s.name === a.name);
+          return ok(JSON.stringify({ reconnectError: err || undefined, ...st }, null, 1));
+        },
+      ),
+      tool(
+        'open_connector_settings',
+        'Открыть пользователю в браузере страницу коннекторов claude.ai (Настройки → Коннекторы), чтобы он сам нажал «Подключить» / «Переподключить» и вошёл. Вход и пароли — только пользователь.',
+        { name: z.string().optional().describe('Какой коннектор назвать пользователю') },
+        async (a) => {
+          await shell.openExternal(CONNECTORS_URL);
+          if (a.name) chatAccess.needsLogin?.(sessionId, a.name);
+          emit({ type: 'toast', text: `Открыл страницу коннекторов claude.ai${a.name ? ` — подключите «${a.name}»` : ''}` });
+          return ok(`Открыто: ${CONNECTORS_URL}. Скажи пользователю, какой коннектор подключить, и вызови mcp_wait_connected.`);
+        },
+      ),
+      tool(
+        'mcp_wait_connected',
+        'Ждать, пока MCP-сервер этого чата подключится (пользователь входит на claude.ai): каждые 10 с переподключает его и проверяет статус; до timeoutSec (по умолчанию 300).',
+        { name: z.string(), timeoutSec: z.number().int().min(10).max(900).default(300) },
+        async (a) => {
+          const q = chatAccess.query?.(sessionId);
+          if (!q) return ok('Нет процесса Claude у этого чата');
+          const until = Date.now() + a.timeoutSec * 1000;
+          let last: any;
+          while (Date.now() < until) {
+            await q.reconnectMcpServer(a.name).catch(() => {});
+            last = (await mcpList(sessionId).catch(() => [])).find((s: any) => s.name === a.name);
+            if (last?.status === 'connected') return ok(JSON.stringify({ connected: true, ...last }, null, 1));
+            await new Promise((r) => setTimeout(r, 10_000));
+          }
+          return ok(JSON.stringify({ connected: false, timeoutSec: a.timeoutSec, ...last }, null, 1));
         },
       ),
       tool(

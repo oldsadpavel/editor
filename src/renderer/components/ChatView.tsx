@@ -1135,6 +1135,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           ))}
         </div>
       )}
+      {chat.mcpAuth?.length ? <McpAuthCard chat={chat} /> : null}
       {/* Which chat this goes to — hard to miss, so a question doesn't land in the wrong chat. */}
       <div className="composer-target" title={`${chat.title}\n${chat.cwd}`}>
         <span className="muted">Пишете в:</span> <b>{chat.title}</b>
@@ -1961,5 +1962,52 @@ function LimitResume({ chat }: { chat: ChatSnapshot }) {
       <input type="checkbox" checked={on} onChange={(e) => void saveApp({ limitResume: e.target.checked })} />
       ⏳ {at ? `продолжу в ${new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}` : 'После лимита'}
     </label>
+  );
+}
+
+/**
+ * Connectors of this chat that need a sign-in: «Войти» opens claude.ai in the browser; the chat reconnects by itself.
+ * The ones Claude asked for are in full; the rest (connected once, unused now) fold into one line and can be hidden.
+ */
+function McpAuthCard({ chat }: { chat: ChatSnapshot }) {
+  const hidden = useStore((s) => s.app?.mcpAuthHidden ?? []);
+  const [open, setOpen] = useState(false);
+  const list = (chat.mcpAuth ?? []).filter((a) => a.asked || a.waiting || !hidden.includes(a.name));
+  const main = list.filter((a) => a.asked || a.waiting);
+  const rest = list.filter((a) => !a.asked && !a.waiting);
+  if (!list.length) return null;
+  const row = (a: NonNullable<ChatSnapshot['mcpAuth']>[number], small?: boolean) => (
+    <div key={a.name} className={`mcp-auth-row ${small ? 'small' : ''}`}>
+      <span>
+        🔌 <b>{a.name.replace(/^claude\.ai /, '')}</b> — {a.status === 'needs-auth' ? 'нужен вход' : 'не подключился'}
+      </span>
+      <span className="mcp-auth-acts">
+        {a.waiting ? (
+          <span className="muted small">⏳ жду входа в браузере… (проверяю каждые 10 с)</span>
+        ) : (
+          <button className="btn small primary" title="Откроет claude.ai → Коннекторы: нажмите «Подключить» и подтвердите вход. Чат сам переподключится и продолжит." onClick={() => void call('mcp:login', chat.sessionId, a.name).catch((e) => toast(e.message, 'error'))}>
+            Войти
+          </button>
+        )}
+        {small && (
+          <button className="btn small" title="Не показывать этот коннектор (во всех чатах)" onClick={() => void saveApp({ mcpAuthHidden: [...hidden, a.name] })}>
+            скрыть
+          </button>
+        )}
+      </span>
+    </div>
+  );
+  return (
+    <div className={`mcp-auth ${main.length ? '' : 'quiet'}`}>
+      {main.map((a) => row(a))}
+      {rest.length > 0 && (
+        <>
+          <div className="mcp-auth-more" onClick={() => setOpen(!open)}>
+            {open ? '▾' : '▸'} 🔌 {main.length ? 'Ещё ' : ''}{rest.length} {rest.length === 1 ? 'коннектор' : rest.length < 5 ? 'коннектора' : 'коннекторов'} без входа
+          </div>
+          {open && rest.map((a) => row(a, true))}
+        </>
+      )}
+    </div>
   );
 }
