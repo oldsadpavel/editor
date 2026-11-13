@@ -9,6 +9,7 @@ import { ContextMenu, type MenuItem } from './components/ContextMenu';
 import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
+import { EconomyAsk, EconomyButton, StatsModal } from './components/Stats';
 import { ProjectSettings } from './components/ProjectSettings';
 import { NewProjectModal } from './components/NewProject';
 import { GitDialogHost } from './components/Git';
@@ -255,6 +256,7 @@ const NO_HIDDEN: string[] = [];
 const CUSTOMIZABLE: { id: string; label: string }[] = [
   ...TOOLBAR.flatMap((b) => (b.id === 'chat' ? [{ id: b.id, label: `${b.icon} ${b.label}` }, { id: 'editor', label: '📝 Редактор' }, { id: 'tasks', label: '✅ Задачи' }] : [{ id: b.id, label: `${b.icon} ${b.label}` }])),
   { id: 'meters', label: '▤ Лимиты (Сессия / Неделя)' },
+  { id: 'economy', label: '🪙 Режим экономии' },
   { id: 'layout', label: '▦ Раскладка' },
 ];
 
@@ -339,6 +341,7 @@ export function App() {
         <div className="grow" />
         <UpdateButton />
         {!hiddenButtons.includes('meters') && <UsageMeters />}
+        {!hiddenButtons.includes('economy') && <EconomyButton />}
         {!hiddenButtons.includes('layout') && <LayoutButton />}
         <AuthButton />
         <button
@@ -357,6 +360,8 @@ export function App() {
       <HelpModal />
       <ProjectSettings />
       <NewProjectModal />
+      <StatsModal />
+      <EconomyAsk />
       <GitDialogHost />
       <ImageLightbox />
       <StatusModal />

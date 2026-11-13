@@ -1042,3 +1042,18 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .mcp-auth-more { cursor: pointer; font-size: 12px; color: var(--fg2); }
 .mcp-auth-row.small { font-size: 12px; padding-left: 14px; }
 .mcp-auth-acts { display: flex; gap: 6px; align-items: center; }
+.stats-modal { position: relative; width: min(980px, 95vw); max-height: 88vh; display: flex; flex-direction: column; gap: 8px; }
+.stats-list { overflow: auto; display: flex; flex-direction: column; gap: 4px; }
+.stats-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
+.stats-row:hover { background: var(--bg3, rgba(255, 255, 255, 0.05)); }
+.stats-bar { width: 90px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; flex: none; }
+.stats-bar > span { display: block; height: 100%; background: var(--accent); }
+.stats-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40%; }
+.stats-detail { padding: 4px 8px 10px 104px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.stats-turn { padding-left: 8px; border-left: 2px solid var(--line); }
+.cron-job { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.cron-job:not(.active) { opacity: 0.6; }
+.cron-state { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: var(--line); white-space: nowrap; }
+.cron-state.active { background: rgba(98, 151, 85, 0.35); }
+.cron-prompt { white-space: pre-wrap; max-height: 3.2em; overflow: hidden; }
+.tb-btn.economy.on { background: rgba(184, 137, 47, 0.25); }

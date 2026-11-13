@@ -85,6 +85,10 @@ export interface Store {
   projectSettings?: string;
   /** The «Новый проект» dialog is open. */
   newProject?: boolean;
+  /** 📊 window: spending / cron jobs. */
+  statsOpen?: 'spend' | 'cron';
+  /** Economy 'ask': the pending confirmation before an expensive model. */
+  economyAsk?: { model?: string; resolve: (r: 'sonnet' | 'keep' | 'cancel') => void };
   /** Git status of the projects' files (lower-case path → code) and each project's branch, for the tree. */
   gitFiles: Record<string, import('./components/Git').GitCode>;
   gitBranches: Record<string, string>;
@@ -617,6 +621,11 @@ export async function renameChat(id: string, title: string) {
 
 /** Sends a prompt; false (with an error toast) when it could not be sent, so the composer can keep the text. */
 export async function sendPrompt(id: string, text: string, opts: SendOptions) {
+  // economy «ask»: confirm before Opus / Fable (the chat's model when none is picked for this question)
+  const { economyCheck } = await import('./components/Stats');
+  const model = await economyCheck(opts.model ?? state.chats[id]?.model);
+  if (model === null) return false;
+  if (model !== (opts.model ?? state.chats[id]?.model)) opts = { ...opts, model };
   try {
     await call('chat:send', id, text, opts);
     return true;

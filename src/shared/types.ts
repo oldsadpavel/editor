@@ -499,6 +499,8 @@ export interface AppState {
   limitResume?: boolean;
   /** Connectors without a sign-in that the user hid from the «Войти» card. */
   mcpAuthHidden?: string[];
+  /** Economy: 'ask' — confirm sending to an expensive model (Opus, Fable); 'block' — they are swapped for Sonnet. */
+  economy?: 'off' | 'ask' | 'block';
   /** Ids of deleted tasks, so a cloud copy doesn't bring them back. */
   tasksDeleted?: string[];
   /** A chat's own «answer ready» sound (absent — the default one). */
@@ -709,4 +711,32 @@ export interface UsageInfo {
   extra?: { percent?: number; used?: number; limit?: number; currency?: string };
   checkedAt?: number;
   error?: string;
+}
+
+/** Spending of one chat in the current 5-hour window (an estimate by API prices: models weigh differently). */
+export interface ChatSpend {
+  id: string;
+  title: string;
+  cwd: string;
+  /** Estimated cost, $ — the share of it is the chat's share of the window. */
+  est: number;
+  tokens: TurnTokens;
+  models: Record<string, number>;
+  tools: Record<string, number>;
+  turns: { startedAt: number; prompt: string; est: number; tokens: number; tools: number; model?: string }[];
+}
+
+/** A scheduled prompt of a chat (CronCreate / ScheduleWakeup): what, when, still alive or not. */
+export interface CronJob {
+  chatId: string;
+  chatTitle: string;
+  id?: string;
+  cron?: string;
+  human?: string;
+  prompt: string;
+  recurring: boolean;
+  createdAt: number;
+  /** active | cancelled | expired (7 days) | stopped (the Claude process restarted: such jobs live only in it) | done */
+  state: 'active' | 'cancelled' | 'expired' | 'stopped' | 'done';
+  nextRun?: string;
 }

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { forkSession, query, listSessions, renameSession, type Query, type SDKMessage, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentId, BgTask, CompactState, ShellRun } from '../shared/types';
+import type { AgentId, BgTask, CompactState, ShellRun, ChatSpend, CronJob } from '../shared/types';
 import type { ChildProcess } from 'node:child_process';
 import { AGENT_NAMES } from './agents';
 import { listAgentChats, loadAgentChat, renameAgentChat, runAgentTurn, saveAgentChat, stopAgent } from './agent-run';
@@ -194,6 +194,8 @@ class ChatSession {
   /** An answer cut off by the usage limit: the turn and when to go on (see the limit watch). */
   limitResume: { key: string; at: number; done: boolean } | null = null;
   limitResumedAt: number | undefined;
+  /** When the current Claude process started (scheduled jobs live only inside it). */
+  procStartedAt: number | undefined;
   /** Connectors that need a sign-in (shown as a «Войти» card above the input). */
   mcpAuth: { name: string; status: string; waiting?: boolean; asked?: boolean }[] = [];
   limitRetries: number | undefined;
@@ -477,6 +479,10 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   }
   if (opts.permissionMode) s.permissionMode = opts.permissionMode;
   s.builder.loadedBytes = undefined; // our own process adds to the builder from here on
+  if (stateFile.data.economy === 'block' && isExpensive(opts.model ?? s.model)) {
+    opts = { ...opts, model: 'sonnet' };
+    emit({ type: 'toast', text: `Эконом: «${s.title}» — дорогая модель заменена на Sonnet` });
+  }
   const modelChanged = (opts.model || undefined) !== s.model;
   const effortChanged = (opts.effort || undefined) !== s.effort;
   s.model = opts.model || undefined;
@@ -564,6 +570,7 @@ function start(s: ChatSession) {
   s.input = new InputQueue();
   s.costSoFar = 0;
   const resume = s.existsOnDisk || !!findTranscript(s.id);
+  s.procStartedAt = Date.now();
   s.q = query({
     prompt: s.input,
     options: {
@@ -1001,6 +1008,7 @@ export function setRemote(sessionId: string, on: boolean) {
     if (!cli) throw new Error('Claude Code не найден');
     stopProcess(s);
     const name = s.title.replace(/[^\p{L}\p{N} _.-]/gu, '').slice(0, 40) || 'MPI';
+    s.procStartedAt = Date.now();
     s.remoteProc = remote.start({
       cli,
       sessionId: s.id,
@@ -1811,3 +1819,99 @@ chatAccess.needsLogin = (sessionId: string, name: string) => {
   else s.mcpAuth.push({ name, status: 'needs-auth', asked: true });
   s.publish(true);
 };
+
+// --- spending in the 5-hour window, scheduled jobs -----------------------------------------------------------------
+
+/** Opus / Fable (and the unnamed default, which is Opus on Max plans). */
+export const isExpensive = (model?: string) => !model || /opus|fable/i.test(model);
+
+/** $ per million tokens: input, output (cache read 0.1× input, cache write 1.25× input). */
+function price(model?: string): [number, number] {
+  if (!model || /opus|fable/i.test(model)) return [15, 75];
+  if (/haiku/i.test(model)) return [1, 5];
+  return [3, 15];
+}
+const estOf = (e: { input: number; output: number; cacheRead: number; cacheWrite: number }, model?: string) => {
+  const [i, o] = price(model);
+  return (e.input * i + e.output * o + e.cacheRead * i * 0.1 + e.cacheWrite * i * 1.25) / 1e6;
+};
+
+export function usageStats(since: number): ChatSpend[] {
+  const out: ChatSpend[] = [];
+  for (const s of sessions.values()) {
+    const chat: ChatSpend = { id: s.id, title: s.title, cwd: s.cwd, est: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, models: {}, tools: {}, turns: [] };
+    for (const t of s.builder.turns) {
+      const entries = t.tokenLog?.length ? t.tokenLog.filter((e) => e.at >= since) : t.startedAt >= since && t.tokens ? [{ ...t.tokens, at: t.startedAt, model: t.models?.[0] }] : [];
+      if (!entries.length) continue;
+      let est = 0;
+      let tok = 0;
+      for (const e of entries) {
+        const model = e.model ?? t.models?.[0];
+        const x = estOf(e, model);
+        est += x;
+        tok += e.input + e.output + e.cacheRead + e.cacheWrite;
+        const short = (model ?? 'по умолчанию').replace(/^claude-/, '').replace(/-\d{8}$/, '');
+        chat.models[short] = (chat.models[short] ?? 0) + x;
+        for (const k of ['input', 'output', 'cacheRead', 'cacheWrite'] as const) chat.tokens[k] += e[k];
+      }
+      const tools = t.items.filter((i) => i.kind === 'tool') as Extract<(typeof t.items)[number], { kind: 'tool' }>[];
+      for (const i of tools) chat.tools[i.name] = (chat.tools[i.name] ?? 0) + 1;
+      chat.est += est;
+      chat.turns.push({ startedAt: t.startedAt, prompt: (t.prompt || t.more?.[0]?.prompt || '').slice(0, 200), est, tokens: tok, tools: tools.length, model: t.models?.[0] });
+    }
+    if (chat.est > 0) {
+      chat.turns.sort((a, b) => b.est - a.est);
+      chat.turns = chat.turns.slice(0, 8);
+      out.push(chat);
+    }
+  }
+  return out.sort((a, b) => b.est - a.est);
+}
+
+/** Jobs scheduled in the open chats: CronCreate (until CronDelete, 7 days, or the process ending) and ScheduleWakeup. */
+export function cronJobs(): CronJob[] {
+  const out: CronJob[] = [];
+  for (const s of sessions.values()) {
+    const jobs = new Map<string, CronJob>();
+    for (const t of s.builder.turns) {
+      for (const i of t.items) {
+        if (i.kind !== 'tool') continue;
+        let input: any = {};
+        try {
+          input = JSON.parse(i.detail ?? '{}');
+        } catch {
+          /* cut */
+        }
+        const outText = i.output ?? '';
+        if (i.name === 'CronCreate') {
+          const id = outText.match(/job\s+([0-9a-f]{6,})/i)?.[1] ?? i.id;
+          jobs.set(id, {
+            chatId: s.id,
+            chatTitle: s.title,
+            id,
+            cron: input.cron,
+            human: outText.match(/\(([^)]+)\)/)?.[1],
+            prompt: String(input.prompt ?? '').slice(0, 300),
+            recurring: input.recurring !== false && !/one-?shot/i.test(outText),
+            createdAt: t.startedAt,
+            nextRun: outText.match(/Next run:\s*([^.]+)/)?.[1],
+            state: i.error ? 'cancelled' : 'active',
+          });
+        } else if (i.name === 'CronDelete') {
+          const j = jobs.get(String(input.id ?? ''));
+          if (j) j.state = 'cancelled';
+        } else if (i.name === 'ScheduleWakeup' && !input.stop) {
+          const at = t.startedAt + Number(input.delaySeconds ?? 0) * 1000;
+          jobs.set(i.id, { chatId: s.id, chatTitle: s.title, prompt: String(input.reason ?? input.prompt ?? '').slice(0, 300), recurring: false, createdAt: t.startedAt, human: `однократно в ${new Date(at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`, state: at < Date.now() ? 'done' : 'active' });
+        }
+      }
+    }
+    for (const j of jobs.values()) {
+      if (j.state !== 'active') continue;
+      if (Date.now() - j.createdAt > 7 * 86_400_000) j.state = 'expired';
+      else if (!s.procStartedAt || j.createdAt < s.procStartedAt - 5000 || !(s.q || s.remoteProc)) j.state = 'stopped';
+    }
+    out.push(...jobs.values());
+  }
+  return out.sort((a, b) => (a.state === 'active' ? 0 : 1) - (b.state === 'active' ? 0 : 1) || b.createdAt - a.createdAt);
+}

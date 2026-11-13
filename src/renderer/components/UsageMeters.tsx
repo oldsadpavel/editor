@@ -34,11 +34,17 @@ function Meter({ label, w, tip }: { label: string; w: UsageWindow; tip: string }
 export function UsageMeters() {
   const u = useStore((s) => s.usage);
   if (!u?.available || (!u.session && !u.week)) return null;
-  const checked = u.checkedAt ? `\nОбновлено: ${new Date(u.checkedAt).toLocaleTimeString('ru-RU')} (клик — обновить)` : '';
+  const checked = u.checkedAt ? `\nОбновлено: ${new Date(u.checkedAt).toLocaleTimeString('ru-RU')} (клик — расход по чатам)` : '';
   const models = (u.models ?? []).map((m) => `\n  ${m.name}: использовано ${Math.round(m.percent)}%, ${untilText(m.resetsAt)}`).join('');
   const extra = u.extra ? `\nДоп. использование: ${u.extra.used ?? '?'} из ${u.extra.limit ?? '?'} ${u.extra.currency ?? ''}` : '';
   return (
-    <div className="meters" onClick={async () => set({ usage: await call('usage:refresh') })}>
+    <div
+      className="meters"
+      onClick={async () => {
+        set({ statsOpen: 'spend' });
+        set({ usage: await call('usage:refresh') });
+      }}
+    >
       {u.session && (
         <Meter
           label="Сессия"
