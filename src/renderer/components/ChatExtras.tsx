@@ -94,6 +94,13 @@ export function ShellCard({ run }: { run: ShellRun }) {
   );
 }
 
+/** «claude-opus-5-5» → «Opus 5.5», «sonnet» → «Sonnet». */
+const shortModel = (m: string) => {
+  const x = m.replace(/^claude-/, '').replace(/-d{8}$/, '').replace(/[1m]$/i, '');
+  const [name, ...ver] = x.split('-');
+  return name.charAt(0).toUpperCase() + name.slice(1) + (ver.length ? ' ' + ver.join('.') : '');
+};
+
 /** Background tasks of the Claude process (Bash in background, subagents), with stop. */
 export function TasksBar({ chat }: { chat: ChatSnapshot }) {
   const [open, setOpen] = useState(false);
@@ -115,6 +122,11 @@ export function TasksBar({ chat }: { chat: ChatSnapshot }) {
               {t.description || t.summary || t.id}
               {t.kind ? <span className="muted"> · {t.kind}</span> : null}
             </span>
+            {t.model && (
+              <span className={`tk-model ${t.modelGuess ? 'guess' : ''}`} title={t.modelGuess ? 'Модель ожидается (из вызова агента или модель чата) — уточнится по первому ответу подагента' : 'Модель, на которой работает подагент'}>
+                {shortModel(t.model)}
+              </span>
+            )}
             <span className="muted small">{t.progress ?? formatTime(t.startedAt)}</span>
             {t.outputFile && (
               <span className="path-link small" onClick={() => openFile(t.outputFile!)}>

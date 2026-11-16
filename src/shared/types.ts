@@ -119,6 +119,12 @@ export interface BgTask {
   summary?: string;
   outputFile?: string;
   progress?: string;
+  /** The Agent/Task call that started it (subagents). */
+  toolUseId?: string;
+  /** Model the subagent runs on: from its replies, or asked for in the Agent call / inherited from the chat until it answers. */
+  model?: string;
+  /** The model is only expected (not seen in a reply yet). */
+  modelGuess?: boolean;
 }
 
 export interface TurnAttachment {

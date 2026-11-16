@@ -765,6 +765,9 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
           if (b.type === 'tool_use') lines.push(`⚙ ${b.name} ${String(b.input?.description ?? b.input?.command ?? b.input?.file_path ?? b.input?.pattern ?? b.input?.url ?? '').slice(0, 160)}`);
         }
         s.builder.addSub((m as any).parent_tool_use_id, lines);
+        const model = (m.message as any)?.model;
+        const task = model && s.tasks.find((t) => t.toolUseId === (m as any).parent_tool_use_id);
+        if (task && (task.model !== model || task.modelGuess)) Object.assign(task, { model, modelGuess: false });
         s.publish();
         return;
       }
@@ -846,7 +849,14 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
         setTimeout(() => void refreshMcpAuth(s), 8000);
       }
       if (sm.subtype === 'task_started') {
-        s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type }];
+        // the model of a subagent: asked for in the Agent call, else the chat's (corrected by its first reply)
+        let model: string | undefined;
+        if (sm.tool_use_id && sm.subagent_type) {
+          let input: any = {};
+          for (const t of s.builder.turns.slice(-3)) for (const i of t.items) if (i.kind === 'tool' && i.id === sm.tool_use_id) try { input = JSON.parse(i.detail ?? '{}'); } catch { /* cut */ }
+          model = input.model ?? s.init?.model ?? s.model;
+        }
+        s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type, toolUseId: sm.tool_use_id, model, modelGuess: model ? true : undefined }];
         s.publish(true);
         taskbar.chatsChanged(anyBusy(), false);
       }
