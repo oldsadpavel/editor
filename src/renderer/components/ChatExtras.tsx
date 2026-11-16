@@ -123,7 +123,11 @@ export function TasksBar({ chat }: { chat: ChatSnapshot }) {
               {t.kind ? <span className="muted"> · {t.kind}</span> : null}
             </span>
             {t.model && (
-              <span className={`tk-model ${t.modelGuess ? 'guess' : ''}`} title={t.modelGuess ? 'Модель ожидается (из вызова агента или модель чата) — уточнится по первому ответу подагента' : 'Модель, на которой работает подагент'}>
+              <span
+                className={`tk-model ${t.modelGuess ? 'guess' : ''} ${t.launcher ? 'launcher' : ''}`}
+                title={t.launcher ? 'Фоновая команда — модель её не выполняет; это модель чата, которая её запустила' : t.modelGuess ? 'Модель ожидается (из вызова агента или модель чата) — уточнится по первому ответу подагента' : 'Модель, на которой работает подагент'}
+              >
+                {t.launcher ? 'запустил ' : ''}
                 {shortModel(t.model)}
               </span>
             )}

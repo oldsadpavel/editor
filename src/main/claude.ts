@@ -850,13 +850,20 @@ function handleMessage(s: ChatSession, m: SDKMessage) {
       }
       if (sm.subtype === 'task_started') {
         // the model of a subagent: asked for in the Agent call, else the chat's (corrected by its first reply)
+        const last = s.builder.turns[s.builder.turns.length - 1];
+        const chatModel = last?.models?.[last.models.length - 1] ?? s.init?.model ?? s.model;
         let model: string | undefined;
-        if (sm.tool_use_id && sm.subagent_type) {
+        let launcher = false;
+        if (!sm.subagent_type) {
+          // a background command: no model runs it — show the chat model that started it
+          model = chatModel;
+          launcher = true;
+        } else if (sm.tool_use_id) {
           let input: any = {};
           for (const t of s.builder.turns.slice(-3)) for (const i of t.items) if (i.kind === 'tool' && i.id === sm.tool_use_id) try { input = JSON.parse(i.detail ?? '{}'); } catch { /* cut */ }
-          model = input.model ?? s.init?.model ?? s.model;
+          model = input.model ?? chatModel;
         }
-        s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type, toolUseId: sm.tool_use_id, model, modelGuess: model ? true : undefined }];
+        s.tasks = [...s.tasks.filter((t) => t.id !== sm.task_id), { id: sm.task_id, description: sm.description ?? '', status: 'running', startedAt: Date.now(), kind: sm.subagent_type ?? sm.task_type, toolUseId: sm.tool_use_id, model, modelGuess: model && !launcher ? true : undefined, launcher: launcher || undefined }];
         s.publish(true);
         taskbar.chatsChanged(anyBusy(), false);
       }

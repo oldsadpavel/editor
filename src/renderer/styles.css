@@ -1071,3 +1071,4 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .spend-tl-leg > i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
 .tk-model { font-size: 11px; padding: 0 6px; border-radius: 8px; background: rgba(78, 143, 214, 0.25); white-space: nowrap; }
 .tk-model.guess { opacity: 0.6; font-style: italic; }
+.tk-model.launcher { background: var(--line); }

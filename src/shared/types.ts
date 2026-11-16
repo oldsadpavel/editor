@@ -125,6 +125,8 @@ export interface BgTask {
   model?: string;
   /** The model is only expected (not seen in a reply yet). */
   modelGuess?: boolean;
+  /** A command, not an agent: `model` is the chat model that started it. */
+  launcher?: boolean;
 }
 
 export interface TurnAttachment {
