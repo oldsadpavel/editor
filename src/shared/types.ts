@@ -532,6 +532,8 @@ export interface AppState {
   /** One-time data repairs already applied. */
   repairs?: string[];
   /** Per-chat model/effort chosen in the composer (remembered across restarts). */
+  /** 📱 Control from the phone (MPI Remote through Insider) is allowed. Off by default. */
+  remoteAccess?: boolean;
   /** Cloud settings storage; the tokens themselves live encrypted in cloud-auth.bin, not here. */
   cloud?: { server: string; auto: boolean; email?: string; name?: string; lastSyncAt?: number; hash?: string; choiceMade?: boolean };
   chatModels?: Record<string, { model?: string; effort?: string; autoApprove?: boolean; remote?: boolean; chrome?: boolean }>;
@@ -619,7 +621,16 @@ export type MainEvent =
   | { type: 'toast'; text: string; kind?: 'error' }
   | { type: 'sessionsChanged'; cwd: string }
   | { type: 'cloud'; status: CloudStatus }
-  | { type: 'serverTests'; reports: Record<string, ServerTestReport> };
+  | { type: 'serverTests'; reports: Record<string, ServerTestReport> }
+  | { type: 'remoteLink'; status: RemoteLinkStatus };
+
+/** The phone link (MPI Remote): the switch, the connection to socket.mrkt.ru, phones seen in the last minutes. */
+export interface RemoteLinkStatus {
+  enabled: boolean;
+  state: 'off' | 'connecting' | 'online' | 'error';
+  error?: string;
+  phones: { name: string; seen: number }[];
+}
 
 /** One saved copy of the settings in the cloud. */
 export interface CloudVersion {

@@ -10,6 +10,7 @@ import { BOTTOM_PANELS, panelAlerts } from './components/Panels';
 import { TreePanel } from './components/Tree';
 import { UsageMeters } from './components/UsageMeters';
 import { EconomyAsk, EconomyButton, StatsModal } from './components/Stats';
+import { RemoteToggle } from './components/RemoteToggle';
 import { ProjectSettings } from './components/ProjectSettings';
 import { NewProjectModal } from './components/NewProject';
 import { GitDialogHost } from './components/Git';
@@ -237,7 +238,7 @@ function HelpModal() {
   );
 }
 
-function Toast() {
+export function Toast() {
   const t = useStore((s) => s.toast);
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -342,6 +343,7 @@ export function App() {
         <UpdateButton />
         {!hiddenButtons.includes('meters') && <UsageMeters />}
         {!hiddenButtons.includes('economy') && <EconomyButton />}
+        <RemoteToggle />
         {!hiddenButtons.includes('layout') && <LayoutButton />}
         <AuthButton />
         <button

@@ -4,7 +4,7 @@ name: build
 # or when a v* tag is pushed (to attach installers to a GitHub release).
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', 'mpi-remote-*']
   workflow_dispatch:
 
 permissions:
@@ -12,6 +12,8 @@ permissions:
 
 jobs:
   build:
+    # mpi-remote-* tags build only the Android app
+    if: ${{ !startsWith(github.ref, 'refs/tags/mpi-remote-') }}
     strategy:
       fail-fast: false
       matrix:
@@ -53,3 +55,44 @@ jobs:
             macOS: *-arm64-mac.zip (Apple Silicon) или *-x64-mac.zip (Intel) — распаковать, перенести в Программы.
             Сборка не подписана: при первом запуске правый клик → Открыть, либо в Терминале xattr -cr "/Applications/MPI.app".
             Claude Code редактор предложит установить сам (кнопка «Установить Claude Code»). /RC работает на Windows (нужен Git for Windows) и macOS (ничего ставить не нужно).
+
+  # MPI Remote — the Android app (src/mobile + Capacitor). Signed with the release key from secrets
+  # ANDROID_KEYSTORE_B64 / ANDROID_KEYSTORE_PASSWORD (without them — the debug key, so updates need a reinstall).
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npx vite build -c vite.mobile.config.ts
+      - run: npx cap sync android
+      - name: Build APK
+        working-directory: android
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          MPI_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          VERSION=$(node -p "require('../package.json').version")
+          export MPI_VERSION_NAME=$VERSION
+          export MPI_VERSION_CODE=$(node -p "'$VERSION'.split('.').reduce((a, x) => a * 100 + Number(x), 0)")
+          if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/mpi.jks"; export MPI_KEYSTORE="$RUNNER_TEMP/mpi.jks"; fi
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mkdir -p ../release && cp app/build/outputs/apk/release/app-release.apk "../release/MPI-Remote-$VERSION.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mpi-remote-android
+          path: release/*.apk
+          retention-days: 30
+      - name: Attach to GitHub release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.apk

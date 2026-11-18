@@ -417,3 +417,34 @@ export async function authorizedFetch(url: string, retry = true): Promise<Respon
   }
   return res;
 }
+
+/** The signed-in storage server (for the phone link) — null when not signed in. */
+export function signedServer(): string | null {
+  ensureAuth();
+  return auth ? base(auth.server) : null;
+}
+
+/** JSON request to the signed-in server with the bearer token (refreshed / retried once on 401). */
+export async function authorizedJson(route: string, init: { method?: string; body?: unknown } = {}, retry = true): Promise<any> {
+  ensureAuth();
+  if (!auth) throw new Error('Не выполнен вход в Insider (☁ Облако)');
+  if (auth.expiresAt && auth.expiresAt < Date.now() + 60_000) await refresh();
+  const res = await fetch(`${base(auth.server)}${route}`, {
+    method: init.method ?? 'GET',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${auth.access}` },
+    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+  });
+  if (res.status === 401 && retry && auth.refresh) {
+    await refresh();
+    return authorizedJson(route, init, false);
+  }
+  const text = await res.text();
+  let data: any = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    /* not json */
+  }
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data;
+}

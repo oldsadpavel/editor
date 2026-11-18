@@ -1072,3 +1072,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .tk-model { font-size: 11px; padding: 0 6px; border-radius: 8px; background: rgba(78, 143, 214, 0.25); white-space: nowrap; }
 .tk-model.guess { opacity: 0.6; font-style: italic; }
 .tk-model.launcher { background: var(--line); }
+.remote-toggle { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.remote-toggle input { margin: 0; }
+.remote-toggle.online { color: #6fbf73; }
+.remote-toggle.phone { color: #6fbf73; background: rgba(98, 151, 85, 0.25); }
+.remote-toggle.connecting { color: #c9b440; }
+.remote-toggle.error { color: #e06c75; }

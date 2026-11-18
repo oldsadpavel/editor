@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AgentId, AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer, SendOptions } from '../shared/types';
-import { setSink } from './bus';
+import { emit, setSink } from './bus';
+import * as remoteLink from './remote-link';
+import { handlers } from './rpc';
 import * as cache from './cache';
 import * as claude from './claude';
 import * as agents from './agents';
@@ -92,7 +94,7 @@ function watchFile(p: string) {
     let t: NodeJS.Timeout | null = null;
     const w = fs.watch(p, () => {
       if (t) clearTimeout(t);
-      t = setTimeout(() => win?.webContents.send('event', { type: 'fileChanged', path: p } satisfies MainEvent), 150);
+      t = setTimeout(() => emit({ type: 'fileChanged', path: p }), 150);
     });
     w.on('error', () => fileWatchers.delete(key));
     fileWatchers.set(key, w);
@@ -109,6 +111,7 @@ function unwatchFile(p: string) {
 // --- IPC ----------------------------------------------------------------------------------
 
 function handle(channel: string, fn: (...args: any[]) => any) {
+  handlers.set(channel, fn);
   ipcMain.handle(channel, async (_e, ...args) => {
     try {
       return { ok: true, value: await fn(...args) };
@@ -119,6 +122,9 @@ function handle(channel: string, fn: (...args: any[]) => any) {
 }
 
 handle('state:get', () => stateFile.data);
+// 📱 the phone link — the switch itself only from this window (never in remote-link's allowlist)
+handle('remote:status', () => remoteLink.status());
+handle('remote:set', (on: boolean) => remoteLink.setEnabled(!!on));
 handle('state:set', (patch: Partial<AppState>) => {
   const before = stateFile.data.projects.map((p) => p.path);
   Object.assign(stateFile.data, patch);
@@ -384,6 +390,7 @@ app.whenReady().then(() => {
   ping.startPing();
   usage.startUsage();
   cloud.startAutoSync();
+  remoteLink.init();
   serverTests.startServerTests();
   updates.startUpdateWatch();
   setTimeout(() => void keys.scanKeys(), 3000);
