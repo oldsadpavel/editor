@@ -251,7 +251,16 @@ export const wsBridge = {
     if (LOCAL[channel]) return (await LOCAL[channel](...args)) as T;
     if (channel === 'state:get') {
       const s = await rpc('state:get', []);
-      return { ...s, ...localLayout(), openChats: (localLayout().openChats as string[]) ?? [], chatPanes: [] } as T;
+      const local = localLayout();
+      // the phone's tabs follow the PC's: chats opened there since the last look are added, closed there — removed;
+      // what was opened / closed on the phone stays as is. The very first time — exactly the PC's tabs.
+      const pc: string[] = s.openChats ?? [];
+      const seen = (local.pcOpenChats as string[] | undefined) ?? [];
+      let open = (local.openChats as string[] | undefined) ?? pc;
+      open = [...open.filter((id) => pc.includes(id) || !seen.includes(id)), ...pc.filter((id) => !seen.includes(id) && !open.includes(id))];
+      const patch = { openChats: open, pcOpenChats: pc, activeChat: (local.activeChat as string | undefined) && open.includes(local.activeChat as string) ? local.activeChat : (s.activeChat && open.includes(s.activeChat) ? s.activeChat : open[0]) };
+      localStorage.setItem(LOCAL_STATE, JSON.stringify({ ...local, ...patch }));
+      return { ...s, ...local, ...patch, chatPanes: [] } as T;
     }
     // the tree asks git status of every project every 10 s: over the phone link once a minute per repo is plenty
     if (channel === 'git' && args[0] === 'status') {
