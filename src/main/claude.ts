@@ -171,7 +171,9 @@ class ChatSession {
   remoteProc: remote.RemoteProc | null = null;
   /** Questions typed into the /RC process that the transcript doesn't show yet (Claude writes a queued one only
    * when it takes it). They stay on screen — grey while queued — across transcript reloads. */
-  remoteQueue: { text: string; at: number; id: string; attachments: TurnAttachment[] }[] = [];
+  remoteQueue: { text: string; at: number; id: string; attachments: TurnAttachment[]; warned?: boolean }[] = [];
+  /** /RC being switched off: the transcript is re-read (the next SDK question waits for it). */
+  remoteOff: Promise<void> | undefined;
   transcriptTick: NodeJS.Timeout | null = null;
   transcriptPoll: NodeJS.Timeout | null = null;
   /** Transcript watcher while queued questions wait to be taken by Claude. */
@@ -1052,7 +1054,7 @@ export function setRemote(sessionId: string, on: boolean) {
     s.remoteProc = null;
     const file = findTranscript(s.id);
     if (file)
-      void loadTranscript(file).then(({ builder }) => {
+      s.remoteOff = loadTranscript(file).then(({ builder }) => {
         // Whatever was pending remotely is over: the next question starts its own turn in the SDK process.
         builder.markInterrupted();
         s.builder = builder;
@@ -1061,6 +1063,7 @@ export function setRemote(sessionId: string, on: boolean) {
         s.publish(true);
       });
   }
+  s.remoteOff?.finally(() => (s.remoteOff = undefined)).catch(() => {});
   rememberChatModel(s);
   s.publish(true);
 }
@@ -1413,6 +1416,47 @@ export async function restart(sessionId: string) {
  * At most twice per answer.
  */
 const STALL_MS = Number(process.env.CLAUDE_EDITOR_STALL_MS) || 120_000;
+
+/**
+ * /RC watch: a question typed into the hidden Claude that never shows up in the history — the TUI still loading a big
+ * history, stuck in a dialog, or the input lost. After 20 s it says so; after RC_LOST_MS with the history not growing at
+ * all, /RC is switched off and the questions go through the normal process instead of hanging silently.
+ */
+const RC_LOST_MS = Number(process.env.CLAUDE_EDITOR_RC_LOST_MS) || 120_000;
+setInterval(() => {
+  const now = Date.now();
+  for (const s of sessions.values()) {
+    if (!s.remote || !s.remoteProc || !s.remoteQueue.length) continue;
+    const q = s.remoteQueue[0];
+    const file = findTranscript(s.id);
+    let mtime = 0;
+    try {
+      mtime = file ? fs.statSync(file).mtimeMs : 0;
+    } catch {
+      /* none yet */
+    }
+    // Claude writes or its spinner turns: working (maybe still on an earlier question, a long command)
+    if (mtime > q.at + 1000 || remote.busy(s.remoteProc)) continue;
+    const age = now - q.at;
+    if (age > 20_000 && !q.warned) {
+      q.warned = true;
+      emit({ type: 'toast', text: s.remoteProc.connected ? `«${s.title}»: скрытый Claude (/RC) пока не взял вопрос` : `«${s.title}»: скрытый Claude (/RC) ещё загружает историю — вопрос уйдёт, как только он будет готов` });
+    }
+    if (age < RC_LOST_MS || (!s.remoteProc.connected && s.remoteProc.exited === undefined && now - s.remoteProc.startedAt < 5 * 60_000)) continue;
+    void rcFallback(s);
+  }
+}, 5000);
+
+async function rcFallback(s: ChatSession) {
+  const texts = s.remoteQueue.map((q) => q.text);
+  const screen = s.remoteProc?.tail.slice(-400).replace(/\s+/g, ' ').trim();
+  console.warn('[rc] questions not taken, switching /RC off:', s.title, screen);
+  s.remoteQueue = [];
+  emit({ type: 'toast', text: `«${s.title}»: /RC не принял вопрос за ${Math.round(RC_LOST_MS / 60_000)} мин — выключаю /RC и отправляю обычным способом`, kind: 'error' });
+  setRemote(s.id, false);
+  await s.remoteOff?.catch(() => {});
+  await send(s.id, texts.join('\n\n'), { model: s.model, effort: s.effort, permissionMode: s.permissionMode }).catch((e) => emit({ type: 'toast', text: String(e?.message ?? e) }));
+}
 setInterval(() => {
   const now = Date.now();
   for (const s of sessions.values()) {

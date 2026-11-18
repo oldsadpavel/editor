@@ -15,6 +15,10 @@ export interface RemoteProc {
   tail: string;
   connected: boolean;
   exited?: number | null;
+  /** When the connection was confirmed: typing before that is lost (a big history takes minutes to load). */
+  connectedAt?: number;
+  /** Last TUI output: a working Claude repaints its spinner all the time. */
+  outputAt?: number;
 }
 
 const TAIL_MAX = 8000;
@@ -100,8 +104,9 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
   const onData = (d: Buffer) => {
     const chunk = stripAnsi(d.toString());
     proc.tail = (proc.tail + chunk).slice(-TAIL_MAX);
+    proc.outputAt = Date.now();
     if (/Compacting conversation/i.test(chunk)) opts.onCompacting?.();
-    if (!proc.connected && /remote-control is active|claude\.ai\/code\/session_/.test(proc.tail)) proc.connected = true;
+    if (!proc.connected && /remote-control is active|claude\.ai\/code\/session_/.test(proc.tail)) markConnected(proc);
     // bypassPermissions asks for a one-time confirmation in the TUI ("No, exit / Yes, I accept"): choose Yes.
     if (!bypassAnswered && /Bypass Permissions mode[\s\S]*Yes, I accept/.test(proc.tail)) {
       bypassAnswered = true;
@@ -112,14 +117,27 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
   child.stdout?.on('data', onData);
   child.stderr?.on('data', onData);
   child.on('exit', (code) => (proc.exited = code));
-  // The transcript's bridge-session record is the authoritative "connected" signal.
+  // The transcript's bridge-session record is the authoritative "connected" signal. Only what is appended after the
+  // start is read: the history can be hundreds of MB.
   if (opts.transcript) {
     const file = opts.transcript;
+    let from = 0;
+    try {
+      from = fs.statSync(file).size;
+    } catch {
+      /* not yet */
+    }
     const t0 = Date.now();
     const timer = setInterval(() => {
-      if (proc.connected || proc.exited !== undefined || Date.now() - t0 > BRIDGE_TIMEOUT_MS) return clearInterval(timer);
+      if (proc.connected || proc.exited !== undefined || Date.now() - t0 > READY_MAX_MS) return clearInterval(timer);
       try {
-        if (fs.readFileSync(file, 'utf8').includes('"bridge-session"')) proc.connected = true;
+        const size = fs.statSync(file).size;
+        if (size <= from) return;
+        const fd = fs.openSync(file, 'r');
+        const buf = Buffer.alloc(Math.min(size - from, 4 << 20));
+        fs.readSync(fd, buf, 0, buf.length, size - buf.length);
+        fs.closeSync(fd);
+        if (buf.toString('utf8').includes('"bridge-session"')) markConnected(proc);
       } catch {
         /* not yet */
       }
@@ -134,12 +152,20 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
  * gets glued to it («пробуйпробуй»). Prompts are sent one after another, each Enter well after its paste.
  */
 let typing: Promise<void> = Promise.resolve();
+const READY_MAX_MS = 5 * 60_000;
+function markConnected(proc: RemoteProc) {
+  proc.connected = true;
+  proc.connectedAt = Date.now();
+}
 export function send(proc: RemoteProc, text: string) {
   const stdin = proc.child.stdin;
   if (!stdin || proc.exited !== undefined) throw new Error('Удалённый процесс Claude не запущен');
   const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
   typing = typing.then(async () => {
+    // the hidden Claude still loading (a big history: minutes): what is typed now is lost — wait until it is up
+    while (!proc.connected && proc.exited === undefined && Date.now() - proc.startedAt < READY_MAX_MS) await wait(500);
     if (proc.exited !== undefined) return;
+    if (proc.connectedAt && Date.now() - proc.connectedAt < 1500) await wait(1500);
     // the TUI turns tabs into spaces anyway
     stdin.write(`\x1b[200~${text.replace(/\t/g, '    ')}\x1b[201~`);
     await wait(600);
@@ -170,6 +196,11 @@ export function stop(proc: RemoteProc) {
       }
     }
   }, 700);
+}
+
+/** The TUI shows a running answer (spinner with «esc to interrupt») right now. */
+export function busy(proc: RemoteProc) {
+  return !!proc.outputAt && Date.now() - proc.outputAt < 10_000 && /esc to interrupt/i.test(proc.tail.slice(-3000));
 }
 
 export function status(proc: RemoteProc | null | undefined): { state: 'off' | 'connecting' | 'connected' | 'exited'; detail?: string } {
