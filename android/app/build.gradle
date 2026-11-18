@@ -8,8 +8,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // CI passes the editor's version (v0.2.13 → 213)
-        versionCode (System.getenv("MPI_VERSION_CODE") ?: "1") as int
-        versionName System.getenv("MPI_VERSION_NAME") ?: "dev"
+        versionCode = Integer.parseInt(System.getenv("MPI_VERSION_CODE") ?: "1")
+        versionName = System.getenv("MPI_VERSION_NAME") ?: "dev"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
