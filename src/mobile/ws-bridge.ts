@@ -57,7 +57,15 @@ let pcTimer: number | undefined;
 
 /** Layout keys of AppState kept on the phone (the PC's tabs stay as they are). */
 const LOCAL_STATE = 'mpi.layout';
-const localLayout = (): Record<string, unknown> => JSON.parse(localStorage.getItem(LOCAL_STATE) || '{}');
+/**
+ * Only the phone's own view is kept here (tabs, active chat / file, expanded answers, drafts). Projects, groups,
+ * favorites and settings always come from the PC — a stale copy of them hid chats and groups.
+ */
+const LOCAL_KEYS = new Set(['openChats', 'pcOpenChats', 'activeChat', 'openFiles', 'activeFile', 'chatExpanded', 'drafts', 'chatProject']);
+const localLayout = (): Record<string, unknown> => {
+  const all = JSON.parse(localStorage.getItem(LOCAL_STATE) || '{}');
+  return Object.fromEntries(Object.entries(all).filter(([k]) => LOCAL_KEYS.has(k)));
+};
 
 /** One reconnect at a time, growing pause (3 s … 60 s) — no storm of sign-ins when the server says 429. */
 let retryTimer: number | undefined;
@@ -170,7 +178,10 @@ function onPc(m: PcMsg) {
       w.reject(new Error(m.error || 'Ошибка'));
     }
   } else if (m.k === 'ev') {
-    for (const e of m.list as MainEvent[]) for (const l of listeners) l(e);
+    for (const e of m.list as MainEvent[]) {
+      const ev = e.type === 'chat' ? { type: 'chat' as const, snapshot: shift(e.snapshot) } : e;
+      for (const l of listeners) l(ev);
+    }
   }
 }
 
@@ -191,6 +202,7 @@ function rpc(ch: string, args: unknown[]): Promise<any> {
       waiting.delete(id);
       reject(new Error('Компьютер не ответил за 2 минуты'));
     }, 120_000);
+    const ackWait = 20_000;
     waiting.set(id, { resolve, reject, timer });
     // the PC acknowledges every call at once: no ack in 10 s — it is gone (closed, switched off, asleep)
     window.setTimeout(() => {
@@ -201,7 +213,7 @@ function rpc(ch: string, args: unknown[]): Promise<any> {
       setLink({ state: 'error', pc: undefined, error: 'Компьютер не отвечает: редактор закрыт или на нём снята галочка «📱 Телефон»' });
       void hello();
       reject(new Error('Компьютер не отвечает'));
-    }, 10_000);
+    }, ackWait);
     sendMsg({ k: 'rpc', from: PHONE_ID, id, ch, args: packArgs(args) }).catch((e) => {
       log('error', `Отправка ${ch}: ${e.message}`);
       waiting.delete(id);
@@ -221,7 +233,10 @@ function subscribe(id: string, on: boolean) {
 /** Channels answered on the phone: layout, desktop-only features, things the PC doesn't give to a phone. */
 const LOCAL: Record<string, (...a: any[]) => unknown> = {
   'state:set': (patch: Record<string, unknown>) => {
-    localStorage.setItem(LOCAL_STATE, JSON.stringify({ ...localLayout(), ...patch }));
+    // a group switched on the phone lasts while the app is open; after a restart the PC's active group is shown
+    if ('activeGroup' in patch) return;
+    const keep = Object.fromEntries(Object.entries(patch).filter(([k]) => LOCAL_KEYS.has(k)));
+    localStorage.setItem(LOCAL_STATE, JSON.stringify({ ...localLayout(), ...keep }));
   },
   'chat:close': (id: string) => subscribe(id, false),
   'fs:watch': () => undefined,
@@ -245,6 +260,24 @@ const LOCAL: Record<string, (...a: any[]) => unknown> = {
 };
 
 const gitCache = new Map<string, { at: number; value: unknown }>();
+
+/**
+ * The PC sends only the last turns of a chat (phoneOffset = index of the first one): the store here holds them from 0,
+ * so live updates (turnsFrom — absolute) are shifted by the chat's offset.
+ */
+const offsets = new Map<string, number>();
+function shift(s: any) {
+  if (!s || typeof s !== 'object' || !Array.isArray(s.turns)) return s;
+  if (typeof s.phoneOffset === 'number') {
+    offsets.set(s.sessionId, s.phoneOffset);
+    const { phoneOffset: _o, ...rest } = s;
+    return { ...rest, olderOnPc: s.phoneOffset };
+  }
+  const off = offsets.get(s.sessionId) ?? 0;
+  if (s.turnsFrom === undefined || !off) return s;
+  const from = s.turnsFrom - off;
+  return from >= 0 ? { ...s, turnsFrom: from } : { ...s, turns: s.turns.slice(-from), turnsFrom: 0 };
+}
 
 export const wsBridge = {
   async invoke<T = any>(channel: string, ...args: unknown[]): Promise<T> {
@@ -272,7 +305,7 @@ export const wsBridge = {
       return value as T;
     }
     if (channel === 'git') gitCache.clear(); // a commit / checkout / pull: fresh status next time
-    const v = await rpc(channel, args);
+    const v = shift(await rpc(channel, args));
     if (channel === 'chat:open') subscribe(String(args[0]), true);
     if (channel === 'chat:new' && v && typeof v === 'object' && 'sessionId' in v) subscribe(String((v as any).sessionId), true);
     return v as T;

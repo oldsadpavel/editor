@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
-import type { MainEvent, RemoteLinkStatus } from '../shared/types';
+import type { ChatSnapshot, MainEvent, RemoteLinkStatus } from '../shared/types';
 import { decoder, encode, unpackArgs, type Codec, type PcMsg, type PhoneMsg } from '../shared/remote-wire';
 import { emit, listen } from './bus';
 import * as cloud from './cloud';
@@ -243,7 +243,7 @@ async function onPhone(m: PhoneMsg) {
   } else if (m.k === 'sub') {
     p.subs = new Set((m.ids ?? []).filter((x) => typeof x === 'string').slice(0, 20));
   } else if (m.k === 'rpc') {
-    void send({ k: 'ack', to: m.from, id: m.id }).catch(() => {});
+    void sendNow({ k: 'ack', to: m.from, id: m.id }).catch(() => {});
     let res: PcMsg;
     try {
       res = { k: 'res', to: m.from, id: m.id, ok: true, value: await call(m.from, m.ch, Array.isArray(m.args) ? unpackArgs(m.args) : []) };
@@ -284,7 +284,19 @@ async function call(from: string, ch: string, args: unknown[]) {
   if (!READ_ONLY.test(ch) && !(ch === 'git' && READ_GIT.has(String(args[0])))) audit(from, ch, args);
   const value = await fn(...args);
   if (ch === 'state:get') return safeState(value);
+  if (isSnapshot(value)) return trimSnapshot(value);
   return value;
+}
+
+/**
+ * A whole chat can be megabytes (hundreds of answers): the phone gets the last PHONE_TURNS and `phoneOffset` — the
+ * index of its first turn; the phone shifts the live updates (turnsFrom) by it.
+ */
+const PHONE_TURNS = 30;
+const isSnapshot = (v: any): v is ChatSnapshot => !!v && typeof v === 'object' && typeof v.sessionId === 'string' && Array.isArray(v.turns);
+function trimSnapshot(s: ChatSnapshot): ChatSnapshot & { phoneOffset: number } {
+  const offset = Math.max(0, s.turns.length - PHONE_TURNS);
+  return { ...s, turns: s.turns.slice(offset), phoneOffset: offset };
 }
 
 /** The state without the cloud sign-in details. */
@@ -300,6 +312,12 @@ function audit(from: string, ch: string, args: unknown[]) {
 }
 
 // --- sending: one request at a time (keeps order); events batched and chat snapshots coalesced ----------------------
+
+/** Small control messages (acks) go at once, not behind big answers queued in send(). */
+async function sendNow(msg: PcMsg) {
+  if (!ws || state !== 'online') return;
+  for (const d of await encode(msg, codec)) await cloud.authorizedJson('/api/editor/remote/send', { method: 'POST', body: { d, socket_id: socketId } });
+}
 
 let chain: Promise<void> = Promise.resolve();
 function send(msg: PcMsg): Promise<void> {
@@ -320,7 +338,7 @@ listen((e) => {
   if (state !== 'online' || !phones.size || !FORWARD.has(e.type)) return;
   if (e.type === 'chat') {
     if (![...phones.values()].some((p) => p.subs.has(e.snapshot.sessionId))) return;
-    pendingChats.set(e.snapshot.sessionId, e);
+    pendingChats.set(e.snapshot.sessionId, e.snapshot.turnsFrom === undefined ? { type: 'chat', snapshot: trimSnapshot(e.snapshot) } : e);
   } else pendingOther.push(e);
   if (!flushTimer) flushTimer = setTimeout(flush, 300);
 });
