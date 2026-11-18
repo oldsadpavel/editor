@@ -24,3 +24,6 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 /* bigger touch targets */
 .m-app .tree-row, .m-app .tab { min-height: 34px; }
 .m-app textarea { font-size: 16px; }
+/* the editor's buttons are 26 px high: on the phone they grow with their text */
+.m-app .btn, .m-login .btn { height: auto; min-height: 32px; line-height: 1.3; }
+.m-login .btn { white-space: normal; min-height: 48px; max-width: 320px; width: 100%; }
