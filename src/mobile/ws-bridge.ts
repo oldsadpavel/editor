@@ -244,6 +244,8 @@ const LOCAL: Record<string, (...a: any[]) => unknown> = {
   'shell:open': (url: string) => window.open(url, '_blank'),
 };
 
+const gitCache = new Map<string, { at: number; value: unknown }>();
+
 export const wsBridge = {
   async invoke<T = any>(channel: string, ...args: unknown[]): Promise<T> {
     if (LOCAL[channel]) return (await LOCAL[channel](...args)) as T;
@@ -251,6 +253,16 @@ export const wsBridge = {
       const s = await rpc('state:get', []);
       return { ...s, ...localLayout(), openChats: (localLayout().openChats as string[]) ?? [], chatPanes: [] } as T;
     }
+    // the tree asks git status of every project every 10 s: over the phone link once a minute per repo is plenty
+    if (channel === 'git' && args[0] === 'status') {
+      const key = String(args[1]);
+      const hit = gitCache.get(key);
+      if (hit && Date.now() - hit.at < 60_000) return hit.value as T;
+      const value = await rpc(channel, args);
+      gitCache.set(key, { at: Date.now(), value });
+      return value as T;
+    }
+    if (channel === 'git') gitCache.clear(); // a commit / checkout / pull: fresh status next time
     const v = await rpc(channel, args);
     if (channel === 'chat:open') subscribe(String(args[0]), true);
     if (channel === 'chat:new' && v && typeof v === 'object' && 'sessionId' in v) subscribe(String((v as any).sessionId), true);
