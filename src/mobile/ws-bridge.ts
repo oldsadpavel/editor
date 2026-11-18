@@ -1,6 +1,7 @@
 import type { MainEvent } from '../shared/types';
 import { decoder, encode, packArgs, type Codec, type PcMsg, type PhoneMsg } from '../shared/remote-wire';
 import { api, setWho } from './auth';
+import { log } from './log';
 
 /**
  * window.bridge of the phone app: the editor's renderer (store, chats, tree, editor) runs unchanged, its calls go to
@@ -35,6 +36,7 @@ export type LinkState = { state: 'connecting' | 'online' | 'error'; pc?: { name:
 const stateListeners = new Set<(s: LinkState) => void>();
 let link: LinkState = { state: 'connecting' };
 function setLink(patch: Partial<LinkState>) {
+  if (patch.state === 'error' && patch.error && patch.error !== link.error) log('warn', 'Связь: ' + patch.error);
   link = { ...link, ...patch };
   for (const l of stateListeners) l(link);
 }
@@ -57,17 +59,29 @@ let pcTimer: number | undefined;
 const LOCAL_STATE = 'mpi.layout';
 const localLayout = (): Record<string, unknown> => JSON.parse(localStorage.getItem(LOCAL_STATE) || '{}');
 
+/** One reconnect at a time, growing pause (3 s … 60 s) — no storm of sign-ins when the server says 429. */
+let retryTimer: number | undefined;
+let backoff = 3000;
+function retry(ms?: number) {
+  clearTimeout(retryTimer);
+  retryTimer = window.setTimeout(connect, ms ?? backoff);
+  backoff = Math.min(backoff * 2, 60_000);
+}
+
 export function start() {
   connect();
   setInterval(() => void sendMsg({ k: 'hello', from: PHONE_ID, name: PHONE_NAME }).catch(() => {}), 60_000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && (!ws || ws.readyState !== WebSocket.OPEN)) connect();
+    if (document.visibilityState === 'visible' && (!ws || ws.readyState !== WebSocket.OPEN)) retry(0);
   });
 }
 
 async function connect() {
+  clearTimeout(retryTimer);
+  const old = ws;
+  ws = null;
   try {
-    ws?.close();
+    old?.close();
   } catch {
     /* closed */
   }
@@ -78,7 +92,8 @@ async function connect() {
     setWho(me.email, me.name);
   } catch (e: any) {
     setLink({ state: 'error', error: e.message });
-    setTimeout(connect, 10_000);
+    log('error', 'Insider /me: ' + e.message);
+    retry();
     return;
   }
   const sock = new WebSocket(`${WS_URL}?protocol=7&client=mpi-remote&version=1.0`);
@@ -94,8 +109,15 @@ async function connect() {
         sock.send(JSON.stringify({ event: 'pusher:subscribe', data: { auth: a.auth, channel } }));
       } catch (err: any) {
         setLink({ state: 'error', error: err.message });
+        log('error', 'Подпись канала: ' + err.message);
+        ws = null;
+        sock.close();
+        retry();
       }
+    } else if (e.event === 'pusher:error') {
+      log('error', 'socket.mrkt.ru: ' + JSON.stringify(e.data));
     } else if (e.event === 'pusher_internal:subscription_succeeded') {
+      backoff = 3000;
       ping = window.setInterval(() => sock.readyState === WebSocket.OPEN && sock.send(JSON.stringify({ event: 'pusher:ping', data: {} })), 25_000);
       void hello();
     } else if (e.event === 'pusher:ping') {
@@ -103,7 +125,7 @@ async function connect() {
     } else if (e.event === 'f' && e.channel === channel) {
       const d = (typeof e.data === 'string' ? JSON.parse(e.data) : e.data)?.d;
       if (typeof d !== 'string') return;
-      const msg = (await decode(d).catch(() => undefined)) as PcMsg | PhoneMsg | undefined;
+      const msg = (await decode(d).catch((err) => void log('error', 'Кадр не разобран: ' + err?.message, { head: d.slice(0, 80) }))) as PcMsg | PhoneMsg | undefined;
       if (msg) onPc(msg as PcMsg);
     }
   };
@@ -111,7 +133,7 @@ async function connect() {
     clearInterval(ping);
     if (ws !== sock) return;
     setLink({ state: 'error', error: 'Нет связи с сервером — переподключаюсь' });
-    setTimeout(connect, 3000);
+    retry();
   };
 }
 
@@ -143,7 +165,10 @@ function onPc(m: PcMsg) {
     waiting.delete(m.id);
     clearTimeout(w.timer);
     if (m.ok) w.resolve(m.value);
-    else w.reject(new Error(m.error || 'Ошибка'));
+    else {
+      log('warn', 'Компьютер вернул ошибку: ' + (m.error || '?'), { id: m.id });
+      w.reject(new Error(m.error || 'Ошибка'));
+    }
   } else if (m.k === 'ev') {
     for (const e of m.list as MainEvent[]) for (const l of listeners) l(e);
   }
@@ -178,6 +203,7 @@ function rpc(ch: string, args: unknown[]): Promise<any> {
       reject(new Error('Компьютер не отвечает'));
     }, 10_000);
     sendMsg({ k: 'rpc', from: PHONE_ID, id, ch, args: packArgs(args) }).catch((e) => {
+      log('error', `Отправка ${ch}: ${e.message}`);
       waiting.delete(id);
       clearTimeout(timer);
       reject(e);

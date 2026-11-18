@@ -43,6 +43,7 @@ export const EDITOR_INSTRUCTIONS = `
 - **Открыть файл** у пользователя в редакторе — \`mcp__editor__open_file\`.
 - **Тесты на сервере после деплоя** — если деплой проекта сам прогоняет тесты, привяжи их отчёт: \`mcp__editor__set_tests_report\`
   (URL с JSON {commit, status, tests, failures, errors, skipped, failed:[{name, message}]}). Редактор опрашивает его после каждого деплоя.
+- **Журнал телефона** (MPI Remote: ошибки приложения на Android и связи редактора с телефоном) — \`mcp__editor__remote_logs\`.
 - **Другие чаты редактора** (отладка: почему чат завис, что он делал, ждёт ли ответа) — \`mcp__editor__list_chats\`
   (открытые чаты: статус, режим /RC, ожидающий вопрос, последняя активность) и \`mcp__editor__read_chat\`
   (последние вопросы и ответы чата по id или части названия, с вызовами инструментов). Только чтение.
@@ -272,6 +273,23 @@ export function editorMcp(sessionId: string, cwd: string) {
             await new Promise((r) => setTimeout(r, 10_000));
           }
           return ok(JSON.stringify({ connected: false, timeoutSec: a.timeoutSec, ...last }, null, 1));
+        },
+      ),
+      tool(
+        'remote_logs',
+        'Журнал ошибок приложения MPI Remote (Android) и связи редактора с телефоном — хранится в Insider (30 дней). Новые сверху. Для отладки телефона: что упало, на каком устройстве и версии, стек.',
+        {
+          source: z.enum(['phone', 'pc', 'all']).default('all').describe('phone — приложение, pc — сторона редактора'),
+          level: z.enum(['error', 'warn', 'info', 'all']).default('all'),
+          limit: z.number().int().min(1).max(500).default(50),
+        },
+        async (a) => {
+          const cloud = await import('./cloud');
+          const q = new URLSearchParams({ limit: String(a.limit) });
+          if (a.source !== 'all') q.set('source', a.source);
+          if (a.level !== 'all') q.set('level', a.level);
+          const r = await cloud.authorizedJson('/api/editor/remote/logs?' + q.toString());
+          return ok(JSON.stringify(r?.logs ?? [], null, 1));
         },
       ),
       tool(

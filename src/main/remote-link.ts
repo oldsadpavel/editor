@@ -137,7 +137,29 @@ function disconnect(to: RemoteLinkStatus['state'], err?: string) {
   error = err;
 }
 
+// --- errors of the link go to Insider too (editor_remote_logs, source pc), batched; read with the MCP tool remote_logs
+let logQueue: { level: string; message: string; context?: unknown; at: number }[] = [];
+const logSeen = new Map<string, number>();
+export function pcLog(level: 'error' | 'warn' | 'info', message: string, context?: unknown) {
+  const key = level + message;
+  if (Date.now() - (logSeen.get(key) ?? 0) < 60_000) return;
+  logSeen.set(key, Date.now());
+  logQueue.push({ level, message: message.slice(0, 4000), context, at: Date.now() });
+  logQueue = logQueue.slice(-200);
+}
+setInterval(async () => {
+  if (!logQueue.length || !cloud.signedServer()) return;
+  const batch = logQueue.slice(0, 50);
+  try {
+    await cloud.authorizedJson('/api/editor/remote/log', { method: 'POST', body: { source: 'pc', device: os.hostname(), app_version: app.getVersion(), entries: batch } });
+    logQueue = logQueue.slice(batch.length);
+  } catch {
+    /* next time */
+  }
+}, 10_000).unref();
+
 function scheduleRetry(err: string) {
+  pcLog('error', 'Связь с телефоном: ' + err);
   disconnect('error', err);
   publish();
   if (!stateFile.data.remoteAccess) return;
@@ -227,8 +249,9 @@ async function onPhone(m: PhoneMsg) {
       res = { k: 'res', to: m.from, id: m.id, ok: true, value: await call(m.from, m.ch, Array.isArray(m.args) ? unpackArgs(m.args) : []) };
     } catch (e: any) {
       res = { k: 'res', to: m.from, id: m.id, ok: false, error: e?.message ?? String(e) };
+      pcLog('warn', `Вызов с телефона ${m.ch}: ${res.error}`, { stack: e?.stack });
     }
-    await send(res);
+    await send(res).catch((e) => pcLog('error', `Ответ на ${m.ch} не отправлен: ${e?.message ?? e}`));
   }
 }
 
@@ -315,8 +338,8 @@ async function flush() {
   flushing = true;
   try {
     await send({ k: 'ev', list });
-  } catch {
-    /* the phone re-opens the chat after a gap */
+  } catch (e: any) {
+    pcLog('warn', 'Не отправились события на телефон: ' + (e?.message ?? e)); // the phone re-opens the chat after a gap
   } finally {
     flushing = false;
   }

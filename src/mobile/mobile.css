@@ -27,3 +27,6 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 /* the editor's buttons are 26 px high: on the phone they grow with their text */
 .m-app .btn, .m-login .btn { height: auto; min-height: 32px; line-height: 1.3; }
 .m-login .btn { white-space: normal; min-height: 48px; max-width: 320px; width: 100%; }
+.m-upd { background: none; border: 1px solid var(--line); color: inherit; border-radius: 6px; padding: 4px 10px; font-size: 15px; }
+.m-upd.new { background: var(--accent); border-color: var(--accent); color: #fff; }
+.m-upd-note { position: fixed; top: 48px; left: 10px; right: 10px; z-index: 50; padding: 10px; border-radius: 8px; background: #2b2d31; border: 1px solid var(--line); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); }

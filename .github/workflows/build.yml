@@ -80,12 +80,14 @@ jobs:
           MPI_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           VERSION=$(node -p "require('../package.json').version")
-          export MPI_VERSION_NAME=$VERSION
-          export MPI_VERSION_CODE=$(node -p "'$VERSION'.split('.').reduce((a, x) => a * 100 + Number(x), 0)")
+          # every build gets a bigger number (the app compares it to update itself); 1000+ — above the first builds (212)
+          BUILD=$((1000 + GITHUB_RUN_NUMBER))
+          export MPI_VERSION_NAME="$VERSION+b$BUILD"
+          export MPI_VERSION_CODE=$BUILD
           if [ -n "$KS_B64" ]; then echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/mpi.jks"; export MPI_KEYSTORE="$RUNNER_TEMP/mpi.jks"; fi
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
-          mkdir -p ../release && cp app/build/outputs/apk/release/app-release.apk "../release/MPI-Remote-$VERSION.apk"
+          mkdir -p ../release && cp app/build/outputs/apk/release/app-release.apk "../release/MPI-Remote-$VERSION-b$BUILD.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: mpi-remote-android

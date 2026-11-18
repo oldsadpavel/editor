@@ -168,6 +168,8 @@ export function useStore<T>(sel: (s: Store) => T): T {
 
 export function toast(text: string, kind: 'info' | 'error' = 'info') {
   set({ toast: { text, kind, nonce: Date.now() } });
+  // MPI Remote sends the error messages it shows to Insider (src/mobile/log.ts)
+  if (kind === 'error') (window as any).__mpiLog?.(text);
 }
 
 async function guard<T>(p: Promise<T>): Promise<T | undefined> {
