@@ -2,6 +2,7 @@ import type { MainEvent } from '../shared/types';
 import { decoder, encode, packArgs, type Codec, type PcMsg, type PhoneMsg } from '../shared/remote-wire';
 import { api, setWho } from './auth';
 import { log } from './log';
+import { pasteImage, saveBlob } from './media';
 
 /**
  * window.bridge of the phone app: the editor's renderer (store, chats, tree, editor) runs unchanged, its calls go to
@@ -76,11 +77,33 @@ function retry(ms?: number) {
   backoff = Math.min(backoff * 2, 60_000);
 }
 
+/**
+ * The phone misses updates while it sleeps in the background or the link is down (and the PC forgets a silent phone
+ * after 3 min): every (re)connection, return to the app and every 90 s the open chats are fetched anew.
+ */
+let resyncing = false;
+export async function resync() {
+  if (resyncing || link.state !== 'online') return;
+  resyncing = true;
+  try {
+    for (const id of subs) {
+      const snap = shift(await rpc('chat:open', [id]).catch(() => null));
+      if (snap) for (const l of listeners) l({ type: 'chat', snapshot: snap });
+    }
+  } finally {
+    resyncing = false;
+  }
+}
+
 export function start() {
   connect();
+  setInterval(() => document.visibilityState === 'visible' && void resync(), 90_000);
+  (window as any).__mpiPasteImage = () => pasteImage(rpc);
   setInterval(() => void sendMsg({ k: 'hello', from: PHONE_ID, name: PHONE_NAME }).catch(() => {}), 60_000);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && (!ws || ws.readyState !== WebSocket.OPEN)) retry(0);
+    if (document.visibilityState !== 'visible') return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) retry(0);
+    else void hello().then(() => resync());
   });
 }
 
@@ -159,6 +182,7 @@ function onPc(m: PcMsg) {
     clearTimeout(pcTimer);
     const first = !link.pc;
     setLink({ state: 'online', pc: { name: m.name, version: m.version, at: Date.now() }, error: undefined });
+    if (first && started) void resync();
     if (!m.to) void hello(); // the PC (re)connected: tell it who we are
     else if (first && subs.size) void sendMsg({ k: 'sub', from: PHONE_ID, ids: [...subs] }).catch(() => {});
   } else if (m.k === 'off') {
@@ -239,6 +263,8 @@ const LOCAL: Record<string, (...a: any[]) => unknown> = {
     localStorage.setItem(LOCAL_STATE, JSON.stringify({ ...localLayout(), ...keep }));
   },
   'chat:close': (id: string) => subscribe(id, false),
+  // a picked / pasted file: bytes don't travel as JSON — a data URL (photos shrunk) saved on the PC
+  'attach:saveBlob': (bytes: Uint8Array, type: string) => saveBlob(rpc, bytes, type),
   'fs:watch': () => undefined,
   'fs:unwatch': () => undefined,
   'notify:done': () => undefined,
@@ -279,8 +305,10 @@ function shift(s: any) {
   return from >= 0 ? { ...s, turnsFrom: from } : { ...s, turns: s.turns.slice(-from), turnsFrom: 0 };
 }
 
+let started = false;
 export const wsBridge = {
   async invoke<T = any>(channel: string, ...args: unknown[]): Promise<T> {
+    started = true;
     if (LOCAL[channel]) return (await LOCAL[channel](...args)) as T;
     if (channel === 'state:get') {
       const s = await rpc('state:get', []);

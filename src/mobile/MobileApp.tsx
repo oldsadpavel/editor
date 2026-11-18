@@ -5,7 +5,7 @@ import './mobile.css';
 import { finishLogin, logout, signedIn, startLogin, who } from './auth';
 import { log, setAppVersion, startLogging } from './log';
 import { check, currentBuild, install, type Available } from './update';
-import { onLink, start, type LinkState } from './ws-bridge';
+import { onLink, resync, start, type LinkState } from './ws-bridge';
 
 /** MPI Remote: sign-in → connection to the PC → the editor's own chats / tree / editor, one screen at a time. */
 function Root() {
@@ -85,7 +85,7 @@ function Connected({ onLogout }: { onLogout: () => void }) {
     <div className="m-app">
       <div className="m-head">
         <span className={`m-dot ${link.state}`} />
-        <span className="m-pc">{link.pc ? link.pc.name : link.state === 'connecting' ? 'Подключение…' : 'Нет связи'}</span>
+        <span className="m-pc" title="Нажмите — заново загрузить открытые чаты с компьютера" onClick={() => void resync()}>{link.pc ? link.pc.name : link.state === 'connecting' ? 'Подключение…' : 'Нет связи'}</span>
         <span className="grow" />
         <UpdateButton />
         <button className="icon-btn" title={`Выйти${me?.email ? ' (' + me.email + ')' : ''}`} onClick={onLogout}>

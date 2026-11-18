@@ -1174,7 +1174,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
             ? `«${chat.title}» · Claude работает… можно дописать — сообщение уйдёт в очередь`
             : tabOffers.length
             ? `↹ Tab: ${tabOffers[0]}${tabOffers.length > 1 ? `   (ещё ${tabOffers.length - 1} — Tab ещё раз)` : ''}`
-            : `Вопрос в «${chat.title}» (${basename(chat.cwd)})… Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы`
+            : `Вопрос в «${chat.title}» (${basename(chat.cwd)})…${(window as any).__mpiMobile ? "" : " Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы"}`
         }
         onPaste={onPaste}
         onChange={(e) => {
@@ -1229,7 +1229,8 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
               return;
             }
           }
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+          // on the phone Enter is a new line (the on-screen keyboard has no Shift+Enter): sent with the ➤ button
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !(window as any).__mpiMobile) {
             e.preventDefault();
             void submit();
           }
@@ -1300,15 +1301,29 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
         <button className="btn small" title="Прикрепить файл (или Ctrl+V / перетащите файл сюда)" onClick={() => pickFiles(addFiles)}>
           📎
         </button>
+        {(window as any).__mpiPasteImage && (
+          <button
+            className="btn small"
+            title="Вставить картинку из буфера обмена телефона"
+            onClick={() =>
+              void (window as any)
+                .__mpiPasteImage()
+                .then((p: string | null) => p && addFiles([p]))
+                .catch((e: Error) => toast(e.message, 'error'))
+            }
+          >
+            📋 Картинка
+          </button>
+        )}
         <button
-          className="btn small"
+          className="btn small paste-text"
           title={`Вставить большой текст файлом: текст из буфера обмена сохраняется во временный файл, в вопрос попадает только ссылка — история чата не раздувается.\nДлинный текст (> ${BIG_TEXT} символов), вставленный Ctrl+V, уходит в файл сам; Ctrl+Shift+V — вставить как есть.`}
           onClick={() => void pasteTextAsFile()}
         >
           📄 текст
         </button>
         {activeFile && (
-          <button className="btn small" title={`Вставить путь открытого файла: ${basename(activeFile)}\n${activeFile}`} onClick={() => setText((v) => v + (v ? ' ' : '') + activeFile + ' ')}>
+          <button className="btn small insert-path" title={`Вставить путь открытого файла: ${basename(activeFile)}\n${activeFile}`} onClick={() => setText((v) => v + (v ? ' ' : '') + activeFile + ' ')}>
             @F
           </button>
         )}
