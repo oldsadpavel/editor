@@ -41,3 +41,13 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 /* chat tabs scroll sideways instead of squeezing */
 .m-app .chat-tabs { overflow-x: auto; scrollbar-width: none; }
 .m-app .chat-toolbar .search { min-width: 0; flex: 1; }
+/* the composer bar on the phone: ⚙ unfolds model / quality / mode / switches; attach, picture, stop and send stay */
+.m-app .composer-bar:not(.opts) > select,
+.m-app .composer-bar:not(.opts) > label,
+.m-app .composer-bar:not(.opts) > .model-picker { display: none; }
+.m-app .composer-bar { flex-wrap: wrap; row-gap: 6px; }
+.m-app .composer-bar.opts > select, .m-app .composer-bar.opts > label { order: 10; }
+.m-app .m-opts.on { background: var(--accent); color: #fff; }
+.m-app .composer-bar .btn.small { min-height: 38px; min-width: 42px; font-size: 16px; }
+/* «Пишете в: …» — the tab already says it */
+.m-app .composer-target { display: none; }

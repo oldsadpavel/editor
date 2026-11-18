@@ -864,6 +864,8 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
   const [dragOver, setDragOver] = useState(false);
   const defaultMode = useStore((s) => s.app!.defaultPermissionMode ?? '');
   const [mode, setMode] = useState(chat.permissionMode ?? defaultMode);
+  /** Phone: model / quality / mode / switches are folded under ⚙. */
+  const [optsOpen, setOptsOpen] = useState(false);
   const [model, setModel] = useState(chat.model ?? '');
   const [effort, setEffort] = useState(chat.effort ?? '');
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -1245,7 +1247,12 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           void sendPrompt(chat.sessionId, t, { permissionMode: mode || undefined, model, effort });
         }}
       />
-      <div className="composer-bar">
+      <div className={`composer-bar ${optsOpen ? 'opts' : ''}`}>
+        {(window as any).__mpiMobile && (
+          <button className={`btn small m-opts ${optsOpen ? 'on' : ''}`} title="Модель, качество, режим, автоодобрение, после лимита, Chrome" onClick={() => setOptsOpen((v) => !v)}>
+            ⚙
+          </button>
+        )}
         <ModelPicker chat={chat} model={model} onModel={(m) => (setModel(m), void call('chat:options', chat.sessionId, { model: m }))} />
         {!chat.agent && <select value={effort} onChange={(e) => (setEffort(e.target.value), void call('chat:options', chat.sessionId, { effort: e.target.value }))} title="Качество ответа: сколько модель думает перед ответом">
           {EFFORTS.map((m) => (
