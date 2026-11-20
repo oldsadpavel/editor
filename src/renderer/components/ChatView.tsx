@@ -1319,7 +1319,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
                 .catch((e: Error) => toast(e.message, 'error'))
             }
           >
-            📋 Картинка
+            📋
           </button>
         )}
         <button
@@ -1449,7 +1449,7 @@ function RestartButton({ chat }: { chat: ChatSnapshot }) {
   const [busy, setBusy] = useState(false);
   return (
     <button
-      className={`btn small icon-only ${stalled ? 'stalled' : ''}`}
+      className={`btn small icon-only restart ${stalled ? 'stalled' : ''}`}
       disabled={busy}
       title={
         (stalled ? `Похоже, завис: от Claude ничего не приходит ${Math.round(quiet / 60_000)} мин.\n` : '') +

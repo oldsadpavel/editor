@@ -109,7 +109,7 @@ export function TasksBar({ chat }: { chat: ChatSnapshot }) {
   if (!tasks.length) return null;
   const label: Record<BgTask['status'], string> = { running: '⏳', completed: '✓', failed: '✕', stopped: '⏹' };
   return (
-    <div className="tasks-bar">
+    <div className={`tasks-bar ${running.length ? '' : 'idle'}`}>
       <div className="tk-head" onClick={() => setOpen(!open)}>
         <span className="twisty">{open ? '▾' : '▸'}</span> Фоновые задачи: {running.length ? <b>{running.length} идёт</b> : 'нет активных'}
         <span className="muted"> · всего {tasks.length}</span>

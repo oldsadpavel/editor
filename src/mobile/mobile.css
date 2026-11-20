@@ -51,3 +51,25 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .m-app .composer-bar .btn.small { min-height: 38px; min-width: 42px; font-size: 16px; }
 /* «Пишете в: …» — the tab already says it */
 .m-app .composer-target { display: none; }
+
+/* --- phone usability pass: less chrome, more chat --- */
+/* restart ⟳ lives under ⚙ with the other rarely used controls; the row always fits (no ➤ on its own line) */
+.m-app .composer-bar:not(.opts) > .restart { display: none; }
+.m-app .composer-bar { flex-wrap: nowrap; }
+.m-app .composer-bar.opts { flex-wrap: wrap; }
+/* chat search / expand row, the connectors-without-sign-in card and an idle background-tasks bar */
+.m-app .chat-toolbar,
+.m-app .mcp-auth.quiet,
+.m-app .tasks-bar.idle { display: none; }
+/* panel head: no drag handle and «ИИ» title; project labels over the tabs */
+.m-app .panel-head .panel-title,
+.m-app .panel-head > :first-child:not(select):not(button) { display: none; }
+.m-app .cg-head { display: none; }
+/* no sideways scrolling inside the chat, no scrollbars (the white corner) */
+.m-app .chat-scroll { overflow-x: hidden; }
+.m-app ::-webkit-scrollbar { width: 0; height: 0; }
+/* the chat's own bottom tabs (Чат / Файлы / Деплои / Разрешения): smaller, one scrollable line */
+.m-app .bottom-tabs { overflow-x: auto; flex-wrap: nowrap; }
+.m-app .bottom-tabs .tab { font-size: 13px; padding: 6px 10px; white-space: nowrap; }
+/* the turn's side icons column narrower */
+.m-app .turn { padding-left: 6px; padding-right: 6px; }
