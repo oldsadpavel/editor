@@ -132,7 +132,7 @@ function UpdateButton() {
   return (
     <>
       <button className={`m-upd ${avail ? 'new' : ''}`} title={`Версия ${mine}`} onClick={() => void run()}>
-        {avail ? `⬆ Обновить (b${avail.build})` : '⟳'}
+        {avail ? `⬆ b${avail.build}` : '⟳'}
       </button>
       {busy && <div className="m-upd-note">{busy}</div>}
     </>

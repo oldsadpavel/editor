@@ -89,3 +89,14 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .m-app .chat-scroll pre, .m-app .chat-scroll code { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
 .m-app .chat-scroll .turn, .m-app .chat-scroll .md { max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
 .m-app .chat-scroll table { display: block; overflow-x: auto; max-width: 100%; }
+/* the PC / update / sign-out cluster sits at the right end of each block's first row (no separate top line) */
+.m-app { position: relative; }
+.m-head { position: absolute; top: 0; right: 0; z-index: 20; border-bottom: 0; padding: 0 4px; height: 34px; background: var(--bg2, #2b2d31); border-bottom-left-radius: 8px; }
+.m-head .grow { display: none; }
+.m-head .m-pc { max-width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-pane.on > :first-child > :first-child { padding-right: 150px; box-sizing: border-box; }
+.m-app .panel-head button[title^="Справка"], .m-app .panel-head .help-btn { display: none; }
+.m-banner { margin-top: 34px; }
+.m-head .m-pc { max-width: 48px; }
+.m-pane.on > :first-child > :first-child { padding-right: 0; }
+.m-app .panel-head, .m-pane.on .tabs:first-child, .m-pane.on > * > .tabs:first-of-type { padding-right: 132px !important; }
