@@ -389,7 +389,17 @@ export class TurnBuilder {
 
   /** A question sent while Claude was working and taken into the running answer (not a separate user entry). */
   private ingestQueued(a: any, at: number) {
-    const prompt = cleanPrompt(String(a.prompt ?? ''));
+    // a question with pictures comes as content blocks (text + image): its text, not «[object Object],[object Object]»
+    const raw = a.prompt;
+    const blocks: any[] = Array.isArray(raw) ? raw : [];
+    const images = blocks.filter((b) => b?.type === 'image').length;
+    const text = Array.isArray(raw)
+      ? blocks
+          .filter((b) => b?.type === 'text' && typeof b.text === 'string')
+          .map((b) => b.text)
+          .join('\n')
+      : String(raw ?? '');
+    const prompt = cleanPrompt(text) + (images && !/\.(png|jpe?g|gif|webp)/i.test(text) ? `${text.trim() ? '\n' : ''}🖼 ×${images}` : '');
     const last = this.turns[this.turns.length - 1];
     if (!prompt || isNoisePrompt(prompt) || !last) return;
     if (last.prompt === prompt || last.more?.some((m) => m.prompt === prompt)) return;
