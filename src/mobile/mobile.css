@@ -73,3 +73,15 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .m-app .bottom-tabs .tab { font-size: 13px; padding: 6px 10px; white-space: nowrap; }
 /* the turn's side icons column narrower */
 .m-app .turn { padding-left: 6px; padding-right: 6px; }
+/* --- compact top and bottom (about half the height) --- */
+.m-head { padding: 2px 8px; gap: 6px; min-height: 32px; }
+.m-head .m-pc { font-size: 13px; }
+.m-head .icon-btn { font-size: 15px; padding: 2px 6px; }
+.m-upd { font-size: 13px; padding: 2px 8px; }
+.m-app .panel-head { min-height: 0; padding: 2px 6px; gap: 4px; }
+.m-app .panel-head .btn, .m-app .panel-head select { height: 26px; min-height: 26px; font-size: 13px; padding: 0 8px; }
+.m-app .chat-tabs .tab { min-height: 28px; height: 28px; font-size: 13px; padding: 0 8px; }
+.m-app .composer-bar .btn.small { min-height: 30px; min-width: 34px; font-size: 14px; padding: 0 6px; }
+.m-app .composer textarea { min-height: 38px; }
+.m-app .bottom-tabs .tab { font-size: 12px; padding: 3px 8px; min-height: 0; }
+.m-tabs button { padding: 7px 4px; font-size: 13px; }

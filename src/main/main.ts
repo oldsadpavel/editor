@@ -197,6 +197,8 @@ handle('clipboard:text', () => clipboard.readText());
 handle('clipboard:files', (dir?: string) => files.clipboardFiles(dir));
 handle('clipboard:pasteInto', (dir: string) => files.pasteInto(dir));
 handle('fs:copyInto', (dir: string, paths: string[]) => files.copyInto(dir, paths));
+// pictures for MPI Remote (the phone can't open efile:// of this PC)
+handle('fs:image', (p: string, maxPx?: number) => files.imageDataUrl(p, Math.min(2400, Math.max(64, Number(maxPx) || 1200))));
 handle('fs:stat', (p: string) => {
   const st = fs.statSync(p);
   return { size: st.size, mtime: st.mtimeMs, dir: st.isDirectory() };

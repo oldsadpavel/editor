@@ -8,7 +8,12 @@ import { StatusModal } from '../renderer/components/StatusModal';
 import { TreePanel } from '../renderer/components/Tree';
 import { init, useStore } from '../renderer/store';
 
-export const initMain = () => init();
+import { startImages } from './images';
+
+export const initMain = () => {
+  startImages((ch, ...a) => (window as any).bridge.invoke(ch, ...a));
+  return init();
+};
 
 type Tab = 'chats' | 'files' | 'editor';
 

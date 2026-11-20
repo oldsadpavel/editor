@@ -63,11 +63,12 @@ const ALLOWED = new Set([
   'stats:cron',
   'deploys:list',
   'attach:saveDataUrl',
+  'fs:image',
 ]);
 /** First argument is a path that must be inside a project. */
 const PATH_ARG = new Set(['fs:list', 'fs:read', 'fs:write', 'fs:exists', 'fs:stat']);
 /** Changes something: written to the audit log. */
-const READ_ONLY = /^(state:get|fs:(list|read|exists|stat|resolve)|files:search|agents:list|chat:(exists|list|open|status|commands|busyCount|mcpList|rewindPreview|image|seen)|usage:get|problems:list|stats:|deploys:list)/;
+const READ_ONLY = /^(state:get|fs:(list|read|exists|stat|resolve|image)|files:search|agents:list|chat:(exists|list|open|status|commands|busyCount|mcpList|rewindPreview|image|seen)|usage:get|problems:list|stats:|deploys:list)/;
 const READ_GIT = new Set(['repoRoot', 'status', 'diff', 'log', 'show', 'branches', 'stashList']);
 /** Events a phone gets (chat only for the chats it has open). */
 const FORWARD = new Set<MainEvent['type']>(['chat', 'chatMeta', 'problems', 'usage', 'toast', 'sessionsChanged', 'fileChanged']);
@@ -255,6 +256,12 @@ async function onPhone(m: PhoneMsg) {
   }
 }
 
+function inAttachments(p: unknown) {
+  if (typeof p !== 'string') return false;
+  const root = path.join(dataDir(), 'attachments').toLowerCase();
+  return path.resolve(p).toLowerCase().startsWith(root + path.sep);
+}
+
 function projectRoots() {
   return stateFile.data.projects.map((p) => path.resolve(p.path).toLowerCase());
 }
@@ -278,6 +285,8 @@ function inProject(p: unknown) {
 async function call(from: string, ch: string, args: unknown[]) {
   if (!ALLOWED.has(ch)) throw new Error(`С телефона недоступно: ${ch}`);
   if (PATH_ARG.has(ch) && !inProject(args[0])) throw new Error('Путь вне проектов редактора');
+  // pictures: project files and the editor's attachments (pasted screenshots live there)
+  if (ch === 'fs:image' && !inProject(args[0]) && !inAttachments(args[0])) throw new Error('Картинка вне проектов редактора');
   if (ch === 'git' && !inProject(args[1])) throw new Error('Репозиторий вне проектов редактора');
   const fn = handlers.get(ch);
   if (!fn) throw new Error(`Нет обработчика ${ch}`);

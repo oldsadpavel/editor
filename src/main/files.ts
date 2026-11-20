@@ -269,3 +269,13 @@ export async function createProject(parent: string, name: string, git: boolean):
     );
   return dir;
 }
+
+/** A picture as a data URL, scaled down to maxPx on its longer side (JPEG; PNG keeps transparency when small) — for the phone. */
+export function imageDataUrl(p: string, maxPx = 1200): string {
+  let img = nativeImage.createFromPath(p);
+  if (img.isEmpty()) throw new Error('Не картинка: ' + path.basename(p));
+  const { width, height } = img.getSize();
+  const k = Math.min(1, maxPx / Math.max(width, height));
+  if (k < 1) img = img.resize({ width: Math.round(width * k), height: Math.round(height * k), quality: 'good' });
+  return 'data:image/jpeg;base64,' + img.toJPEG(82).toString('base64');
+}
