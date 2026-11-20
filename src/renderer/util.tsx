@@ -75,7 +75,18 @@ const unescapeHtml = (s: string) => s.replace(/&(amp|lt|gt|quot|#39);/g, (_, e) 
 
 /** Absolute paths in plain text (E:\\dir\\file.ext, /home/…/file.ext) become links too. */
 const TEXT_PATH_RE = /(?<![\p{L}\p{N}])((?:[A-Za-z]:[\\/]|(?<=\s|^)\/)[^\s<>"'`|?*,;]*[\\/][^\s<>"'`|?*,;]*\.[\p{L}\p{N}]{1,8})(?=[\s,.;:)!?»]*(?:\s|$|<))/gu;
-const copyButton = (path: string) => `<button class="copy-file" data-copy="${path}" title="Скопировать весь текст файла в буфер">⧉</button>`;
+/** Binary files: their text can't be copied, only the path. */
+const BINARY_EXT = new Set('xlsx xls docx doc pdf odt ods pptx png jpg jpeg gif webp ico bmp zip rar 7z gz tar exe dll msi apk ipa epf erf cf cfe mxl'.split(' '));
+/**
+ * After a file path: ⧉ copies the path (a file named in instructions — «open X», «run Y»); 📄 copies the whole text of
+ * the file (for text files only).
+ */
+const copyButton = (path: string) => {
+  const bare = path.replace(/:\d+$/, '');
+  const ext = bare.split('.').pop()!.toLowerCase();
+  const text = /\.[\p{L}\p{N}]{1,8}$/u.test(bare) && !BINARY_EXT.has(ext);
+  return `<button class="copy-file" data-copy-text="${bare}" title="Скопировать путь">⧉</button>` + (text ? `<button class="copy-file copy-content" data-copy="${path}" title="Скопировать весь текст файла в буфер">📄</button>` : '');
+};
 /** ⧉ after inline code that isn't a file: copies the text itself (a host, an address, a command, a hash). */
 const copyTextButton = (text: string) => `<button class="copy-file" data-copy-text="${text}" title="Скопировать в буфер">⧉</button>`;
 const linkPaths = (html: string) => html.replace(TEXT_PATH_RE, (m) => `<span class="path-link" data-path="${m}">${m}</span>${copyButton(m)}`);
