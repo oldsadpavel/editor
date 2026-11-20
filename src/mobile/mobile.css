@@ -85,3 +85,7 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .m-app .composer textarea { min-height: 38px; }
 .m-app .bottom-tabs .tab { font-size: 12px; padding: 3px 8px; min-height: 0; }
 .m-tabs button { padding: 7px 4px; font-size: 13px; }
+/* long code / paths in answers wrap instead of making the chat wider than the screen (the sideways slider) */
+.m-app .chat-scroll pre, .m-app .chat-scroll code { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+.m-app .chat-scroll .turn, .m-app .chat-scroll .md { max-width: 100%; min-width: 0; overflow-wrap: anywhere; }
+.m-app .chat-scroll table { display: block; overflow-x: auto; max-width: 100%; }
