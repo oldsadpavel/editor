@@ -109,7 +109,7 @@ function OpenRouterRow({ onOpen }: { onOpen: () => void }) {
 }
 
 type OrStatus = { hasKey: boolean; label?: string; usage?: number; limit?: number | null; error?: string };
-type OrModel = { id: string; name: string; context?: number };
+type OrModel = { id: string; name: string; context?: number; vision?: boolean; tools?: boolean; price?: string };
 
 /**
  * ⚙ OpenRouter: the key (kept encrypted on this PC, never shown again) and which OpenRouter models are in the model
@@ -123,6 +123,7 @@ export function OpenRouterModal() {
   const [list, setList] = useState<OrModel[] | null>(null);
   const [q, setQ] = useState('');
   const [custom, setCustom] = useState('');
+  const [onlyFit, setOnlyFit] = useState(true);
   const refresh = () => {
     void call<OrStatus>('openrouter:status').then(setSt);
     void call<OrModel[]>('openrouter:models').then(setList, (e) => (setList([]), toast(e.message, 'error')));
@@ -133,7 +134,7 @@ export function OpenRouterModal() {
   if (!open) return null;
   const close = () => set({ showOpenRouter: undefined });
   const toggle = (id: string) => void saveApp({ openrouterModels: chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id] });
-  const shown = (list ?? []).filter((m) => !q || (m.id + ' ' + m.name).toLowerCase().includes(q.toLowerCase()));
+  const shown = (list ?? []).filter((m) => (!q || (m.id + ' ' + m.name).toLowerCase().includes(q.toLowerCase())) && (!onlyFit || (m.tools !== false && m.vision !== false)));
   const extra: OrModel[] = chosen.filter((id) => !(list ?? []).some((m) => m.id === id)).map((id) => ({ id, name: id }));
   return (
     <div className="modal-bg" onMouseDown={close}>
@@ -185,6 +186,9 @@ export function OpenRouterModal() {
         <div>
           <b>Модели в списке</b> <span className="muted small">— отмеченные появятся в выборе модели чата</span>
         </div>
+        <label className="small" style={{ display: 'block', marginTop: 4 }}>
+          <input type="checkbox" checked={onlyFit} onChange={(e) => setOnlyFit(e.target.checked)} /> только подходящие для чатов: умеют инструменты и принимают картинки
+        </label>
         <input className="search" placeholder="Поиск модели…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: '100%', margin: '6px 0' }} />
         <div className="or-list">
           {!list && <div className="muted">Загружаю список…</div>}
@@ -193,6 +197,10 @@ export function OpenRouterModal() {
               <input type="checkbox" checked={chosen.includes(m.id)} onChange={() => toggle(m.id)} />
               <span className="grow">{m.name}</span>
               <code className="muted small">{m.id}</code>
+              {m.vision === true && <span title="Принимает картинки (скриншоты в чате, Claude in Chrome)">👁</span>}
+              {m.vision === false && <span className="muted small" title="Не принимает картинки: если в истории чата есть скриншоты, OpenRouter ответит ошибкой «No endpoints found that support image input»">без картинок</span>}
+              {m.tools === false && <span className="err small" title="Не умеет вызывать инструменты — Claude Code с ней работать не сможет">без инструментов</span>}
+              {m.price && <span className="muted small" title="Цена за 1 млн токенов: вход / выход">{m.price}</span>}
               {m.context ? <span className="muted small">{Math.round(m.context / 1000)}k</span> : null}
             </label>
           ))}

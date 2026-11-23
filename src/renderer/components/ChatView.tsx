@@ -422,6 +422,11 @@ function TurnBody({
             </div>
           )}
           {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
+          {turn.error && /support image input/i.test(turn.error) && (
+            <div className="turn-error-hint">
+              Эта модель не принимает картинки, а в истории чата они есть (скриншоты, Claude in Chrome) — модель получает всю историю. Выберите модель с 👁 в «⚙ OpenRouter…», выключите Chrome для этого чата или начните новый чат.
+            </div>
+          )}
           {turn.reads.length > 0 && (
             <div className="reads">
               Прочитаны:{' '}

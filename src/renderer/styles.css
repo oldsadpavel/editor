@@ -1089,3 +1089,4 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .or-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .or-row:hover { background: rgba(128, 128, 128, 0.08); }
 .or-key .err { color: #e06c75; }
+.turn-error-hint { font-size: 12px; color: var(--fg2); padding: 4px 8px; }

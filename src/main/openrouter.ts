@@ -47,12 +47,23 @@ export async function status(): Promise<{ hasKey: boolean; label?: string; usage
 }
 
 /** Models OpenRouter offers for Claude Code (its Anthropic-compatible list). */
-export async function models(): Promise<{ id: string; name: string; context?: number }[]> {
+export async function models(): Promise<{ id: string; name: string; context?: number; vision?: boolean; tools?: boolean; price?: string }[]> {
   const key = getKey();
   const r = await fetch(`${BASE}/v1/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {} });
   if (!r.ok) throw new Error(`OpenRouter: HTTP ${r.status}`);
   const j: any = await r.json();
-  return (j.data ?? []).map((m: any) => ({ id: m.id, name: m.display_name ?? m.name ?? m.id, context: m.max_input_tokens ?? m.context_length }));
+  return (j.data ?? []).map((m: any) => {
+    const p = Number(m.pricing?.prompt), c = Number(m.pricing?.completion);
+    return {
+      id: m.id,
+      name: m.display_name ?? m.name ?? m.id,
+      context: m.max_input_tokens ?? m.context_length,
+      // pictures in the chat (screenshots, Chrome) need image input; Claude Code itself needs tool calls
+      vision: Array.isArray(m.architecture?.input_modalities) ? m.architecture.input_modalities.includes('image') : undefined,
+      tools: Array.isArray(m.supported_parameters) ? m.supported_parameters.includes('tools') : undefined,
+      price: isFinite(p) && isFinite(c) ? `$${(p * 1e6).toFixed(2)} / $${(c * 1e6).toFixed(2)}` : undefined,
+    };
+  });
 }
 
 /** Environment of a Claude Code process answering through OpenRouter with this model. */
