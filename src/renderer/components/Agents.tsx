@@ -85,6 +85,29 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
 
 const NO_MODELS: string[] = [];
 
+/** OpenRouter in the account menu: key there or not, how many models are in the list; opens ⚙ OpenRouter. */
+function OpenRouterRow({ onOpen }: { onOpen: () => void }) {
+  const chosen = useStore((s) => s.app?.openrouterModels ?? NO_MODELS);
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  useEffect(() => void call<{ hasKey: boolean }>('openrouter:status').then((s) => setHasKey(s.hasKey), () => setHasKey(false)), []);
+  return (
+    <div className="acc-agent">
+      <div className="acc-row">
+        <span className={`acc-dot ${hasKey ? (chosen.length ? 'ok' : 'warn') : 'off'}`} />
+        <div className="acc-main">
+          <b>OpenRouter</b>
+          <span className="muted small">{hasKey === null ? '…' : hasKey ? `ключ задан · моделей в списке: ${chosen.length}` : 'модели openrouter.ai в чатах Claude Code — нужен ключ'}</span>
+        </div>
+        <div className="acc-actions inline">
+          <button className="btn small" onClick={onOpen}>
+            {hasKey ? 'Модели и ключ' : 'Добавить ключ'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type OrStatus = { hasKey: boolean; label?: string; usage?: number; limit?: number | null; error?: string };
 type OrModel = { id: string; name: string; context?: number };
 
@@ -334,6 +357,7 @@ export function AccountsPopover({ x, y, claudeItems, onClose }: { x: number; y: 
           </div>
         </div>
       ))}
+      <OpenRouterRow onOpen={act(() => set({ showOpenRouter: true }))} />
       <div className="acc-footer">
         <button className="btn small" onClick={act(() => set({ showCloud: true }))}>
           ☁ Облако настроек…
