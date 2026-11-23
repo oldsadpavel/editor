@@ -4,7 +4,7 @@ import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
 import { isFavorite, openFavorite, removeFavorite, toggleFavorite } from '../favorites';
 import { PlanCard, ShellCard, TasksBar, ThinkingBlock, TodoCard, ToolDetails, openClaudeConfig, rewindTo } from './ChatExtras';
-import { get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, saveApp, sendPrompt, set, setAutoApprove, setUi, setRemote, toast, updateDraft, useStore, type LightboxItem } from '../store';
+import { focusChatTurn, get, openChat, closeChat, newChat, loadDraft, saveExpanded, savedExpanded, markSeen, openFile, openInSystem, openLightbox, renameChat, saveApp, sendPrompt, set, setAutoApprove, setUi, setRemote, toast, updateDraft, useStore, type LightboxItem, type ReplyQuote } from '../store';
 import { Markdown, basename, formatDuration, formatTime, plural, relPath } from '../util';
 import { DeployCard } from './Panels';
 import { SoundButton } from './SoundButton';
@@ -160,7 +160,20 @@ function taskNotes(prompt: string): TaskNote[] | null {
 const NOTE_STATUS: Record<string, string> = { completed: '✓ завершена', failed: '✕ с ошибкой', killed: '⏹ остановлена', running: '⏳ идёт' };
 
 /** One line for the turn head: what finished, without the XML. */
+/** «Это про твой ответ на мой вопрос «…» (time):» + quoted lines + the question (↩ Reply): the parts. */
+const REPLY_HEAD = /^Это про (фрагмент твоего ответа|твой ответ) на мой вопрос «(.*?)» \(([^)]*)\):\n/;
+function splitReply(prompt: string): { question: string; quote: string; part: boolean; when: string; rest: string } | null {
+  const m = REPLY_HEAD.exec(prompt);
+  if (!m) return null;
+  const lines = prompt.slice(m[0].length).split('\n');
+  let i = 0;
+  while (i < lines.length && lines[i].startsWith('> ')) i++;
+  return { part: m[1].startsWith('фрагмент'), question: m[2], when: m[3], quote: lines.slice(0, i).map((l) => l.slice(2)).join('\n'), rest: lines.slice(i).join('\n').trim() };
+}
+
 function promptHeadline(prompt: string): string {
+  const reply = splitReply(prompt);
+  if (reply) return '↩ ' + firstLine(reply.rest || reply.question);
   const notes = taskNotes(prompt);
   if (!notes) return firstLine(prompt);
   return '🔔 ' + notes.map((n) => n.summary ?? `Фоновая задача ${n.taskId ?? ''}`).join(' · ');
@@ -168,6 +181,17 @@ function promptHeadline(prompt: string): string {
 
 /** The question part of a turn: a normal prompt, or a card for background-task notifications. */
 function PromptText({ prompt, cwd }: { prompt: string; cwd: string }) {
+  const reply = splitReply(prompt);
+  if (reply)
+    return (
+      <>
+        <div className="q-reply" title={reply.quote}>
+          ↩ {reply.part ? 'про фрагмент ответа' : 'про ответ'} на «{reply.question}» · {reply.when}
+          <div className="q-reply-text">{reply.quote}</div>
+        </div>
+        <div className="q-text">{reply.rest}</div>
+      </>
+    );
   const notes = taskNotes(prompt);
   if (!notes) return <div className="q-text">{prompt}</div>;
   return (
@@ -699,6 +723,19 @@ function TurnRow({
         {!turn.live && <RemindButton ctx={{ sessionId, cwd, chatTitle: chatTitle ?? '', turn }} />}
         {!turn.live && !turn.shell && (
           <span
+            className="reply-btn"
+            title="Ответить на этот ответ: следующий вопрос будет про него (выделите часть ответа — процитируется только она)"
+            onMouseDown={(e) => e.preventDefault() /* keep the selection */}
+            onClick={(e) => {
+              e.stopPropagation();
+              quoteTurn(sessionId, turn, e.currentTarget.closest('.turn'));
+            }}
+          >
+            ↩
+          </span>
+        )}
+        {!turn.live && !turn.shell && (
+          <span
             className="rewind-btn"
             title="Откатить сюда: вернуть разговор (и файлы) к моменту перед этим вопросом — как Esc Esc в Claude Code"
             onClick={(e) => {
@@ -933,7 +970,13 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
       ref.current?.focus();
     };
     window.addEventListener('chat-insert', onInsert);
-    return () => window.removeEventListener('chat-insert', onInsert);
+    // ↩ on an answer: the input of that chat gets the focus
+    const onFocus = (e: Event) => (e as CustomEvent).detail === chat.sessionId && ref.current?.focus();
+    window.addEventListener('chat-focus-input', onFocus);
+    return () => {
+      window.removeEventListener('chat-insert', onInsert);
+      window.removeEventListener('chat-focus-input', onFocus);
+    };
   }, []);
 
   // ▶ on a `! cmd` in an answer: run it right away, as if typed with ! and sent
@@ -1095,11 +1138,14 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
       return;
     }
     const sent = { text, attachments };
+    const quote = get().quotes?.[chat.sessionId];
     setText('');
     setAttachments([]);
     onSent();
-    const ok = await sendPrompt(chat.sessionId, t, { permissionMode: mode || undefined, model, effort, attachments: sent.attachments });
+    if (quote) set((s) => ({ quotes: { ...s.quotes, [chat.sessionId]: undefined as unknown as ReplyQuote } }));
+    const ok = await sendPrompt(chat.sessionId, quote ? withQuote(quote, t) : t, { permissionMode: mode || undefined, model, effort, attachments: sent.attachments });
     if (!ok) {
+      if (quote) set((s) => ({ quotes: { ...s.quotes, [chat.sessionId]: quote } }));
       // Keep what the user typed if sending failed.
       setText(sent.text);
       setAttachments(sent.attachments);
@@ -1166,6 +1212,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           ))}
         </div>
       )}
+      <ReplyChip sessionId={chat.sessionId} />
       <textarea
         ref={ref}
         value={text}
@@ -1498,6 +1545,41 @@ const LOCAL_COMMANDS: SlashItem[] = [
 function mergeCommands(session: SlashItem[]): SlashItem[] {
   const local = new Set(LOCAL_COMMANDS.map((c) => c.name));
   return [...LOCAL_COMMANDS, ...session.filter((c) => !local.has(c.name))];
+}
+
+/** Over the input: which answer the next question is about; ✕ — drop it. Click — show that answer. */
+function ReplyChip({ sessionId }: { sessionId: string }) {
+  const q = useStore((s) => s.quotes?.[sessionId]);
+  if (!q) return null;
+  return (
+    <div className="reply-chip" title={q.text}>
+      <span className="reply-chip-body" title="Показать этот ответ" onClick={() => focusChatTurn(sessionId, q.startedAt)}>
+        ↩ <b>{q.selected ? 'Фрагмент ответа' : 'Ответ'}</b> на «{q.question.replace(/\s+/g, ' ').slice(0, 60)}» — <span className="muted">{q.text.replace(/\s+/g, ' ').slice(0, 120)}</span>
+      </span>
+      <button className="icon-btn" title="Не отвечать на него" onClick={() => set((s) => ({ quotes: { ...s.quotes, [sessionId]: undefined as unknown as ReplyQuote } }))}>
+        ×
+      </button>
+    </div>
+  );
+}
+
+/** ↩ on a turn: what the next question answers — the selection inside this turn, else the answer's last text. */
+function quoteTurn(sessionId: string, turn: Turn, el: Element | null) {
+  const sel = window.getSelection();
+  const picked = sel && !sel.isCollapsed && el && el.contains(sel.anchorNode) ? sel.toString().trim() : '';
+  const texts = turn.items.filter((i) => i.kind === 'text').map((i) => (i as { text: string }).text.trim()).filter(Boolean);
+  const answer = texts[texts.length - 1] ?? '';
+  const text = (picked || answer).slice(0, 1500);
+  if (!text) return toast('В этом ответе нет текста для цитаты', 'error');
+  set((s) => ({ quotes: { ...s.quotes, [sessionId]: { turnId: turn.id, question: turn.prompt.slice(0, 200), text, at: turn.answeredAt ?? turn.startedAt, startedAt: turn.startedAt, selected: !!picked } } }));
+  window.dispatchEvent(new CustomEvent('chat-focus-input', { detail: sessionId }));
+}
+
+/** The quote put in front of the question so Claude knows which of its answers it is about. */
+function withQuote(q: ReplyQuote, question: string) {
+  const when = new Date(q.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const lines = q.text.split('\n').map((l) => '> ' + l).join('\n');
+  return `Это про ${q.selected ? 'фрагмент твоего ответа' : 'твой ответ'} на мой вопрос «${q.question.replace(/\s+/g, ' ').slice(0, 150)}» (${when}):\n${lines}\n\n${question}`;
 }
 
 /** System "open file" dialog through a hidden <input type=file>; paths come from the preload bridge. */

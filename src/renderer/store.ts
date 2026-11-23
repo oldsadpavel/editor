@@ -46,6 +46,16 @@ export interface OpenFile {
   version: number;
 }
 
+export interface ReplyQuote {
+  turnId: string;
+  startedAt: number;
+  question: string;
+  text: string;
+  at: number;
+  /** A part selected in the answer, not the whole answer. */
+  selected?: boolean;
+}
+
 export interface Draft {
   text: string;
   attachments: string[];
@@ -114,6 +124,8 @@ export interface Store {
   update?: string;
   /** Chat whose /status (or /context) card is shown. */
   statusFor?: { sessionId: string; section?: 'context' };
+  /** ↩ Reply: the answer (or a selected part of it) the next question in this chat refers to. */
+  quotes?: Record<string, ReplyQuote>;
 }
 
 let state: Store = {

@@ -1078,3 +1078,9 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .remote-toggle.phone { color: #6fbf73; background: rgba(98, 151, 85, 0.25); }
 .remote-toggle.connecting { color: #c9b440; }
 .remote-toggle.error { color: #e06c75; }
+.reply-btn { cursor: pointer; opacity: 0.55; padding: 0 3px; }
+.reply-btn:hover { opacity: 1; color: var(--accent); }
+.reply-chip { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; padding: 4px 8px; border-left: 3px solid var(--accent); background: rgba(78, 143, 214, 0.1); border-radius: 4px; font-size: 12px; }
+.reply-chip-body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.q-reply { font-size: 12px; color: var(--fg2); border-left: 2px solid var(--line); padding: 2px 8px; margin-bottom: 4px; }
+.q-reply-text { white-space: pre-wrap; max-height: 4.2em; overflow: hidden; opacity: 0.8; }
