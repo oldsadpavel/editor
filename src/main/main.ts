@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { AgentId, AppState, DeployTarget, DirEntry, MainEvent, PermissionAnswer, SendOptions } from '../shared/types';
 import { emit, setSink } from './bus';
 import * as remoteLink from './remote-link';
+import * as openrouter from './openrouter';
 import { handlers } from './rpc';
 import * as cache from './cache';
 import * as claude from './claude';
@@ -124,6 +125,9 @@ function handle(channel: string, fn: (...args: any[]) => any) {
 handle('state:get', () => stateFile.data);
 // 📱 the phone link — the switch itself only from this window (never in remote-link's allowlist)
 handle('remote:status', () => remoteLink.status());
+handle('openrouter:status', () => openrouter.status());
+handle('openrouter:setKey', (key: string | null) => openrouter.setKey(key));
+handle('openrouter:models', () => openrouter.models());
 handle('remote:set', (on: boolean) => remoteLink.setEnabled(!!on));
 handle('state:set', (patch: Partial<AppState>) => {
   const before = stateFile.data.projects.map((p) => p.path);

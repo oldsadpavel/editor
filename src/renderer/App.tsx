@@ -19,7 +19,7 @@ import { Boot } from './components/Boot';
 import { CloudModal } from './components/CloudModal';
 import { McpModal } from './components/ChatExtras';
 import { Switcher } from './components/Switcher';
-import { AccountsPopover, AgentSwitchModal, AgentsModal } from './components/Agents';
+import { AccountsPopover, AgentSwitchModal, AgentsModal, OpenRouterModal } from './components/Agents';
 import { TaskDraftModal, TaskModal, TasksButton, useTaskReminders } from './components/Tasks';
 import { InstallClaudeButton } from './components/SetupPanel';
 import { HELP } from './help';
@@ -371,6 +371,7 @@ export function App() {
       <McpModal />
       <Switcher />
       <AgentsModal />
+      <OpenRouterModal />
       <TaskDraftModal />
       <TaskModal />
       <AgentSwitchModal />

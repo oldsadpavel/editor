@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AgentId, AgentInfo, ChatSnapshot } from '../../shared/types';
 import { call } from '../api';
-import { closeChat, get, loadAgents, newChat, openFile, set, toast, useStore } from '../store';
+import { closeChat, get, loadAgents, newChat, openFile, saveApp, set, toast, useStore } from '../store';
 
 export const AGENT_SHORT: Record<AgentId, string> = { claude: 'Claude', codex: 'GPT', gemini: 'Gemini', opencode: 'OC', aider: 'Aider' };
 export const AGENT_NAME: Record<AgentId, string> = { claude: 'Claude Code', codex: 'Codex (OpenAI)', gemini: 'Gemini CLI (Google)', opencode: 'OpenCode', aider: 'Aider' };
@@ -16,6 +16,7 @@ const CLAUDE_MODELS = [
 
 /** Short label of a model for the closed select. */
 function shortModel(agent: AgentId, model: string, agents: AgentInfo[]) {
+  if (agent === 'claude' && model.startsWith('or:')) return 'OR · ' + model.slice(3).split('/').pop()!.replace(/\[1m\]$/, '');
   if (agent === 'claude') return model ? model[0].toUpperCase() + model.slice(1) : 'Модель';
   const m = agents.find((a) => a.id === agent)?.models.find((x) => x.id === model);
   return `${AGENT_SHORT[agent]}${model ? ` · ${(m?.name ?? model).replace(/ \(бесплатно\)$/, '').split('/').pop()}` : ''}`;
@@ -32,6 +33,7 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
   const value = `${agent}|${model}`;
   // only agents that can answer now (logged in / have a key); the rest are one line pointing to ⚙ Агенты
   const usable = agents.filter((a) => a.installed && a.ready);
+  const orModels = useStore((s) => s.app?.openrouterModels ?? NO_MODELS);
   const waiting = agents.filter((a) => a.installed && !a.ready);
   return (
     <select
@@ -41,6 +43,7 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
       onChange={(e) => {
         const v = e.target.value;
         if (v === '__agents') return set({ showAgents: true });
+        if (v === '__openrouter') return set({ showOpenRouter: true });
         const [a, ...rest] = v.split('|');
         const m = rest.join('|');
         if (a === agent) return onModel(m);
@@ -57,6 +60,14 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
           </option>
         ))}
       </optgroup>
+      <optgroup label="OpenRouter (через Claude Code)">
+        {orModels.map((id) => (
+          <option key={id} value={`claude|or:${id}`}>
+            {id}
+          </option>
+        ))}
+        <option value="__openrouter">⚙ OpenRouter…</option>
+      </optgroup>
       {usable.map((a) => (
         <optgroup key={a.id} label={a.name}>
           <option value={`${a.id}|`}>{AGENT_SHORT[a.id]}: по умолчанию</option>
@@ -69,6 +80,115 @@ export function ModelPicker({ chat, model, onModel }: { chat: ChatSnapshot; mode
       ))}
       <option value="__agents">⚙ Агенты…{waiting.length ? ` (нужен вход: ${waiting.map((a) => AGENT_SHORT[a.id]).join(', ')})` : ''}</option>
     </select>
+  );
+}
+
+const NO_MODELS: string[] = [];
+
+type OrStatus = { hasKey: boolean; label?: string; usage?: number; limit?: number | null; error?: string };
+type OrModel = { id: string; name: string; context?: number };
+
+/**
+ * ⚙ OpenRouter: the key (kept encrypted on this PC, never shown again) and which OpenRouter models are in the model
+ * list. A chat with such a model is the same Claude Code — tools, files, MCP — answered through openrouter.ai.
+ */
+export function OpenRouterModal() {
+  const open = useStore((s) => s.showOpenRouter);
+  const chosen = useStore((s) => s.app?.openrouterModels ?? NO_MODELS);
+  const [st, setSt] = useState<OrStatus | null>(null);
+  const [key, setKey] = useState('');
+  const [list, setList] = useState<OrModel[] | null>(null);
+  const [q, setQ] = useState('');
+  const [custom, setCustom] = useState('');
+  const refresh = () => {
+    void call<OrStatus>('openrouter:status').then(setSt);
+    void call<OrModel[]>('openrouter:models').then(setList, (e) => (setList([]), toast(e.message, 'error')));
+  };
+  useEffect(() => {
+    if (open) refresh();
+  }, [open]);
+  if (!open) return null;
+  const close = () => set({ showOpenRouter: undefined });
+  const toggle = (id: string) => void saveApp({ openrouterModels: chosen.includes(id) ? chosen.filter((x) => x !== id) : [...chosen, id] });
+  const shown = (list ?? []).filter((m) => !q || (m.id + ' ' + m.name).toLowerCase().includes(q.toLowerCase()));
+  const extra: OrModel[] = chosen.filter((id) => !(list ?? []).some((m) => m.id === id)).map((id) => ({ id, name: id }));
+  return (
+    <div className="modal-bg" onMouseDown={close}>
+      <div className="modal or-modal" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="icon-btn git-x" title="Закрыть" onClick={close}>
+          ×
+        </button>
+        <h3 style={{ marginTop: 0 }}>OpenRouter</h3>
+        <p className="muted small">
+          Модели с openrouter.ai в чатах Claude Code: те же инструменты, файлы и MCP, ответ — через OpenRouter (оплата с вашего счёта OpenRouter, лимиты Claude не тратятся). Полную совместимость OpenRouter гарантирует только для моделей Anthropic; другие могут хуже работать с инструментами.
+        </p>
+        <div className="or-key">
+          <b>Ключ API:</b>{' '}
+          {st?.hasKey ? (
+            <>
+              <span>сохранён{st.label ? ` (${st.label})` : ''}</span>
+              {st.usage !== undefined && (
+                <span className="muted small">
+                  {' '}
+                  · потрачено ${st.usage.toFixed(2)}
+                  {st.limit ? ` из $${st.limit}` : ''}
+                </span>
+              )}
+              {st.error && <span className="err small"> · {st.error}</span>}{' '}
+              <button className="btn small" onClick={() => void call('openrouter:setKey', null).then(refresh)}>
+                Удалить
+              </button>
+            </>
+          ) : (
+            <span className="muted">нет — создайте на openrouter.ai/keys и вставьте сюда</span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 6, margin: '6px 0 10px' }}>
+          <input type="password" placeholder="sk-or-v1-…" value={key} onChange={(e) => setKey(e.target.value)} style={{ flex: 1 }} autoComplete="off" />
+          <button
+            className="btn primary"
+            disabled={!key.trim()}
+            onClick={() =>
+              void call('openrouter:setKey', key.trim()).then(() => {
+                setKey('');
+                refresh();
+                toast('Ключ OpenRouter сохранён (зашифрован на этом компьютере)');
+              })
+            }
+          >
+            Сохранить ключ
+          </button>
+        </div>
+        <div>
+          <b>Модели в списке</b> <span className="muted small">— отмеченные появятся в выборе модели чата</span>
+        </div>
+        <input className="search" placeholder="Поиск модели…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: '100%', margin: '6px 0' }} />
+        <div className="or-list">
+          {!list && <div className="muted">Загружаю список…</div>}
+          {[...extra, ...shown].map((m) => (
+            <label key={m.id} className="or-row">
+              <input type="checkbox" checked={chosen.includes(m.id)} onChange={() => toggle(m.id)} />
+              <span className="grow">{m.name}</span>
+              <code className="muted small">{m.id}</code>
+              {m.context ? <span className="muted small">{Math.round(m.context / 1000)}k</span> : null}
+            </label>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <input placeholder="или id модели вручную, например anthropic/claude-sonnet-5.5" value={custom} onChange={(e) => setCustom(e.target.value)} style={{ flex: 1 }} />
+          <button
+            className="btn"
+            disabled={!custom.trim()}
+            onClick={() => {
+              if (!chosen.includes(custom.trim())) void saveApp({ openrouterModels: [...chosen, custom.trim()] });
+              setCustom('');
+            }}
+          >
+            Добавить
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

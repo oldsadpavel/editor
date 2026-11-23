@@ -73,6 +73,8 @@ export interface Store {
   /** Coding agents besides Claude Code (installed, logged in, models). */
   agents: AgentInfo[];
   showAgents?: boolean;
+  /** ⚙ OpenRouter window (key, models in the list). */
+  showOpenRouter?: boolean;
   /** A model of another agent was picked in a chat: the confirmation dialog. */
   agentSwitch?: { sessionId: string; cwd: string; agent: AgentId; model: string };
   /** Задачи: the task shown on the right; the «new task» dialog (from a chat answer). */

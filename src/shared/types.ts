@@ -509,6 +509,8 @@ export interface AppState {
   mcpAuthHidden?: string[];
   /** Economy: 'ask' — confirm sending to an expensive model (Opus, Fable); 'block' — they are swapped for Sonnet. */
   economy?: 'off' | 'ask' | 'block';
+  /** OpenRouter models shown in the model list (ids as OpenRouter names them). */
+  openrouterModels?: string[];
   /** Ids of deleted tasks, so a cloud copy doesn't bring them back. */
   tasksDeleted?: string[];
   /** A chat's own «answer ready» sound (absent — the default one). */

@@ -14,6 +14,7 @@ import * as approvals from './approvals';
 import { emit } from './bus';
 import { IMAGE_EXT } from './files';
 import * as problems from './problems';
+import * as openrouter from './openrouter';
 import * as remote from './remote';
 import { dataDir, stateFile } from './store';
 import * as taskbar from './taskbar';
@@ -28,6 +29,7 @@ import { limitResetAt } from './limit-reset';
  * main loop on Sonnet (checked 28.10.2026, Claude Code via SDK and -p); the full id works. Other aliases are fine.
  */
 export function modelArg(m: string | undefined): string | undefined {
+  if (openrouter.isOr(m)) return openrouter.orId(m!);
   return m === 'haiku' ? 'claude-haiku-5-5' : m;
 }
 
@@ -485,7 +487,10 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     opts = { ...opts, model: 'sonnet' };
     emit({ type: 'toast', text: `Эконом: «${s.title}» — дорогая модель заменена на Sonnet` });
   }
+  if (openrouter.isOr(opts.model ?? s.model) && !openrouter.getKey()) throw new Error('Нет ключа OpenRouter: выберите в списке моделей «⚙ OpenRouter…» и вставьте ключ');
   const modelChanged = (opts.model || undefined) !== s.model;
+  // Anthropic ↔ OpenRouter is another endpoint: the process is started anew (the history stays — same session)
+  const providerChanged = modelChanged && openrouter.isOr(opts.model) !== openrouter.isOr(s.model);
   const effortChanged = (opts.effort || undefined) !== s.effort;
   s.model = opts.model || undefined;
   s.effort = opts.effort || undefined;
@@ -513,6 +518,7 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
   if (s.title === 'Новый чат') s.title = (text || path.basename(attachments[0] ?? '')).slice(0, 60);
   s.partial = '';
   s.setStatus('running');
+  if (s.q && providerChanged) stopProcess(s);
   if (!s.q) start(s);
   else {
     // A running session switches model, effort and permission mode in place; history and context stay.
@@ -594,6 +600,8 @@ function start(s: ChatSession) {
       allowedTools: ['mcp__editor'],
       ...(s.permissionMode ? { permissionMode: s.permissionMode as any } : {}),
       ...(s.model ? { model: modelArg(s.model) } : {}),
+      // a model from OpenRouter: the same Claude Code, answered through openrouter.ai
+      ...(openrouter.isOr(s.model) ? { env: { ...process.env, ...openrouter.env(s.model!) } } : {}),
       ...(s.effort ? { effort: s.effort } : {}),
       ...(s.permissionMode === 'bypassPermissions' ? { allowDangerouslySkipPermissions: true } : {}),
       // Claude in Chrome (the browser extension), like `claude --chrome`
@@ -1038,6 +1046,7 @@ export function setRemote(sessionId: string, on: boolean) {
       // pasted screenshots live in the editor's attachments folder, outside the project: readable without asking
       addDirs: [path.join(dataDir(), 'attachments')],
       chrome: s.chrome,
+      env: openrouter.isOr(s.model) ? openrouter.env(s.model!) : undefined,
       transcript: findTranscript(s.id),
       onCompacting: () => {
         if (s.compacting) return;
@@ -1688,8 +1697,10 @@ export async function setOptions(sessionId: string, o: { model?: string; effort?
   const s = sessions.get(sessionId);
   if (!s) return;
   if (o.model !== undefined && (o.model || undefined) !== s.model) {
+    const providerChanged = openrouter.isOr(o.model) !== openrouter.isOr(s.model);
     s.model = o.model || undefined;
-    await s.q?.setModel(modelArg(s.model)).catch(() => {});
+    if (providerChanged && s.q && s.status !== 'running') stopProcess(s); // the next question starts it with the other provider
+    else await s.q?.setModel(modelArg(s.model)).catch(() => {});
   }
   if (o.effort !== undefined && (o.effort || undefined) !== s.effort) {
     s.effort = o.effort || undefined;
@@ -1884,7 +1895,7 @@ chatAccess.needsLogin = (sessionId: string, name: string) => {
 // --- spending in the 5-hour window, scheduled jobs -----------------------------------------------------------------
 
 /** Opus / Fable (and the unnamed default, which is Opus on Max plans). */
-export const isExpensive = (model?: string) => !model || /opus|fable/i.test(model);
+export const isExpensive = (model?: string) => !openrouter.isOr(model) && (!model || /opus|fable/i.test(model));
 
 /** $ per million tokens: input, output (cache read 0.1× input, cache write 1.25× input). */
 function price(model?: string): [number, number] {

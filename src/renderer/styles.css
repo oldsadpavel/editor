@@ -1084,3 +1084,8 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .reply-chip-body { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .q-reply { font-size: 12px; color: var(--fg2); border-left: 2px solid var(--line); padding: 2px 8px; margin-bottom: 4px; }
 .q-reply-text { white-space: pre-wrap; max-height: 4.2em; overflow: hidden; opacity: 0.8; }
+.or-modal { width: min(760px, 94vw); max-height: 88vh; display: flex; flex-direction: column; position: relative; }
+.or-list { overflow: auto; max-height: 44vh; border: 1px solid var(--line); border-radius: 4px; }
+.or-row { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.or-row:hover { background: rgba(128, 128, 128, 0.08); }
+.or-key .err { color: #e06c75; }

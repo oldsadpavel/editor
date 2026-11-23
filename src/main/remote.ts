@@ -90,7 +90,7 @@ export function ptyCommand(cmd: string, args: string[]): { file: string; args: s
   return { file: 'script', args: ['-q', '-e', '-c', `/bin/sh -c ${shQuote(inner)}`, '/dev/null'] };
 }
 
-export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; addDirs?: string[]; chrome?: boolean; transcript: string | null; onCompacting?: () => void }): RemoteProc {
+export function start(opts: { cli: string; sessionId: string; cwd: string; name: string; permissionMode?: string; model?: string; addDirs?: string[]; chrome?: boolean; env?: Record<string, string>; transcript: string | null; onCompacting?: () => void }): RemoteProc {
   const args = ['--resume', opts.sessionId, '--remote-control', opts.name];
   if (opts.chrome) args.push('--chrome');
   for (const d of opts.addDirs ?? []) args.push('--add-dir', d);
@@ -98,7 +98,7 @@ export function start(opts: { cli: string; sessionId: string; cwd: string; name:
   if (opts.model) args.push('--model', opts.model);
   const pty = ptyCommand(opts.cli, args);
   // detached on macOS/Linux: own process group, so stop() can end claude together with `script`.
-  const child = spawn(pty.file, pty.args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32', env: { ...childEnv(), ...pty.env } });
+  const child = spawn(pty.file, pty.args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: process.platform !== 'win32', env: { ...childEnv(), ...opts.env, ...pty.env } });
   const proc: RemoteProc = { child, startedAt: Date.now(), tail: '', connected: false };
   let bypassAnswered = false;
   const onData = (d: Buffer) => {
