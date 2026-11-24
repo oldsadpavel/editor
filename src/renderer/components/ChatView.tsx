@@ -422,6 +422,22 @@ function TurnBody({
             </div>
           )}
           {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
+          {turn.error && /tool call could not be parsed/i.test(turn.error) && (
+            <div className="turn-error-hint">
+              Модель выдала вызов инструмента в формате, который Claude Code не смог разобрать (он сам повторил — не помогло). Так бывает у не-Anthropic моделей через OpenRouter: полную совместимость с Claude Code OpenRouter гарантирует только для моделей Anthropic.{' '}
+              <button
+                className="btn small"
+                title="Отправить «продолжай» ещё раз — иногда со второго захода модель вызывает инструмент правильно"
+                onClick={() => {
+                  const chat = get().chats[sessionId];
+                  if (chat) void sendPrompt(sessionId, 'продолжай', { model: chat.model, permissionMode: chat.permissionMode });
+                }}
+              >
+                Повторить
+              </button>{' '}
+              Если повторяется — смените модель для этого шага (например на Claude или другую модель OpenRouter) и продолжите в этом же чате.
+            </div>
+          )}
           {turn.error && /support image input/i.test(turn.error) && (
             <div className="turn-error-hint">
               Эта модель не принимает картинки, а в истории чата они есть (скриншоты, Claude in Chrome) — модель получает всю историю, поэтому падает каждый вопрос.{' '}
