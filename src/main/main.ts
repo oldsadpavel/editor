@@ -214,8 +214,17 @@ handle('image:copy', (p: string) => files.copyImage(p));
 handle('chat:image', (id: string, uuid: string, index: number) => files.transcriptImage(id, uuid, index));
 
 handle('auth:status', () => claude.authStatus());
-handle('auth:login', (method?: 'claudeai' | 'console' | 'sso', email?: string) => claude.login(method, email));
-handle('auth:logout', () => claude.logout());
+handle('auth:login', async (method?: 'claudeai' | 'console' | 'sso', email?: string) => {
+  const r = await claude.login(method, email);
+  // the limits meter kept the old sign-in: restart it (a moment later, when the new credentials are written)
+  setTimeout(() => void usage.resetUsage(), 3000);
+  return r;
+});
+handle('auth:logout', async () => {
+  const r = await claude.logout();
+  void usage.resetUsage();
+  return r;
+});
 handle('claude:installCommand', () => claude.installCommand().display);
 handle('claude:install', () => claude.installClaude());
 
@@ -318,6 +327,7 @@ handle('app:pendingUpdate', () => updates.pendingUpdate());
 handle('app:restartToUpdate', () => updates.restartToUpdate());
 handle('chat:busyCount', () => claude.runningSessions().length);
 handle('usage:get', () => usage.lastUsage());
+handle('usage:reset', () => usage.resetUsage());
 handle('usage:refresh', () => usage.refreshUsage());
 handle('setup:status', () => setupStatus());
 handle('cache:scan', () => cache.scanCache());

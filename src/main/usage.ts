@@ -40,6 +40,8 @@ async function refresh() {
     if (typeof fn !== 'function') return publish({ available: false, checkedAt: Date.now(), error: 'SDK не отдаёт лимиты' });
     const r = await fn.call(meter, { skipBehaviors: true });
     const rl = r?.rate_limits;
+    // no limits from it: the meter process may hold a sign-in that's gone (re-login) — the next poll starts a fresh one
+    if (!r?.rate_limits_available || !rl) dropMeter();
     publish({
       available: !!r?.rate_limits_available && !!rl,
       plan: r?.subscription_type ?? undefined,
@@ -67,6 +69,17 @@ export function onRateLimitEvent(info: { rateLimitType?: string; utilization?: n
   const w: UsageWindow = { percent, resetsAt: info.resetsAt ? info.resetsAt * 1000 : undefined };
   if (info.rateLimitType === 'five_hour') publish({ ...current, session: w, checkedAt: Date.now() });
   else if (info.rateLimitType === 'seven_day') publish({ ...current, week: w, checkedAt: Date.now() });
+}
+
+function dropMeter() {
+  meter?.interrupt().catch(() => {});
+  meter = null;
+}
+
+/** After signing in / out of Claude Code: a new meter process with the new sign-in, limits read at once. */
+export function resetUsage() {
+  dropMeter();
+  return refresh().then(() => current);
 }
 
 export function lastUsage() {
