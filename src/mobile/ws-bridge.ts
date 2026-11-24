@@ -218,7 +218,24 @@ function sendMsg(msg: PhoneMsg): Promise<void> {
   return p;
 }
 
+/** Calls to the PC still waiting for an answer — the loader next to the PC name. */
+let pendingCalls = 0;
+const pendingListeners = new Set<(n: number) => void>();
+export const onPending = (fn: (n: number) => void) => {
+  pendingListeners.add(fn);
+  fn(pendingCalls);
+  return () => void pendingListeners.delete(fn);
+};
 function rpc(ch: string, args: unknown[]): Promise<any> {
+  pendingCalls++;
+  for (const l of pendingListeners) l(pendingCalls);
+  return rpcRaw(ch, args).finally(() => {
+    pendingCalls--;
+    for (const l of pendingListeners) l(pendingCalls);
+  });
+}
+
+function rpcRaw(ch: string, args: unknown[]): Promise<any> {
   if (link.state !== 'online') return Promise.reject(new Error(link.error || 'Нет связи с компьютером'));
   const id = ++seq;
   return new Promise((resolve, reject) => {

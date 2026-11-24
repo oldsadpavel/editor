@@ -100,3 +100,6 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .m-head .m-pc { max-width: 48px; }
 .m-pane.on > :first-child > :first-child { padding-right: 0; }
 .m-app .panel-head, .m-pane.on .tabs:first-child, .m-pane.on > * > .tabs:first-of-type { padding-right: 132px !important; }
+.m-pending { width: 12px; height: 12px; flex: none; }
+.m-tabs .spinner { width: 12px; height: 12px; display: inline-block; vertical-align: -1px; }
+.m-wait-badge { margin-left: 4px; background: #c9b440; color: #000; border-radius: 8px; padding: 0 6px; font-size: 11px; }

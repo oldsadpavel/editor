@@ -6,7 +6,7 @@ import { GitDialogHost } from '../renderer/components/Git';
 import { ImageLightbox } from '../renderer/components/ImageViewer';
 import { StatusModal } from '../renderer/components/StatusModal';
 import { TreePanel } from '../renderer/components/Tree';
-import { init, useStore } from '../renderer/store';
+import { init, shownStatus, useStore } from '../renderer/store';
 
 import { startImages } from './images';
 
@@ -23,6 +23,9 @@ export function MobileMain() {
   const activeFile = useStore((s) => s.activeFile);
   const activeChat = useStore((s) => s.app?.activeChat);
   const files = useStore((s) => s.files.length);
+  // open chats answering right now (incl. background tasks) — a spinner on the «Чаты» tab, like the desktop tabs
+  const working = useStore((s) => (s.app?.openChats ?? []).filter((id) => shownStatus(s.chats[id]) === 'running').length);
+  const waiting = useStore((s) => (s.app?.openChats ?? []).filter((id) => s.chats[id]?.status === 'waiting').length);
   const first = useRef(true);
   // opening a file in the tree shows the editor, opening a chat shows the chats
   useEffect(() => {
@@ -51,7 +54,8 @@ export function MobileMain() {
       </div>
       <div className="m-tabs">
         <button className={tab === 'chats' ? 'on' : ''} onClick={() => setTab('chats')}>
-          💬 Чаты
+          {working ? <span className="spinner" /> : '💬'} Чаты{working ? ` · ${working}` : ''}
+          {waiting ? <span className="m-wait-badge" title="Ждут вашего ответа">{waiting}</span> : null}
         </button>
         <button className={tab === 'files' ? 'on' : ''} onClick={() => setTab('files')}>
           📁 Файлы

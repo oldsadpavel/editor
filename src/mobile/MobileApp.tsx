@@ -5,7 +5,7 @@ import './mobile.css';
 import { finishLogin, logout, signedIn, startLogin, who } from './auth';
 import { log, setAppVersion, startLogging } from './log';
 import { check, currentBuild, install, type Available } from './update';
-import { onLink, resync, start, type LinkState } from './ws-bridge';
+import { onLink, onPending, resync, start, type LinkState } from './ws-bridge';
 
 /** MPI Remote: sign-in → connection to the PC → the editor's own chats / tree / editor, one screen at a time. */
 function Root() {
@@ -84,6 +84,7 @@ function Connected({ onLogout }: { onLogout: () => void }) {
   return (
     <div className="m-app">
       <div className="m-head">
+        <PendingSpinner />
         <span className={`m-dot ${link.state}`} />
         <span className="m-pc" title="Нажмите — заново загрузить открытые чаты с компьютера" onClick={() => void resync()}>{link.pc ? link.pc.name : link.state === 'connecting' ? 'Подключение…' : 'Нет связи'}</span>
         <span className="grow" />
@@ -137,6 +138,20 @@ function UpdateButton() {
       {busy && <div className="m-upd-note">{busy}</div>}
     </>
   );
+}
+
+/** A call to the PC takes longer than 0.3 s (through Insider): the loader, like the spinners on the desktop. */
+function PendingSpinner() {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let t: number | undefined;
+    return onPending((n) => {
+      clearTimeout(t);
+      if (n > 0) t = window.setTimeout(() => setBusy(true), 300);
+      else setBusy(false);
+    });
+  }, []);
+  return busy ? <span className="spinner m-pending" title="Жду ответа компьютера" /> : null;
 }
 
 export function mount() {
