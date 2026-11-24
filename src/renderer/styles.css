@@ -1090,3 +1090,5 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .or-row:hover { background: rgba(128, 128, 128, 0.08); }
 .or-key .err { color: #e06c75; }
 .turn-error-hint { font-size: 12px; color: var(--fg2); padding: 4px 8px; }
+.or-balance { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 0 8px; }
+.or-balance.bad .meter-val { color: #e06c75; }

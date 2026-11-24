@@ -128,6 +128,7 @@ handle('remote:status', () => remoteLink.status());
 handle('openrouter:status', () => openrouter.status());
 handle('openrouter:setKey', (key: string | null) => openrouter.setKey(key));
 handle('openrouter:models', () => openrouter.models());
+handle('openrouter:balance', () => openrouter.balance());
 handle('chat:stripImages', (id: string) => claude.stripChatImages(id));
 handle('remote:set', (on: boolean) => remoteLink.setEnabled(!!on));
 handle('state:set', (patch: Partial<AppState>) => {

@@ -1,5 +1,41 @@
+import { useEffect, useState } from 'react';
 import type { UsageWindow } from '../../shared/types';
 import { call } from '../api';
+
+type OrBalance = { remaining?: number; credits?: number; usage?: number; keyRemaining?: number | null; keyLimit?: number | null; error?: string } | null;
+
+/**
+ * Instead of the claude.ai meters while the active chat is on OpenRouter: how much money is left there. Refreshed when
+ * the tab switches to such a chat, after each of its answers and every 2 minutes; click — refresh and open ⚙ OpenRouter.
+ */
+function OpenRouterBalance() {
+  const [b, setB] = useState<OrBalance | undefined>(undefined);
+  const active = useStore((s) => s.app?.activeChat);
+  const done = useStore((s) => (s.app?.activeChat ? s.app.chatMeta[s.app.activeChat]?.completedAt : undefined));
+  const load = () => void call<OrBalance>('openrouter:balance').then(setB, () => setB({ error: 'нет связи' }));
+  useEffect(load, [active, done]);
+  useEffect(() => {
+    const t = setInterval(load, 120_000);
+    return () => clearInterval(t);
+  }, []);
+  const left = b?.keyRemaining ?? b?.remaining;
+  const money = (x?: number | null) => (typeof x === 'number' ? `$${x.toFixed(2)}` : '?');
+  const low = typeof left === 'number' && left < 2;
+  const tip =
+    b === undefined
+      ? 'Загружаю…'
+      : b === null
+        ? 'Нет ключа OpenRouter — «⚙ OpenRouter…» в списке моделей'
+        : b.error
+          ? `OpenRouter: ${b.error}`
+          : `OpenRouter — активный чат отвечает через него\nНа счёте: ${money(b.remaining)} (пополнено ${money(b.credits)}, потрачено ${money(b.usage)})${b.keyLimit ? `\nЛимит ключа: ${money(b.keyLimit)}, осталось ${money(b.keyRemaining)}` : ''}\nКлик — обновить и открыть настройки OpenRouter`;
+  return (
+    <div className={`meters or-balance ${low ? 'bad' : ''}`} title={tip} onClick={() => (load(), set({ showOpenRouter: true }))}>
+      <span className="meter-label">OpenRouter</span>
+      <span className="meter-val">{b === undefined ? '…' : b === null ? 'нет ключа' : b.error ? '⚠' : `${money(left)} осталось`}</span>
+    </div>
+  );
+}
 import { set, useStore } from '../store';
 
 function untilText(ms?: number) {
@@ -33,6 +69,12 @@ function Meter({ label, w, tip }: { label: string; w: UsageWindow; tip: string }
  */
 export function UsageMeters() {
   const u = useStore((s) => s.usage);
+  // the active chat answers through OpenRouter: its money matters, not the claude.ai limits
+  const orChat = useStore((s) => {
+    const id = s.app?.activeChat;
+    return id ? !!s.chats[id]?.model?.startsWith('or:') : false;
+  });
+  if (orChat) return <OpenRouterBalance />;
   if (!u?.available || (!u.session && !u.week)) return null;
   const checked = u.checkedAt ? `\nОбновлено: ${new Date(u.checkedAt).toLocaleTimeString('ru-RU')} (клик — расход по чатам)` : '';
   const models = (u.models ?? []).map((m) => `\n  ${m.name}: использовано ${Math.round(m.percent)}%, ${untilText(m.resetsAt)}`).join('');

@@ -94,3 +94,24 @@ export function env(model: string): Record<string, string> {
     CLAUDE_CODE_SUBAGENT_MODEL: id,
   };
 }
+
+/** Money left on OpenRouter: the account's credits minus usage, and the key's own limit if it has one. */
+export async function balance(): Promise<{ remaining?: number; credits?: number; usage?: number; keyRemaining?: number | null; keyLimit?: number | null; error?: string } | null> {
+  const key = getKey();
+  if (!key) return null;
+  const h = { Authorization: `Bearer ${key}` };
+  const [c, k] = await Promise.all([
+    fetch(`${BASE}/v1/credits`, { headers: h }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    fetch(`${BASE}/v1/key`, { headers: h }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+  ]);
+  if (!c && !k) return { error: 'OpenRouter не ответил' };
+  const credits = c?.data?.total_credits;
+  const usage = c?.data?.total_usage ?? k?.data?.usage;
+  return {
+    credits,
+    usage,
+    remaining: typeof credits === 'number' && typeof usage === 'number' ? credits - usage : undefined,
+    keyLimit: k?.data?.limit ?? null,
+    keyRemaining: k?.data?.limit_remaining ?? null,
+  };
+}
