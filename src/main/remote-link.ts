@@ -64,6 +64,7 @@ const ALLOWED = new Set([
   'deploys:list',
   'attach:saveDataUrl',
   'fs:image',
+  'chat:stripImages',
 ]);
 /** First argument is a path that must be inside a project. */
 const PATH_ARG = new Set(['fs:list', 'fs:read', 'fs:write', 'fs:exists', 'fs:stat']);

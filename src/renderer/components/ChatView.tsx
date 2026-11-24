@@ -424,7 +424,24 @@ function TurnBody({
           {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
           {turn.error && /support image input/i.test(turn.error) && (
             <div className="turn-error-hint">
-              Эта модель не принимает картинки, а в истории чата они есть (скриншоты, Claude in Chrome) — модель получает всю историю. Выберите модель с 👁 в «⚙ OpenRouter…», выключите Chrome для этого чата или начните новый чат.
+              Эта модель не принимает картинки, а в истории чата они есть (скриншоты, Claude in Chrome) — модель получает всю историю, поэтому падает каждый вопрос.{' '}
+              <button
+                className="btn small"
+                title="Картинки в истории этого чата заменятся короткой пометкой (копия истории сохранится рядом), и вопрос уйдёт снова"
+                onClick={() =>
+                  void call<number>('chat:stripImages', sessionId).then(
+                    (n) => {
+                      toast(`Убрано картинок из истории: ${n}. Отправляю вопрос снова`);
+                      const chat = get().chats[sessionId];
+                      if (chat && turn.prompt) void sendPrompt(sessionId, turn.prompt, { model: chat.model, permissionMode: chat.permissionMode });
+                    },
+                    (e) => toast(e.message, 'error'),
+                  )
+                }
+              >
+                Убрать картинки из истории и повторить
+              </button>{' '}
+              Или выберите модель с 👁 в «⚙ OpenRouter…». Если включён Chrome — снимите галочку, его скриншоты тоже картинки.
             </div>
           )}
           {turn.reads.length > 0 && (

@@ -15,6 +15,7 @@ import { emit } from './bus';
 import { IMAGE_EXT } from './files';
 import * as problems from './problems';
 import * as openrouter from './openrouter';
+import { stripImages } from './strip-images';
 import * as remote from './remote';
 import { dataDir, stateFile } from './store';
 import * as taskbar from './taskbar';
@@ -439,10 +440,11 @@ const MAX_INLINE_IMAGE = 5 * 1024 * 1024;
  * Message content for a prompt with attachments: images go inline (Claude sees them), and every attachment path is
  * listed under ATTACHMENTS_HEADER so Claude can open any file with Read and the transcript keeps the paths.
  */
-function buildContent(text: string, attachments: string[]) {
+function buildContent(text: string, attachments: string[], noImages = false) {
   if (!attachments.length) return text;
   const blocks: any[] = [];
-  for (const p of attachments) {
+  // a model without image input: pictures go by path only (an image block would break every later question)
+  for (const p of noImages ? [] : attachments) {
     const mime = IMAGE_MIME[path.extname(p).toLowerCase()];
     if (!mime) continue;
     try {
@@ -526,7 +528,9 @@ export async function send(sessionId: string, text: string, opts: SendOptions) {
     if (modelChanged) await s.q.setModel(modelArg(s.model)).catch(() => {});
     if (effortChanged) await s.q.applyFlagSettings({ effortLevel: (s.effort as any) ?? null }).catch(() => {});
   }
-  const content = buildContent(text, attachments);
+  const orModel = openrouter.isOr(s.model) ? openrouter.orId(s.model!) : null;
+  if (orModel) void openrouter.ensureModels();
+  const content = buildContent(text, attachments, !!orModel && openrouter.vision(orModel) === false);
   s.input!.push({
     type: 'user',
     uuid: uid,
@@ -1992,4 +1996,28 @@ export function cronJobs(): CronJob[] {
     out.push(...jobs.values());
   }
   return out.sort((a, b) => (a.state === 'active' ? 0 : 1) - (b.state === 'active' ? 0 : 1) || b.createdAt - a.createdAt);
+}
+
+/**
+ * «Убрать картинки из истории»: the chat's transcript without image blocks (strip-images.ts), the process restarted on
+ * it — for a model without image input that otherwise fails on every question. Returns how many pictures went.
+ */
+export async function stripChatImages(sessionId: string): Promise<number> {
+  const s = sessions.get(sessionId);
+  if (!s) throw new Error('Чат не открыт');
+  if (s.status === 'running') throw new Error('Дождитесь конца ответа или нажмите «Стоп»');
+  const file = findTranscript(s.id);
+  if (!file) throw new Error('Нет файла истории этого чата');
+  const q = s.q;
+  stopProcess(s);
+  try {
+    q?.close();
+  } catch {
+    /* already gone */
+  }
+  await new Promise((r) => setTimeout(r, 500)); // the old process lets go of the file
+  const n = await stripImages(file);
+  s.builder = (await loadTranscript(file)).builder;
+  s.publish(true);
+  return n;
 }

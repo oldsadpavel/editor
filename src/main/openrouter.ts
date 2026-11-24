@@ -52,7 +52,7 @@ export async function models(): Promise<{ id: string; name: string; context?: nu
   const r = await fetch(`${BASE}/v1/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {} });
   if (!r.ok) throw new Error(`OpenRouter: HTTP ${r.status}`);
   const j: any = await r.json();
-  return (j.data ?? []).map((m: any) => {
+  const list = (j.data ?? []).map((m: any) => {
     const p = Number(m.pricing?.prompt), c = Number(m.pricing?.completion);
     return {
       id: m.id,
@@ -64,6 +64,17 @@ export async function models(): Promise<{ id: string; name: string; context?: nu
       price: isFinite(p) && isFinite(c) ? `$${(p * 1e6).toFixed(2)} / $${(c * 1e6).toFixed(2)}` : undefined,
     };
   });
+  for (const m of list) if (m.vision !== undefined) visionById.set(m.id, m.vision);
+  return list;
+}
+
+/** Image input of the models (from the last models() call): false — the model can't take pictures. */
+const visionById = new Map<string, boolean>();
+export const vision = (id: string) => visionById.get(id);
+let loading: Promise<unknown> | null = null;
+export function ensureModels() {
+  if (!visionById.size) loading ??= models().catch(() => (loading = null));
+  return loading;
 }
 
 /** Environment of a Claude Code process answering through OpenRouter with this model. */
