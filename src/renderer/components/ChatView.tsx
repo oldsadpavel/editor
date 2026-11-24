@@ -323,6 +323,18 @@ function ToolGroup({ tools, cwd }: { tools: Extract<TurnItem, { kind: 'tool' }>[
 
 type BodyTab = 'answer' | 'thinking' | 'files' | 'approvals';
 
+/** Who answers: an OpenRouter model by its name (DeepSeek, GPT…), otherwise Claude. */
+export function workerName(model?: string) {
+  if (!model?.startsWith('or:')) return 'Claude';
+  const id = model.slice(3).replace(/^~/, '').replace(/\[1m\]$/, '');
+  const name = id.split('/').pop() ?? id;
+  return name.replace(/-latest$/, '').replace(/^./, (c) => c.toUpperCase());
+}
+function WorkerName({ sessionId }: { sessionId: string }) {
+  const model = useStore((s) => s.chats[sessionId]?.model);
+  return <>{workerName(model)}</>;
+}
+
 function TurnBody({
   turn,
   cwd,
@@ -418,7 +430,7 @@ function TurnBody({
           {partial && <Markdown text={partial} cwd={cwd} />}
           {turn.live && !partial && (
             <div className="thinking">
-              <span className="spinner" /> Claude работает…
+              <span className="spinner" /> <WorkerName sessionId={sessionId} /> работает…
             </div>
           )}
           {turn.error && <div className="turn-error">⚠ {turn.error}</div>}
@@ -1258,7 +1270,7 @@ function Composer({ chat, onSent }: { chat: ChatSnapshot; onSent: () => void }) 
           chat.remote && !(tabOffers.length && !busy)
             ? `«${chat.title}» · удалённый режим: вопрос уйдёт в тот же чат, что и на телефоне`
             : busy
-            ? `«${chat.title}» · Claude работает… можно дописать — сообщение уйдёт в очередь`
+            ? `«${chat.title}» · ${workerName(chat.model)} работает… можно дописать — сообщение уйдёт в очередь`
             : tabOffers.length
             ? `↹ Tab: ${tabOffers[0]}${tabOffers.length > 1 ? `   (ещё ${tabOffers.length - 1} — Tab ещё раз)` : ''}`
             : `Вопрос в «${chat.title}» (${basename(chat.cwd)})…${(window as any).__mpiMobile ? "" : " Enter — отправить, Shift+Enter — перенос, Ctrl+V — скриншот или файлы"}`
