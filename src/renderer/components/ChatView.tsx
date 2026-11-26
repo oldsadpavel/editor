@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { computeTopics, ownQuestion, splitReply, type Topic } from '../topics';
+import { ContextMenu } from './ContextMenu';
 import type { ApprovalEntry, ChatSnapshot, FavoriteAnswer, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem, TurnItemTool } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
@@ -160,16 +162,6 @@ function taskNotes(prompt: string): TaskNote[] | null {
 const NOTE_STATUS: Record<string, string> = { completed: '✓ завершена', failed: '✕ с ошибкой', killed: '⏹ остановлена', running: '⏳ идёт' };
 
 /** One line for the turn head: what finished, without the XML. */
-/** «Это про твой ответ на мой вопрос «…» (time):» + quoted lines + the question (↩ Reply): the parts. */
-const REPLY_HEAD = /^Это про (фрагмент твоего ответа|твой ответ) на мой вопрос «(.*?)» \(([^)]*)\):\n/;
-function splitReply(prompt: string): { question: string; quote: string; part: boolean; when: string; rest: string } | null {
-  const m = REPLY_HEAD.exec(prompt);
-  if (!m) return null;
-  const lines = prompt.slice(m[0].length).split('\n');
-  let i = 0;
-  while (i < lines.length && lines[i].startsWith('> ')) i++;
-  return { part: m[1].startsWith('фрагмент'), question: m[2], when: m[3], quote: lines.slice(0, i).map((l) => l.slice(2)).join('\n'), rest: lines.slice(i).join('\n').trim() };
-}
 
 function promptHeadline(prompt: string): string {
   const reply = splitReply(prompt);
@@ -695,6 +687,85 @@ function FavStar({ sessionId, turn }: { sessionId: string; turn: Turn }) {
   );
 }
 
+/** The topic label of a turn (or a faint # on hover): click — put into a topic, a new one, rename, take out. */
+function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn: Turn; topic?: Topic; topics: Topic[] }) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const setName = (name: string) => {
+    const all = get().app?.turnTopics ?? {};
+    const mine = { ...(all[sessionId] ?? {}) };
+    if (name) mine[turn.id] = name;
+    else delete mine[turn.id];
+    void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
+  };
+  /** Into an existing topic: an automatic one gets its name fixed on all its questions, so they stay one topic. */
+  const joinTopic = (t: Topic) => {
+    const name = t.key.startsWith('n:') ? t.key.slice(2) : t.name;
+    const all = get().app?.turnTopics ?? {};
+    const mine = { ...(all[sessionId] ?? {}) };
+    const chat = get().chats[sessionId];
+    if (chat && !t.key.startsWith('n:')) for (const [id, x] of computeTopics(chat.turns, mine)) if (x.key === t.key) mine[id] = name;
+    mine[turn.id] = name;
+    void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
+  };
+  const renameTopic = (from: Topic, to: string) => {
+    const all = get().app?.turnTopics ?? {};
+    const mine = { ...(all[sessionId] ?? {}) };
+    // every turn of the topic gets the name (auto-linked ones too)
+    const chat = get().chats[sessionId];
+    const members = chat ? computeTopics(chat.turns, mine) : new Map();
+    for (const [id, t] of members) if (t.key === from.key) mine[id] = to;
+    void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
+  };
+  return (
+    <>
+      <span
+        className={`topic-chip ${topic ? '' : 'empty'}`}
+        style={topic ? { background: topic.color } : undefined}
+        title={topic ? `Тема: ${topic.name} · вопросов: ${topic.size}\nКлик — сменить тему, переименовать, убрать` : 'Отнести к теме (вопросы одной задачи — одним цветом)'}
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        {topic ? topic.name : '#'}
+      </span>
+      {menu && (
+        <ContextMenu
+          {...menu}
+          onClose={() => setMenu(null)}
+          items={[
+            ...topics.filter((t) => t.key !== topic?.key).map((t) => ({ label: `● ${t.name}`, action: () => joinTopic(t) })),
+            { label: '＋ Новая тема из этого вопроса', action: () => setName(ownQuestion(turn.prompt).replace(/\s+/g, ' ').trim().slice(0, 40) || 'тема') },
+            ...(topic ? [{ label: '✎ Переименовать тему…', action: () => setRenaming(true) }, { label: '✕ Убрать из темы', action: () => setName('-') }] : []),
+          ]}
+        />
+      )}
+      {renaming && topic && (
+        <div className="modal-bg" onMouseDown={() => setRenaming(false)}>
+          <div className="modal" style={{ width: 'min(420px, 92vw)' }} onMouseDown={(e) => e.stopPropagation()}>
+            <b>Название темы</b>
+            <input
+              autoFocus
+              defaultValue={topic.name}
+              style={{ width: '100%', marginTop: 8 }}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setRenaming(false);
+                if (e.key === 'Enter') {
+                  const to = (e.target as HTMLInputElement).value.trim();
+                  if (to) renameTopic(topic, to);
+                  setRenaming(false);
+                }
+              }}
+            />
+            <div className="muted small" style={{ marginTop: 6 }}>Enter — сохранить, Esc — отмена</div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function TurnRow({
   turn,
   cwd,
@@ -705,6 +776,8 @@ function TurnRow({
   highlight,
   sessionId,
   approvals,
+  topic,
+  topics,
 }: {
   turn: Turn;
   cwd: string;
@@ -715,6 +788,8 @@ function TurnRow({
   highlight?: boolean;
   sessionId: string;
   approvals: ApprovalEntry[];
+  topic?: Topic;
+  topics?: Topic[];
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [bodyTab, setBodyTab] = useState<BodyTab>('answer');
@@ -728,7 +803,7 @@ function TurnRow({
   };
   const chatTitle = useStore((s) => s.chats[sessionId]?.title);
   return (
-    <div className={`turn ${open ? 'open' : ''} ${turn.live ? 'live' : ''} ${turn.error ? 'failed' : ''} ${highlight ? 'flash' : ''}`} ref={ref}>
+    <div className={`turn ${open ? 'open' : ''} ${turn.live ? 'live' : ''} ${turn.error ? 'failed' : ''} ${highlight ? 'flash' : ''} ${topic ? 'has-topic' : ''}`} ref={ref} style={topic ? ({ '--topic': topic.color } as React.CSSProperties) : undefined}>
       <div className="turn-head" onClick={onToggle}>
         <span className="twisty">{open ? '▾' : '▸'}</span>
         <span className="turn-q">
@@ -768,6 +843,7 @@ function TurnRow({
             🛡 {approvals.length}
           </span>
         )}
+        <TopicChip sessionId={sessionId} turn={turn} topic={topic} topics={topics ?? []} />
         <TokensBadge turn={turn} />
         {!turn.live && <FavStar sessionId={sessionId} turn={turn} />}
         {!turn.live && <RemindButton ctx={{ sessionId, cwd, chatTitle: chatTitle ?? '', turn }} />}
@@ -1621,7 +1697,7 @@ function quoteTurn(sessionId: string, turn: Turn, el: Element | null) {
   const answer = texts[texts.length - 1] ?? '';
   const text = (picked || answer).slice(0, 1500);
   if (!text) return toast('В этом ответе нет текста для цитаты', 'error');
-  set((s) => ({ quotes: { ...s.quotes, [sessionId]: { turnId: turn.id, question: turn.prompt.slice(0, 200), text, at: turn.answeredAt ?? turn.startedAt, startedAt: turn.startedAt, selected: !!picked } } }));
+  set((s) => ({ quotes: { ...s.quotes, [sessionId]: { turnId: turn.id, question: ownQuestion(turn.prompt).slice(0, 200), text, at: turn.answeredAt ?? turn.startedAt, startedAt: turn.startedAt, selected: !!picked } } }));
   window.dispatchEvent(new CustomEvent('chat-focus-input', { detail: sessionId }));
 }
 
@@ -1691,6 +1767,10 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
     saveExpanded(chat.sessionId, [...expanded]);
   }, [expanded]);
   const [q, setQ] = useState('');
+  const manualTopics = useStore((s) => s.app?.turnTopics?.[chat.sessionId]);
+  const topicOf = useMemo(() => computeTopics(chat.turns, manualTopics), [chat.turns, manualTopics]);
+  const topicList = useMemo(() => [...new Map([...topicOf.values()].map((t) => [t.key, t])).values()], [topicOf]);
+  const [topicFilter, setTopicFilter] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   /** When the user last scrolled by hand (wheel, touch, keys, scrollbar). Only that can unpin the view. */
@@ -1773,14 +1853,15 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   focusRef.current = focus;
 
   const needle = q.toLowerCase();
+  const byTopic = topicFilter ? chat.turns.filter((t) => topicOf.get(t.id)?.key === topicFilter) : chat.turns;
   const found = needle
-    ? chat.turns.filter(
+    ? byTopic.filter(
         (t) =>
           t.prompt.toLowerCase().includes(needle) ||
           t.more?.some((m) => m.prompt.toLowerCase().includes(needle)) ||
           t.items.some((i) => i.kind === 'text' && i.text.toLowerCase().includes(needle)),
       )
-    : chat.turns;
+    : byTopic;
   // Long chats draw only the last questions; earlier ones come in pages when scrolled to the top.
   const [limit, setLimit] = useState(TURN_PAGE);
   const turns = found.length > limit ? found.slice(-limit) : found;
@@ -1821,6 +1902,16 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
       {tab === 'chat' && (
         <div className="chat-toolbar">
           <input className="search" placeholder="Поиск по вопросам и ответам…" value={q} onChange={(e) => setQ(e.target.value)} />
+          {topicList.length > 0 && (
+            <select className="topic-filter" value={topicFilter} onChange={(e) => setTopicFilter(e.target.value)} title="Показать только вопросы одной темы">
+              <option value="">Все темы</option>
+              {topicList.map((t) => (
+                <option key={t.key} value={t.key}>
+                  ● {t.name} ({t.size})
+                </option>
+              ))}
+            </select>
+          )}
           <span className="muted">
             {found.length} {plural(found.length, 'вопрос', 'вопроса', 'вопросов')}
           </span>
@@ -1887,6 +1978,8 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
                 partialThinking={t === last ? chat.partialThinking : undefined}
                 highlight={focus?.turnId === t.id}
                 approvals={approvalsByTurn.get(t.id) ?? NO_APPROVALS}
+                topic={topicOf.get(t.id)}
+                topics={topicList}
               />
             ))}
             {!chat.turns.length && <div className="empty">Новый чат в {chat.cwd}. Задайте вопрос ниже.</div>}
