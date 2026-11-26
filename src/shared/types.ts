@@ -513,6 +513,8 @@ export interface AppState {
   openrouterModels?: string[];
   /** Topics set by hand in chats: chat id → turn id → topic name ("-" — taken out of any topic). */
   turnTopics?: Record<string, Record<string, string>>;
+  /** Topics also from shared memory files, edited files, task numbers and pages (default on). */
+  topicAuto?: boolean;
   /** Ids of deleted tasks, so a cloud copy doesn't bring them back. */
   tasksDeleted?: string[];
   /** A chat's own «answer ready» sound (absent — the default one). */

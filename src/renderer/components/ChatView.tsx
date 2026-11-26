@@ -704,7 +704,7 @@ function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn
     const all = get().app?.turnTopics ?? {};
     const mine = { ...(all[sessionId] ?? {}) };
     const chat = get().chats[sessionId];
-    if (chat && !t.key.startsWith('n:')) for (const [id, x] of computeTopics(chat.turns, mine)) if (x.key === t.key) mine[id] = name;
+    if (chat && !t.key.startsWith('n:')) for (const [id, x] of computeTopics(chat.turns, mine, get().app?.topicAuto !== false)) if (x.key === t.key) mine[id] = name;
     mine[turn.id] = name;
     void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
   };
@@ -713,7 +713,7 @@ function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn
     const mine = { ...(all[sessionId] ?? {}) };
     // every turn of the topic gets the name (auto-linked ones too)
     const chat = get().chats[sessionId];
-    const members = chat ? computeTopics(chat.turns, mine) : new Map();
+    const members = chat ? computeTopics(chat.turns, mine, get().app?.topicAuto !== false) : new Map();
     for (const [id, t] of members) if (t.key === from.key) mine[id] = to;
     void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
   };
@@ -722,7 +722,7 @@ function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn
       <span
         className={`topic-chip ${topic ? '' : 'empty'}`}
         style={topic ? { background: topic.color } : undefined}
-        title={topic ? `Тема: ${topic.name} · вопросов: ${topic.size}\nКлик — сменить тему, переименовать, убрать` : 'Отнести к теме (вопросы одной задачи — одним цветом)'}
+        title={topic ? `Тема: ${topic.name} · вопросов: ${topic.size}${topic.reasons.length ? `\nСвязаны: ${topic.reasons.join(', ')}` : ''}\nКлик — сменить тему, переименовать, убрать` : 'Отнести к теме (вопросы одной задачи — одним цветом)'}
         onClick={(e) => {
           e.stopPropagation();
           setMenu({ x: e.clientX, y: e.clientY });
@@ -738,6 +738,10 @@ function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn
             ...topics.filter((t) => t.key !== topic?.key).map((t) => ({ label: `● ${t.name}`, action: () => joinTopic(t) })),
             { label: '＋ Новая тема из этого вопроса', action: () => setName(ownQuestion(turn.prompt).replace(/\s+/g, ' ').trim().slice(0, 40) || 'тема') },
             ...(topic ? [{ label: '✎ Переименовать тему…', action: () => setRenaming(true) }, { label: '✕ Убрать из темы', action: () => setName('-') }] : []),
+            {
+              label: get().app?.topicAuto === false ? '○ Связывать автоматически (общая память, файлы, номера задач)' : '● Связывать автоматически (общая память, файлы, номера задач)',
+              action: () => void saveApp({ topicAuto: get().app?.topicAuto === false }),
+            },
           ]}
         />
       )}
@@ -1768,7 +1772,8 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   }, [expanded]);
   const [q, setQ] = useState('');
   const manualTopics = useStore((s) => s.app?.turnTopics?.[chat.sessionId]);
-  const topicOf = useMemo(() => computeTopics(chat.turns, manualTopics), [chat.turns, manualTopics]);
+  const autoTopics = useStore((s) => s.app?.topicAuto !== false);
+  const topicOf = useMemo(() => computeTopics(chat.turns, manualTopics, autoTopics), [chat.turns, manualTopics, autoTopics]);
   const topicList = useMemo(() => [...new Map([...topicOf.values()].map((t) => [t.key, t])).values()], [topicOf]);
   const [topicFilter, setTopicFilter] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
