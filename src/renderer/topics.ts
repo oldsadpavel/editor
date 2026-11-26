@@ -47,6 +47,17 @@ function signals(t: Turn): { key: string; label: string; kind: 'memory' | 'file'
   for (const e of t.edits ?? []) out.push({ key: 'f:' + e.path.replace(/\\/g, '/').toLowerCase(), label: 'файл ' + base(e.path), kind: 'file' });
   const text = ownQuestion(t.prompt) + ' ' + (t.more ?? []).map((m) => m.prompt).join(' ');
   for (const m of text.matchAll(/(?:#|задач[аиуе]?\s*№?\s*|task\s*#?)(\d{3,7})\b/gi)) out.push({ key: 't:' + m[1], label: 'задача ' + m[1], kind: 'task' });
+  // the Insider tracker: tool calls on a task (update_task, complete_task, create_*…) with its number
+  for (const i of t.items) {
+    if (i.kind !== 'tool' || !/insider/i.test(i.name) || !i.detail) continue;
+    try {
+      const d = JSON.parse(i.detail);
+      const id = d.task_id ?? d.taskId ?? (/task/i.test(i.name) ? d.id : undefined);
+      if (id && /^\d{3,7}$/.test(String(id))) out.push({ key: 't:' + id, label: 'задача ' + id, kind: 'task' });
+    } catch {
+      /* cut detail */
+    }
+  }
   for (const m of text.matchAll(/https?:\/\/[^\s)>»"']+/g)) {
     const u = m[0].replace(/[.,;]+$/, '').replace(/[?#].*$/, '').replace(/\/$/, '');
     if (u.split('/').length > 3) out.push({ key: 'u:' + u.toLowerCase(), label: 'страница ' + u.replace(/^https?:\/\//, ''), kind: 'url' });
@@ -62,7 +73,15 @@ function colorOf(key: string) {
 }
 
 /** Topic of every turn that has one. `manual` — names set by hand (turn id → name). */
-export function computeTopics(turns: Turn[], manual: Record<string, string> | undefined, auto = true): Map<string, Topic> {
+/** A task of the editor's «Задачи» made from an answer of this chat: its source question and the command sent from it. */
+export interface ChatTask {
+  title: string;
+  sourceAt: number;
+  command?: string;
+  createdAt: number;
+}
+
+export function computeTopics(turns: Turn[], manual: Record<string, string> | undefined, auto = true, tasks: ChatTask[] = []): Map<string, Topic> {
   const reasons = new Map<string, Set<string>>(); // root-independent: turn id → why it is linked
   const parent = new Map<string, string>();
   const find = (x: string): string => {
@@ -113,6 +132,19 @@ export function computeTopics(turns: Turn[], manual: Record<string, string> | un
       if (u.ids.length < 2 || u.ids.length > limit[u.kind]) continue;
       for (const id of u.ids.slice(1)) union(u.ids[0], id);
       for (const id of u.ids) note(id, u.label);
+    }
+  }
+  // «Задачи»: the question a task came from + the question its «▶ Выполнить в чате» sent
+  for (const task of tasks) {
+    const src = turns.find((x) => x.startedAt === task.sourceAt);
+    if (!src) continue;
+    note(src.id, 'задача «' + task.title.slice(0, 40) + '»');
+    const cmd = task.command?.trim();
+    if (!cmd) continue;
+    const run = turns.find((x) => x.startedAt > task.createdAt && (x.prompt.trim() === cmd || x.more?.some((m) => m.prompt.trim() === cmd)));
+    if (run) {
+      union(src.id, run.id);
+      note(run.id, 'задача «' + task.title.slice(0, 40) + '»');
     }
   }
   // hand-made: one name — one topic

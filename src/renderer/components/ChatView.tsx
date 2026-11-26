@@ -687,6 +687,10 @@ function FavStar({ sessionId, turn }: { sessionId: string; turn: Turn }) {
   );
 }
 
+/** Tasks of «Задачи» made from this chat (for topics). */
+const chatTasksOf = (sessionId: string) =>
+  (get().app?.tasks ?? []).filter((x) => x.source?.sessionId === sessionId).map((x) => ({ title: x.title, sourceAt: x.source!.turnStartedAt, command: x.command, createdAt: x.createdAt }));
+
 /** The topic label of a turn (or a faint # on hover): click — put into a topic, a new one, rename, take out. */
 function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn: Turn; topic?: Topic; topics: Topic[] }) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -704,7 +708,7 @@ function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn
     const all = get().app?.turnTopics ?? {};
     const mine = { ...(all[sessionId] ?? {}) };
     const chat = get().chats[sessionId];
-    if (chat && !t.key.startsWith('n:')) for (const [id, x] of computeTopics(chat.turns, mine, get().app?.topicAuto !== false)) if (x.key === t.key) mine[id] = name;
+    if (chat && !t.key.startsWith('n:')) for (const [id, x] of computeTopics(chat.turns, mine, get().app?.topicAuto !== false, chatTasksOf(sessionId))) if (x.key === t.key) mine[id] = name;
     mine[turn.id] = name;
     void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
   };
@@ -713,7 +717,7 @@ function TopicChip({ sessionId, turn, topic, topics }: { sessionId: string; turn
     const mine = { ...(all[sessionId] ?? {}) };
     // every turn of the topic gets the name (auto-linked ones too)
     const chat = get().chats[sessionId];
-    const members = chat ? computeTopics(chat.turns, mine, get().app?.topicAuto !== false) : new Map();
+    const members = chat ? computeTopics(chat.turns, mine, get().app?.topicAuto !== false, chatTasksOf(sessionId)) : new Map();
     for (const [id, t] of members) if (t.key === from.key) mine[id] = to;
     void saveApp({ turnTopics: { ...all, [sessionId]: mine } });
   };
@@ -1773,7 +1777,12 @@ export function ChatView({ chat }: { chat: ChatSnapshot }) {
   const [q, setQ] = useState('');
   const manualTopics = useStore((s) => s.app?.turnTopics?.[chat.sessionId]);
   const autoTopics = useStore((s) => s.app?.topicAuto !== false);
-  const topicOf = useMemo(() => computeTopics(chat.turns, manualTopics, autoTopics), [chat.turns, manualTopics, autoTopics]);
+  const allTasks = useStore((s) => s.app?.tasks);
+  const chatTasks = useMemo(
+    () => (allTasks ?? []).filter((x) => x.source?.sessionId === chat.sessionId).map((x) => ({ title: x.title, sourceAt: x.source!.turnStartedAt, command: x.command, createdAt: x.createdAt })),
+    [allTasks, chat.sessionId],
+  );
+  const topicOf = useMemo(() => computeTopics(chat.turns, manualTopics, autoTopics, chatTasks), [chat.turns, manualTopics, autoTopics, chatTasks]);
   const topicList = useMemo(() => [...new Map([...topicOf.values()].map((t) => [t.key, t])).values()], [topicOf]);
   const [topicFilter, setTopicFilter] = useState('');
   const scroller = useRef<HTMLDivElement>(null);
