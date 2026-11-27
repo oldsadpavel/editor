@@ -23,8 +23,8 @@ const LINES = [
 const shuffled = () => [...LINES].sort(() => Math.random() - 0.5);
 
 /** Startup screen: the MPI logo comes alive (data runs along the wires) with joke status lines. */
-export function Boot() {
-  const [lines] = useState(shuffled);
+export function Boot({ note, extra }: { note?: string; extra?: string[] } = {}) {
+  const [lines] = useState(() => [...shuffled(), ...(extra ?? [])].sort(() => Math.random() - 0.5));
   const [i, setI] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setI((x) => x + 1), 1300);
@@ -42,6 +42,7 @@ export function Boot() {
           <span>.</span>
         </span>
       </div>
+      {note && <div className="boot-note">{note}</div>}
       <div className="boot-name">MPI · Meat Proxy Interface</div>
     </div>
   );

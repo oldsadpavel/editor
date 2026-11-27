@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../renderer/styles.css';
 import './mobile.css';
+import { Boot } from '../renderer/components/Boot';
+import { Logo } from '../renderer/components/Logo';
 import { finishLogin, logout, signedIn, startLogin, who } from './auth';
 import { log, setAppVersion, startLogging } from './log';
 import { check, currentBuild, install, type Available } from './update';
@@ -42,6 +44,7 @@ function Root() {
   if (!authed)
     return (
       <div className="m-login">
+        <Logo size={110} animated className="boot-logo" />
         <div className="m-logo">MPI</div>
         <div className="muted">Управление редактором на компьютере</div>
         <button
@@ -94,10 +97,26 @@ function Connected({ onLogout }: { onLogout: () => void }) {
         </button>
       </div>
       {link.state !== 'online' && link.error && <div className="m-banner">{link.error}</div>}
-      {Main ? <Main /> : <div className="m-wait muted">{link.state === 'online' ? 'Загружаю…' : 'Жду компьютер…'}</div>}
+      {Main ? (
+        <Main />
+      ) : (
+        <div className="m-wait">
+          <Boot note={link.state === 'online' ? undefined : link.error ? link.error : 'Жду компьютер…'} extra={PHONE_LINES} />
+        </div>
+      )}
     </div>
   );
 }
+
+/** Phone-only lines for the loading screen (mixed with the editor's own). */
+const PHONE_LINES = [
+  'Ищем компьютер через Insider',
+  'Будим мясной прокси на расстоянии',
+  'Протягиваем провод через весь город',
+  'Уговариваем компьютер не спать',
+  'Передаём кожаному привет из кармана',
+  'Сжимаем историю чатов в карман',
+];
 
 /** ⟳ — checks GitHub for a newer APK; found — downloads it and opens the installer. Checked by itself too. */
 function UpdateButton() {
