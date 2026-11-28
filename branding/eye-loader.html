@@ -35,17 +35,57 @@
     18%, 72% { transform: scaleX(1); }
     80%, 100% { transform: scaleX(1.6); }
   }
-  /* blinks: twice per loop, the second one a quick double */
-  .eye .lid-top { animation: lidTop 7s infinite; }
-  .eye .lid-bot { animation: lidBot 7s infinite; }
-  @keyframes lidTop {
-    0%, 32%, 37%, 86%, 89.5%, 92%, 95.5%, 100% { transform: translateY(-50px); }
-    34.5%, 88%, 94% { transform: translateY(22px); }
+  /*
+   * Creature lids: what stays open is an almond (lens) that narrows to a slit and shuts — the lid edges follow the
+   * eye's shape, not two half-moons. Two kinds, picked at random per blink: horizontal lids (top and bottom meet) and
+   * vertical ones (from the sides, like a reptile's third eyelid). Fast close (~0.1 s), short hold, slower open.
+   */
+  .eye .opening { transform-box: view-box; transform-origin: 50px 52px; }
+  .eye .open-v { transform-origin: 50px 50px; display: none; }
+  .eye.blink-v .open-v { display: inline; }
+  .eye.blink-v .open-h { display: none; }
+  .eye.blink-h .open-h { animation: shutH 0.36s; }
+  .eye.blink-v .open-v { animation: shutV 0.42s; }
+  @keyframes shutH {
+    0% { transform: scaleY(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
+    28% { transform: scaleY(0); }
+    36% { transform: scaleY(0); animation-timing-function: cubic-bezier(.15, .6, .35, 1); }
+    100% { transform: scaleY(1); }
   }
-  @keyframes lidBot {
-    0%, 32%, 37%, 86%, 89.5%, 92%, 95.5%, 100% { transform: translateY(50px); }
-    34.5%, 88%, 94% { transform: translateY(-22px); }
+  @keyframes shutV {
+    0% { transform: scaleX(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
+    30% { transform: scaleX(0); }
+    40% { transform: scaleX(0); animation-timing-function: cubic-bezier(.15, .6, .35, 1); }
+    100% { transform: scaleX(1); }
   }
+  /* ---------- states ---------- */
+  .eye .err-tint { opacity: 0; mix-blend-mode: multiply; }
+  /* waiting for your answer: stares at you, wide pupil, a pulsing yellow halo */
+  .eye.state-wait .look { animation: none; transform: none; }
+  .eye.state-wait .pupil { animation: wide 1.6s ease-in-out infinite alternate; }
+  @keyframes wide { from { transform: scaleX(1.9); } to { transform: scaleX(2.6); } }
+  .eye.state-wait svg { animation: halo 1.6s ease-in-out infinite alternate; }
+  @keyframes halo { from { filter: drop-shadow(0 0 1px #e0b040); } to { filter: drop-shadow(0 0 7px #f2c14e); } }
+  /* stopped: the lids shut, slow breathing */
+  .eye.state-stop .open-h { transform: scaleY(0); }
+  .eye.state-stop .glow { animation: none; opacity: .5; }
+  .eye.state-stop svg { animation: breathe 3.2s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(.96); } }
+  .eye .seam { display: none; }
+  .eye.state-stop .seam { display: inline; }
+  /* error: red cast, a thin trembling slit */
+  .eye.state-error .err-tint { opacity: .65; }
+  .eye.state-error .look { animation: tremble .18s steps(2) infinite; }
+  @keyframes tremble { 0% { transform: translate(-1.2px, 0); } 100% { transform: translate(1.2px, .5px); } }
+  .eye.state-error .pupil { animation: none; transform: scaleX(.55); }
+  /* vertical lids are a thin membrane: the eye's glow shows through a little */
+  .eye .lid-v { opacity: 0; }
+  .eye .lid-h { opacity: 1; }
+  .eye.blink-v .lid-v { opacity: 1; }
+  .eye.blink-v .lid-h { opacity: 0; }
+  /* while the lid is down the eye sinks a hair, as eyes do */
+  .eye.blink .look-wrap { animation: sink 0.36s; }
+  @keyframes sink { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(2px); } }
   /* a slow «breathing» glow of the iris */
   .eye .glow { animation: glow 2.4s ease-in-out infinite alternate; }
   @keyframes glow { from { opacity: .55; } to { opacity: 1; } }
@@ -83,14 +123,29 @@
         <line x1="74" y1="26" x2="66" y2="34"/><line x1="26" y1="74" x2="34" y2="66"/>
       </g>
       <!-- the pupil looks around -->
-      <g class="look">
+      <g class="look-wrap"><g class="look">
         <ellipse class="pupil" cx="50" cy="50" rx="4.2" ry="27" fill="#07080a"/>
         <ellipse cx="50" cy="50" rx="7" ry="29" fill="none" stroke="C3" stroke-opacity=".5" stroke-width="1.5" class="pupil"/>
-      </g>
+      </g></g>
       <circle cx="50" cy="50" r="36" fill="url(#shade-ID)"/>
-      <!-- eyelids -->
-      <circle class="lid-top" cx="50" cy="-30" r="62" fill="#2a2c31" stroke="#15161a" stroke-width="2"/>
-      <circle class="lid-bot" cx="50" cy="130" r="62" fill="#2a2c31" stroke="#15161a" stroke-width="2"/>
+      <!-- eyelids: everything but the almond-shaped opening (which narrows to a slit when it blinks) -->
+      <!-- error: a red cast over the iris -->
+      <circle class="err-tint" cx="50" cy="50" r="36" fill="#e02626"/>
+      <mask id="lids-ID" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+        <rect x="0" y="0" width="100" height="100" fill="#fff"/>
+        <path class="opening open-h" d="M -6 52 Q 50 -14 106 52 Q 50 118 -6 52 Z" fill="#000"/>
+        <path class="opening open-v" d="M 50 -6 Q -14 50 50 106 Q 114 50 50 -6 Z" fill="#000"/>
+      </mask>
+      <g mask="url(#lids-ID)">
+        <rect class="lid-h" x="0" y="0" width="100" height="100" fill="#2a2c31"/>
+        <rect class="lid-v" x="0" y="0" width="100" height="100" fill="C3" fill-opacity=".9"/>
+      </g>
+      <!-- closed (stopped): the seam of the shut lids, lashes down -->
+      <path class="seam" d="M 16 50 Q 50 64 84 50" fill="none" stroke="#5b616b" stroke-width="2.2" stroke-linecap="round"/>
+      <g class="seam" stroke="#5b616b" stroke-width="1.6" stroke-linecap="round"><line x1="30" y1="56" x2="28" y2="62"/><line x1="42" y1="59" x2="41" y2="65"/><line x1="58" y1="59" x2="59" y2="65"/><line x1="70" y1="56" x2="72" y2="62"/></g>
+      <!-- the lid's edge, along the opening -->
+      <path class="opening open-h edge" d="M -6 52 Q 50 -14 106 52 Q 50 118 -6 52 Z" fill="none" stroke="#0d0e10" stroke-width="2.5"/>
+      <path class="opening open-v edge" d="M 50 -6 Q -14 50 50 106 Q 114 50 50 -6 Z" fill="none" stroke="#0d0e10" stroke-width="2.5"/>
     </g>
     <!-- glare -->
     <ellipse cx="38" cy="32" rx="8" ry="5" fill="#fff" fill-opacity=".55" transform="rotate(-30 38 32)"/>
@@ -114,6 +169,20 @@
   <div class="cell"><span class="eye" data-size="24"></span>24 px</div>
   <div class="cell"><span class="eye" data-size="48"></span>48 px</div>
   <div class="cell"><span class="eye" data-size="140"></span>140 px (экран загрузки)</div>
+</div>
+
+<h2>Состояния (янтарный / изумрудный)</h2>
+<div class="row">
+  <div class="cell"><span style="display:flex;gap:10px"><span data-variant="a"><span class="eye" data-size="56"></span></span><span data-variant="b"><span class="eye" data-size="56"></span></span></span>работает: смотрит по сторонам, моргает</div>
+  <div class="cell"><span style="display:flex;gap:10px"><span data-variant="a"><span class="eye state-wait" data-size="56"></span></span><span data-variant="b"><span class="eye state-wait" data-size="56"></span></span></span>ждёт вашего ответа / разрешения</div>
+  <div class="cell"><span style="display:flex;gap:10px"><span data-variant="a"><span class="eye state-stop" data-size="56"></span></span><span data-variant="b"><span class="eye state-stop" data-size="56"></span></span></span>остановлено (спит)</div>
+  <div class="cell"><span style="display:flex;gap:10px"><span data-variant="a"><span class="eye state-error" data-size="56"></span></span><span data-variant="b"><span class="eye state-error" data-size="56"></span></span></span>ошибка</div>
+</div>
+<div class="row" style="margin-top:14px">
+  <div class="cell"><div class="mock" data-variant="a"><span class="eye" data-size="18"></span> Claude работает…</div></div>
+  <div class="cell"><div class="mock" data-variant="a"><span class="eye state-wait" data-size="18"></span> Ждёт вашего ответа</div></div>
+  <div class="cell"><div class="mock" data-variant="a"><span class="eye state-stop" data-size="18"></span> Остановлено</div></div>
+  <div class="cell"><div class="mock" data-variant="a"><span class="eye state-error" data-size="18"></span> Ошибка</div></div>
 </div>
 
 <h2>Как это будет выглядеть в редакторе — сейчас и с «оком»</h2>
@@ -142,8 +211,29 @@
     el.style.width = s;
     el.style.height = s;
     const delay = -(Math.random() * 7).toFixed(2) + 's';
-    el.querySelectorAll('.look, .pupil, .lid-top, .lid-bot').forEach((x) => (x.style.animationDelay = delay));
+    el.querySelectorAll('.look, .pupil').forEach((x) => (x.style.animationDelay = delay));
+    blinkLater(el);
   });
+
+  /** One blink: the class restarts the animation; sometimes a second one right after (a double blink). */
+  function blink(el, then, kind) {
+    // horizontal (top + bottom) or vertical (from the sides) lids — at random; a double blink keeps its kind
+    const k = kind ?? (Math.random() < 0.5 ? 'h' : 'v');
+    el.classList.remove('blink', 'blink-h', 'blink-v');
+    void el.offsetWidth; // restart
+    el.classList.add('blink', 'blink-' + k);
+    setTimeout(() => {
+      el.classList.remove('blink', 'blink-h', 'blink-v');
+      then?.(k);
+    }, k === 'v' ? 440 : 380);
+  }
+  /** Next blink in 2–6 s, one in five a double. */
+  function blinkLater(el) {
+    // a sleeping (stopped) eye doesn't blink; a waiting one blinks less often
+    if (el.classList.contains('state-stop')) return;
+    if (el.classList.contains('state-wait') && Math.random() < 0.5) return void setTimeout(() => blinkLater(el), 3000);
+    setTimeout(() => blink(el, (k) => (Math.random() < 0.2 ? setTimeout(() => blink(el, () => blinkLater(el), k), 120) : blinkLater(el))), 2000 + Math.random() * 4000);
+  }
 </script>
 </body>
 </html>
