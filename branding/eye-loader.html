@@ -20,13 +20,14 @@
   .eye svg { width: 100%; height: 100%; display: block; overflow: visible; }
   /* looks around: centre, left, right, up, a quick glance down-right, back */
   .eye .look { animation: look 7s ease-in-out infinite; transform-box: fill-box; }
+  .eye .look { transform-box: view-box; transform-origin: 50px 50px; }
   @keyframes look {
-    0%, 12% { transform: translate(0, 0); }
-    18%, 30% { transform: translate(-13px, 2px); }
-    36%, 48% { transform: translate(13px, 1px); }
-    54%, 62% { transform: translate(2px, -10px); }
-    66%, 72% { transform: translate(10px, 8px); }
-    78%, 100% { transform: translate(0, 0); }
+    0%, 12% { transform: translate(0, 0) rotate(0deg); }
+    18%, 30% { transform: translate(-13px, 2px) rotate(-14deg); }
+    36%, 48% { transform: translate(13px, 1px) rotate(14deg); }
+    54%, 62% { transform: translate(2px, -10px) rotate(4deg); }
+    66%, 72% { transform: translate(10px, 8px) rotate(22deg); }
+    78%, 100% { transform: translate(0, 0) rotate(0deg); }
   }
   /* the slit widens when it looks straight at you */
   .eye .pupil { animation: dilate 7s ease-in-out infinite; transform-origin: 50px 50px; }
@@ -47,10 +48,18 @@
   .eye.blink-h .open-h { animation: shutH 0.36s; }
   .eye.blink-v .open-v { animation: shutV 0.42s; }
   @keyframes shutH {
-    0% { transform: scaleY(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
-    28% { transform: scaleY(0); }
-    36% { transform: scaleY(0); animation-timing-function: cubic-bezier(.15, .6, .35, 1); }
-    100% { transform: scaleY(1); }
+    0% { transform: translateY(0) rotate(0deg) scaleY(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
+    28% { transform: translateY(6px) rotate(-16deg) scaleY(0); }
+    36% { transform: translateY(6px) rotate(-16deg) scaleY(0); animation-timing-function: cubic-bezier(.15, .6, .35, 1); }
+    100% { transform: translateY(0) rotate(0deg) scaleY(1); }
+  }
+  /* squint: the lids half-close into a tilted almond, hold a moment as if looking closer, open again */
+  .eye.blink-s .open-h { animation: squint 1.25s; }
+  @keyframes squint {
+    0% { transform: translateY(0) rotate(0deg) scaleY(1); animation-timing-function: cubic-bezier(.4, 0, .6, 1); }
+    22% { transform: translateY(4px) rotate(-18deg) scaleY(.42); }
+    70% { transform: translateY(4px) rotate(-18deg) scaleY(.36); animation-timing-function: cubic-bezier(.3, .6, .4, 1); }
+    100% { transform: translateY(0) rotate(0deg) scaleY(1); }
   }
   @keyframes shutV {
     0% { transform: scaleX(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
@@ -218,14 +227,16 @@
   /** One blink: the class restarts the animation; sometimes a second one right after (a double blink). */
   function blink(el, then, kind) {
     // horizontal (top + bottom) or vertical (from the sides) lids — at random; a double blink keeps its kind
-    const k = kind ?? (Math.random() < 0.5 ? 'h' : 'v');
-    el.classList.remove('blink', 'blink-h', 'blink-v');
+    // horizontal 45 %, vertical 30 %, squint 25 % (a squint is never doubled)
+    const r = Math.random();
+    const k = kind ?? (r < 0.45 ? 'h' : r < 0.75 ? 'v' : 's');
+    el.classList.remove('blink', 'blink-h', 'blink-v', 'blink-s');
     void el.offsetWidth; // restart
     el.classList.add('blink', 'blink-' + k);
     setTimeout(() => {
-      el.classList.remove('blink', 'blink-h', 'blink-v');
-      then?.(k);
-    }, k === 'v' ? 440 : 380);
+      el.classList.remove('blink', 'blink-h', 'blink-v', 'blink-s');
+      then?.(k === 's' ? 'h' : k);
+    }, k === 'v' ? 440 : k === 's' ? 1280 : 380);
   }
   /** Next blink in 2–6 s, one in five a double. */
   function blinkLater(el) {
