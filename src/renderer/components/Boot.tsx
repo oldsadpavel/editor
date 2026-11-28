@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Logo } from './Logo';
+import { Eye } from './Eye';
 
 /** What the editor is "doing" while it starts. Shown in random order, a new one every ~1.3 s. */
 const LINES = [
@@ -32,7 +32,7 @@ export function Boot({ note, extra }: { note?: string; extra?: string[] } = {}) 
   }, []);
   return (
     <div className="boot">
-      <Logo size={150} animated className="boot-logo" />
+      <Eye size={130} className="boot-logo" />
       <div className="boot-shadow" aria-hidden="true" />
       <div key={i} className="boot-line">
         {lines[i % lines.length]}

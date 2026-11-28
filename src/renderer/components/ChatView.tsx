@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { computeTopics, ownQuestion, splitReply, type Topic } from '../topics';
 import { ContextMenu } from './ContextMenu';
+import { Eye } from './Eye';
 import type { ApprovalEntry, ChatSnapshot, FavoriteAnswer, FileEdit, PermissionRequest, Turn, TurnAttachment, TurnItem, TurnItemTool } from '../../shared/types';
 import { call, fileUrl } from '../api';
 import { isImage, pasteHasFiles, readPastedFiles } from '../clipboard';
@@ -322,9 +323,15 @@ export function workerName(model?: string) {
   const name = id.split('/').pop() ?? id;
   return name.replace(/-latest$/, '').replace(/^./, (c) => c.toUpperCase());
 }
-function WorkerName({ sessionId }: { sessionId: string }) {
+/** «Око» + who works: amber for Claude, emerald for an OpenRouter model; staring when the chat waits for you. */
+function WorkingEye({ sessionId }: { sessionId: string }) {
   const model = useStore((s) => s.chats[sessionId]?.model);
-  return <>{workerName(model)}</>;
+  const waiting = useStore((s) => s.chats[sessionId]?.status === 'waiting');
+  return (
+    <>
+      <Eye size={20} state={waiting ? 'wait' : 'run'} variant={model?.startsWith('or:') ? 'emerald' : 'amber'} /> {workerName(model)} {waiting ? 'ждёт вашего ответа' : 'работает…'}
+    </>
+  );
 }
 
 function TurnBody({
@@ -422,7 +429,7 @@ function TurnBody({
           {partial && <Markdown text={partial} cwd={cwd} />}
           {turn.live && !partial && (
             <div className="thinking">
-              <span className="spinner" /> <WorkerName sessionId={sessionId} /> работает…
+              <WorkingEye sessionId={sessionId} />
             </div>
           )}
           {turn.error && <div className="turn-error">⚠ {turn.error}</div>}

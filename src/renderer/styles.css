@@ -1100,3 +1100,61 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 .turn-head .turn-q { min-width: 140px; }
 .topic-chip { max-width: 110px; flex: 0 1 auto; }
 .boot-note { margin-top: 12px; max-width: 86%; text-align: center; font-size: 12.5px; color: #e0a04f; }
+
+/* ---------- «Око» (components/Eye.tsx, design: branding/eye-loader.html) ---------- */
+.eye { display: inline-block; flex: none; vertical-align: middle; }
+.eye svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.eye .look { animation: eye-look 7s ease-in-out infinite; }
+@keyframes eye-look {
+  0%, 12% { transform: translate(0, 0); }
+  18%, 30% { transform: translate(-13px, 2px); }
+  36%, 48% { transform: translate(13px, 1px); }
+  54%, 62% { transform: translate(2px, -10px); }
+  66%, 72% { transform: translate(10px, 8px); }
+  78%, 100% { transform: translate(0, 0); }
+}
+.eye .pupil { animation: eye-dilate 7s ease-in-out infinite; transform-origin: 50px 50px; }
+@keyframes eye-dilate { 0%, 12% { transform: scaleX(1.6); } 18%, 72% { transform: scaleX(1); } 80%, 100% { transform: scaleX(1.6); } }
+.eye .glow { animation: eye-glow 2.4s ease-in-out infinite alternate; }
+@keyframes eye-glow { from { opacity: .55; } to { opacity: 1; } }
+.eye .opening { transform-box: view-box; transform-origin: 50px 52px; }
+.eye .open-v { transform-origin: 50px 50px; display: none; }
+.eye.blink-v .open-v { display: inline; }
+.eye.blink-v .open-h { display: none; }
+.eye.blink-h .open-h { animation: eye-shut-h 0.36s; }
+.eye.blink-v .open-v { animation: eye-shut-v 0.42s; }
+@keyframes eye-shut-h {
+  0% { transform: scaleY(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
+  28%, 36% { transform: scaleY(0); }
+  36% { animation-timing-function: cubic-bezier(.15, .6, .35, 1); }
+  100% { transform: scaleY(1); }
+}
+@keyframes eye-shut-v {
+  0% { transform: scaleX(1); animation-timing-function: cubic-bezier(.55, 0, .9, .45); }
+  30%, 40% { transform: scaleX(0); }
+  40% { animation-timing-function: cubic-bezier(.15, .6, .35, 1); }
+  100% { transform: scaleX(1); }
+}
+.eye .lid-v { opacity: 0; }
+.eye.blink-v .lid-v { opacity: 1; }
+.eye.blink-v .lid-h { opacity: 0; }
+.eye .err-tint { opacity: 0; mix-blend-mode: multiply; }
+.eye .seam { display: none; }
+/* waiting for you: stares, wide pupil, pulsing halo */
+.eye-wait .look { animation: none; transform: none; }
+.eye-wait .pupil { animation: eye-wide 1.6s ease-in-out infinite alternate; }
+@keyframes eye-wide { from { transform: scaleX(1.9); } to { transform: scaleX(2.6); } }
+.eye-wait svg { animation: eye-halo 1.6s ease-in-out infinite alternate; }
+@keyframes eye-halo { from { filter: drop-shadow(0 0 1px #e0b040); } to { filter: drop-shadow(0 0 6px #f2c14e); } }
+/* stopped: shut, lashes, breathing */
+.eye-stop .open-h { transform: scaleY(0); }
+.eye-stop .glow { animation: none; opacity: .5; }
+.eye-stop .seam { display: inline; }
+.eye-stop svg { animation: eye-breathe 3.2s ease-in-out infinite; }
+@keyframes eye-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(.96); } }
+/* error: red cast, trembling slit */
+.eye-error .err-tint { opacity: .65; }
+.eye-error .look { animation: eye-tremble .18s steps(2) infinite; }
+@keyframes eye-tremble { 0% { transform: translate(-1.2px, 0); } 100% { transform: translate(1.2px, .5px); } }
+.eye-error .pupil { animation: none; transform: scaleX(.55); }
+.thinking .eye { margin-right: 2px; }
