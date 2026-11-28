@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>«Око» в стиле Insider — превью</title>
+<style>
+  body { margin: 0; padding: 28px; background: #f3f2ef; color: #1c1b19; font: 14px 'Inter', system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 28px 0 10px; }
+  .sub { color: #77746e; margin-bottom: 8px; }
+  .row { display: flex; align-items: flex-end; gap: 34px; flex-wrap: wrap; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8a867f; font-size: 12px; }
+  .card { background: #fff; border: 1px solid #e3e1dc; border-radius: 10px; padding: 10px 14px; display: inline-flex; align-items: center; gap: 8px; color: #555; }
+  .boot { width: 220px; height: 170px; background: #f3f2ef; border: 1px dashed #d8d5cf; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+  .bob { animation: bob .9s ease-in-out infinite alternate; }
+  @keyframes bob { from { transform: translateY(0); } to { transform: translateY(-6px); } }
+
+  /* ---- the shared eye motion (as in the editor) ---- */
+  .eye svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .eye { display: inline-block; }
+  .look { animation: look 7s ease-in-out infinite; }
+  @keyframes look {
+    0%, 12% { transform: translate(0, 0); } 18%, 30% { transform: translate(-13px, 2px); } 36%, 48% { transform: translate(13px, 1px); }
+    54%, 62% { transform: translate(2px, -10px); } 66%, 72% { transform: translate(10px, 8px); } 78%, 100% { transform: translate(0, 0); }
+  }
+  .pupil { animation: dilate 7s ease-in-out infinite; transform-origin: 50px 50px; }
+  @keyframes dilate { 0%, 12% { transform: scaleX(1.6); } 18%, 72% { transform: scaleX(1); } 80%, 100% { transform: scaleX(1.6); } }
+  .opening { transform-box: view-box; transform-origin: 50px 52px; }
+  .open-v { transform-origin: 50px 50px; display: none; }
+  .eye.blink-v .open-v { display: inline; }
+  .eye.blink-v .open-h { display: none; }
+  .eye.blink-h .open-h { animation: shutH .36s; }
+  .eye.blink-v .open-v { animation: shutV .42s; }
+  @keyframes shutH { 0% { transform: scaleY(1); animation-timing-function: cubic-bezier(.55,0,.9,.45); } 28%, 36% { transform: scaleY(0); } 36% { animation-timing-function: cubic-bezier(.15,.6,.35,1); } 100% { transform: scaleY(1); } }
+  @keyframes shutV { 0% { transform: scaleX(1); animation-timing-function: cubic-bezier(.55,0,.9,.45); } 30%, 40% { transform: scaleX(0); } 40% { animation-timing-function: cubic-bezier(.15,.6,.35,1); } 100% { transform: scaleX(1); } }
+  .lid-v { opacity: 0; } .eye.blink-v .lid-v { opacity: 1; } .eye.blink-v .lid-h { opacity: 0; }
+
+  /* B: the dot of «i» */
+  .logo-in { position: relative; width: 48px; height: 48px; background: #1c1b19; border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; color: #fff; font: 700 17px 'Inter', system-ui, sans-serif; letter-spacing: .2px; }
+  .logo-in .i { position: relative; display: inline-block; }
+  .logo-in .i-dotless { font-family: inherit; }
+  .logo-in .eye-dot { position: absolute; left: 50%; top: .02em; transform: translateX(-50%); width: .4em !important; height: .4em !important; }
+</style>
+</head>
+<body>
+<h1>«Око» в стиле Insider</h1>
+<div class="sub">Под логотип «in»: чёрный скруглённый квадрат, белый, строго. Движения те же, что в редакторе: смотрит по сторонам, моргает (веки горизонтальные или вертикальные, случайно).</div>
+
+<!-- A: monochrome eye in the logo square -->
+<template id="tpl-a">
+  <svg viewBox="0 0 100 100">
+    <defs>
+      <clipPath id="ball-ID"><ellipse cx="50" cy="52" rx="34" ry="34"/></clipPath>
+      <mask id="lids-ID" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+        <rect width="100" height="100" fill="#fff"/>
+        <path class="opening open-h" d="M 4 52 Q 50 -2 96 52 Q 50 106 4 52 Z" fill="#000"/>
+        <path class="opening open-v" d="M 50 6 Q -4 52 50 98 Q 104 52 50 6 Z" fill="#000"/>
+      </mask>
+    </defs>
+    <rect x="2" y="2" width="96" height="96" rx="28" fill="#1c1b19"/>
+    <g clip-path="url(#ball-ID)">
+      <circle cx="50" cy="52" r="34" fill="#f6f5f2"/>
+      <circle cx="50" cy="52" r="34" fill="none" stroke="#d9d6cf" stroke-width="6"/>
+      <g class="look"><ellipse class="pupil" cx="50" cy="52" rx="5" ry="25" fill="#1c1b19"/></g>
+      <g mask="url(#lids-ID)">
+        <rect class="lid-h" width="100" height="100" fill="#1c1b19"/>
+        <rect class="lid-v" width="100" height="100" fill="#3a3835"/>
+      </g>
+    </g>
+    <circle cx="38" cy="38" r="4.5" fill="#fff" fill-opacity=".9"/>
+  </svg>
+</template>
+
+<!-- C: amber iris in the logo square -->
+<template id="tpl-c">
+  <svg viewBox="0 0 100 100">
+    <defs>
+      <radialGradient id="iris-ID" cx="45%" cy="42%" r="62%"><stop offset="0" stop-color="#ffd29a"/><stop offset=".55" stop-color="#e08a3c"/><stop offset="1" stop-color="#7a3510"/></radialGradient>
+      <clipPath id="ball-ID"><circle cx="50" cy="52" r="33"/></clipPath>
+      <mask id="lids-ID" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+        <rect width="100" height="100" fill="#fff"/>
+        <path class="opening open-h" d="M 4 52 Q 50 -2 96 52 Q 50 106 4 52 Z" fill="#000"/>
+        <path class="opening open-v" d="M 50 6 Q -4 52 50 98 Q 104 52 50 6 Z" fill="#000"/>
+      </mask>
+    </defs>
+    <rect x="2" y="2" width="96" height="96" rx="28" fill="#1c1b19"/>
+    <g clip-path="url(#ball-ID)">
+      <circle cx="50" cy="52" r="33" fill="url(#iris-ID)"/>
+      <g class="look"><ellipse class="pupil" cx="50" cy="52" rx="4.2" ry="25" fill="#07080a"/></g>
+      <g mask="url(#lids-ID)">
+        <rect class="lid-h" width="100" height="100" fill="#1c1b19"/>
+        <rect class="lid-v" width="100" height="100" fill="#7a3510" fill-opacity=".9"/>
+      </g>
+    </g>
+    <ellipse cx="39" cy="38" rx="7" ry="4.5" fill="#fff" fill-opacity=".55" transform="rotate(-30 39 38)"/>
+  </svg>
+</template>
+
+<!-- B: a tiny round eye — the dot of «i» -->
+<template id="tpl-b">
+  <svg viewBox="0 0 100 100">
+    <defs>
+      <clipPath id="ball-ID"><circle cx="50" cy="50" r="44"/></clipPath>
+      <mask id="lids-ID" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+        <rect width="100" height="100" fill="#fff"/>
+        <path class="opening open-h" d="M -6 50 Q 50 -16 106 50 Q 50 116 -6 50 Z" fill="#000"/>
+        <path class="opening open-v" d="M 50 -6 Q -16 50 50 106 Q 116 50 50 -6 Z" fill="#000"/>
+      </mask>
+    </defs>
+    <g clip-path="url(#ball-ID)">
+      <circle cx="50" cy="50" r="44" fill="#fff"/>
+      <g class="look"><ellipse class="pupil" cx="50" cy="50" rx="9" ry="30" fill="#1c1b19"/></g>
+      <g mask="url(#lids-ID)">
+        <rect class="lid-h" width="100" height="100" fill="#1c1b19"/>
+        <rect class="lid-v" width="100" height="100" fill="#55524d"/>
+      </g>
+    </g>
+  </svg>
+</template>
+
+<h2>A — моно: белое око в квадрате логотипа</h2>
+<div class="row" data-t="a">
+  <div class="cell"><span class="eye" data-size="14"></span>14</div>
+  <div class="cell"><span class="eye" data-size="18"></span>18</div>
+  <div class="cell"><span class="eye" data-size="24"></span>24</div>
+  <div class="cell"><span class="eye" data-size="44"></span>44 (загрузка данных)</div>
+  <div class="cell"><span class="eye" data-size="72"></span>72 (экран загрузки)</div>
+</div>
+
+<h2>B — «in», у которого точка над «i» — моргающее око</h2>
+<div class="row" data-t="b">
+  <div class="cell"><span class="logo-in" style="width:48px;height:48px;font-size:17px"><span class="i">ı<span class="eye eye-dot" data-size="7"></span></span>n</span>48 (как сейчас)</div>
+  <div class="cell"><span class="logo-in bob" style="width:72px;height:72px;border-radius:21px;font-size:26px"><span class="i">ı<span class="eye eye-dot" data-size="11"></span></span>n</span>72 (экран загрузки)</div>
+  <div class="cell"><span class="logo-in" style="width:120px;height:120px;border-radius:34px;font-size:44px"><span class="i">ı<span class="eye eye-dot" data-size="18"></span></span>n</span>120 (крупно)</div>
+</div>
+
+<h2>C — янтарная радужка в квадрате логотипа (мост к редактору)</h2>
+<div class="row" data-t="c">
+  <div class="cell"><span class="eye" data-size="14"></span>14</div>
+  <div class="cell"><span class="eye" data-size="18"></span>18</div>
+  <div class="cell"><span class="eye" data-size="24"></span>24</div>
+  <div class="cell"><span class="eye" data-size="44"></span>44</div>
+  <div class="cell"><span class="eye" data-size="72"></span>72</div>
+</div>
+
+<h2>В интерфейсе Insider</h2>
+<div class="row">
+  <div class="cell"><div class="boot"><span class="logo-in">in</span><span data-t="a"><span class="eye bob" data-size="56"></span></span></div>экран загрузки — A</div>
+  <div class="cell"><div class="boot"><span data-t="b"><span class="logo-in bob" style="width:72px;height:72px;border-radius:21px;font-size:26px"><span class="i">ı<span class="eye eye-dot" data-size="11"></span></span>n</span></span></div>экран загрузки — B</div>
+  <div class="cell"><div class="card" data-t="a"><span class="eye" data-size="18"></span> Загружаю файлы…</div>строка загрузки — A</div>
+  <div class="cell"><div class="card" data-t="c"><span class="eye" data-size="18"></span> Загружаю файлы…</div>строка загрузки — C</div>
+</div>
+
+<script>
+  let n = 0;
+  document.querySelectorAll('.eye').forEach((el) => {
+    const t = el.closest('[data-t]')?.dataset.t ?? 'a';
+    el.innerHTML = document.getElementById('tpl-' + t).innerHTML.replaceAll('-ID', '-' + n++);
+    const s = el.dataset.size + 'px';
+    el.style.width = s;
+    el.style.height = s;
+    const d = -(Math.random() * 7).toFixed(2) + 's';
+    el.querySelectorAll('.look, .pupil').forEach((x) => (x.style.animationDelay = d));
+    later(el);
+  });
+  function blink(el, then, kind) {
+    const k = kind ?? (Math.random() < 0.5 ? 'h' : 'v');
+    el.classList.remove('blink-h', 'blink-v');
+    void el.offsetWidth;
+    el.classList.add('blink-' + k);
+    setTimeout(() => { el.classList.remove('blink-h', 'blink-v'); then?.(k); }, k === 'v' ? 440 : 380);
+  }
+  function later(el) {
+    setTimeout(() => blink(el, (k) => (Math.random() < 0.2 ? setTimeout(() => blink(el, () => later(el), k), 120) : later(el))), 2000 + Math.random() * 4000);
+  }
+</script>
+</body>
+</html>
