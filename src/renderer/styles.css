@@ -1158,3 +1158,5 @@ body.dragging-block .col.drop-over > * { opacity: 0.6; }
 @keyframes eye-tremble { 0% { transform: translate(-1.2px, 0); } 100% { transform: translate(1.2px, .5px); } }
 .eye-error .pupil { animation: none; transform: scaleX(.55); }
 .thinking .eye { margin-right: 2px; }
+.working-text { animation: working-in .35s ease-out; }
+@keyframes working-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }

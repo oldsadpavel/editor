@@ -324,13 +324,46 @@ export function workerName(model?: string) {
   return name.replace(/-latest$/, '').replace(/^./, (c) => c.toUpperCase());
 }
 /** «Око» + who works: amber for Claude, emerald for an OpenRouter model; staring when the chat waits for you. */
+/** What the eye says while it works: a new line every few seconds, in random order. */
+const WORKING_LINES = [
+  'Работаем…',
+  'Думаем над этим…',
+  'Копаемся в коде…',
+  'Читаем файлы…',
+  'Сверяемся с памятью…',
+  'Прикидываем варианты…',
+  'Шуршим…',
+  'Колдуем…',
+  'Вникаем…',
+  'Собираем кусочки…',
+  'Перепроверяем…',
+  'Почти придумали…',
+  'Ворочаем шестерёнки…',
+  'Смотрим во все глаза…',
+  'Не моргаем… почти',
+  'Чешем затылок…',
+  'Сводим концы с концами…',
+  'Разбираемся, что к чему…',
+];
+const WAITING_LINES = ['Ждём вашего ответа', 'Нужно ваше слово', 'Смотрим на вас — ваш ход', 'Без вас дальше никак'];
+
+/** «Око» + a rotating line; staring and asking when the chat waits for you. The model is in the tooltip. */
 function WorkingEye({ sessionId }: { sessionId: string }) {
   const model = useStore((s) => s.chats[sessionId]?.model);
   const waiting = useStore((s) => s.chats[sessionId]?.status === 'waiting');
+  const lines = waiting ? WAITING_LINES : WORKING_LINES;
+  const [i, setI] = useState(() => Math.floor(Math.random() * 1000));
+  useEffect(() => {
+    const t = setInterval(() => setI((x) => x + 1 + Math.floor(Math.random() * 3)), waiting ? 6000 : 4000);
+    return () => clearInterval(t);
+  }, [waiting]);
   return (
-    <>
-      <Eye size={20} state={waiting ? 'wait' : 'run'} variant={model?.startsWith('or:') ? 'emerald' : 'amber'} /> {workerName(model)} {waiting ? 'ждёт вашего ответа' : 'работает…'}
-    </>
+    <span className="working-line" title={`Отвечает: ${workerName(model)}`}>
+      <Eye size={20} state={waiting ? 'wait' : 'run'} variant={model?.startsWith('or:') ? 'emerald' : 'amber'} />{' '}
+      <span key={i} className="working-text">
+        {lines[i % lines.length]}
+      </span>
+    </span>
   );
 }
 
