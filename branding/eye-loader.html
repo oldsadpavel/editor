@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>MPI — «око» вместо крутилки (превью)</title>
+<style>
+  body { margin: 0; padding: 28px; background: #1e1f22; color: #dfe1e5; font: 14px system-ui, sans-serif; }
+  h2 { font-weight: 600; font-size: 16px; margin: 26px 0 12px; color: #fff; }
+  .row { display: flex; align-items: center; gap: 34px; flex-wrap: wrap; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8b8f97; font-size: 12px; }
+  .mock { background: #2b2d31; border: 1px solid #3a3d42; border-radius: 8px; padding: 10px 14px; display: inline-flex; align-items: center; gap: 8px; }
+  .tab { background: #2b2d31; border-bottom: 2px solid #d97757; padding: 6px 12px; display: inline-flex; gap: 6px; align-items: center; }
+
+  /* the current spinner, for comparison */
+  .spinner { width: 12px; height: 12px; display: inline-block; border: 2px solid rgba(255,255,255,.15); border-top-color: #d97757; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- the eye ---------- */
+  .eye { display: inline-block; vertical-align: middle; }
+  .eye svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  /* looks around: centre, left, right, up, a quick glance down-right, back */
+  .eye .look { animation: look 7s ease-in-out infinite; transform-box: fill-box; }
+  @keyframes look {
+    0%, 12% { transform: translate(0, 0); }
+    18%, 30% { transform: translate(-13px, 2px); }
+    36%, 48% { transform: translate(13px, 1px); }
+    54%, 62% { transform: translate(2px, -10px); }
+    66%, 72% { transform: translate(10px, 8px); }
+    78%, 100% { transform: translate(0, 0); }
+  }
+  /* the slit widens when it looks straight at you */
+  .eye .pupil { animation: dilate 7s ease-in-out infinite; transform-origin: 50px 50px; }
+  @keyframes dilate {
+    0%, 12% { transform: scaleX(1.6); }
+    18%, 72% { transform: scaleX(1); }
+    80%, 100% { transform: scaleX(1.6); }
+  }
+  /* blinks: twice per loop, the second one a quick double */
+  .eye .lid-top { animation: lidTop 7s infinite; }
+  .eye .lid-bot { animation: lidBot 7s infinite; }
+  @keyframes lidTop {
+    0%, 32%, 37%, 86%, 89.5%, 92%, 95.5%, 100% { transform: translateY(-50px); }
+    34.5%, 88%, 94% { transform: translateY(22px); }
+  }
+  @keyframes lidBot {
+    0%, 32%, 37%, 86%, 89.5%, 92%, 95.5%, 100% { transform: translateY(50px); }
+    34.5%, 88%, 94% { transform: translateY(-22px); }
+  }
+  /* a slow «breathing» glow of the iris */
+  .eye .glow { animation: glow 2.4s ease-in-out infinite alternate; }
+  @keyframes glow { from { opacity: .55; } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<h1 style="font-size:20px;margin:0">«Око» вместо крутилки — посмотреть</h1>
+<div style="color:#8b8f97;margin-top:6px">Своё, в цветах MPI: тёмная металлическая оправа, глаз с вертикальным зрачком — смотрит по сторонам, моргает (иногда дважды), зрачок расширяется, когда смотрит прямо. Два цвета на выбор.</div>
+
+<template id="eye-tpl">
+  <svg viewBox="0 0 100 100" aria-hidden="true">
+    <defs>
+      <radialGradient id="rim-ID" cx="35%" cy="30%" r="80%">
+        <stop offset="0" stop-color="#9aa1ab"/><stop offset=".45" stop-color="#4a4f57"/><stop offset="1" stop-color="#1c1e22"/>
+      </radialGradient>
+      <radialGradient id="iris-ID" cx="45%" cy="42%" r="62%">
+        <stop offset="0" stop-color="C1"/><stop offset=".55" stop-color="C2"/><stop offset="1" stop-color="C3"/>
+      </radialGradient>
+      <radialGradient id="shade-ID" cx="50%" cy="50%" r="50%">
+        <stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/>
+      </radialGradient>
+      <clipPath id="ball-ID"><circle cx="50" cy="50" r="36"/></clipPath>
+    </defs>
+    <!-- frame -->
+    <circle cx="50" cy="50" r="48" fill="url(#rim-ID)"/>
+    <circle cx="50" cy="50" r="40" fill="#111214"/>
+    <g clip-path="url(#ball-ID)">
+      <!-- iris -->
+      <circle class="glow" cx="50" cy="50" r="36" fill="url(#iris-ID)"/>
+      <!-- fine radial lines of the iris -->
+      <g stroke="C3" stroke-opacity=".35" stroke-width="1.2">
+        <line x1="50" y1="16" x2="50" y2="30"/><line x1="50" y1="70" x2="50" y2="84"/>
+        <line x1="16" y1="50" x2="28" y2="50"/><line x1="72" y1="50" x2="84" y2="50"/>
+        <line x1="26" y1="26" x2="34" y2="34"/><line x1="66" y1="66" x2="74" y2="74"/>
+        <line x1="74" y1="26" x2="66" y2="34"/><line x1="26" y1="74" x2="34" y2="66"/>
+      </g>
+      <!-- the pupil looks around -->
+      <g class="look">
+        <ellipse class="pupil" cx="50" cy="50" rx="4.2" ry="27" fill="#07080a"/>
+        <ellipse cx="50" cy="50" rx="7" ry="29" fill="none" stroke="C3" stroke-opacity=".5" stroke-width="1.5" class="pupil"/>
+      </g>
+      <circle cx="50" cy="50" r="36" fill="url(#shade-ID)"/>
+      <!-- eyelids -->
+      <circle class="lid-top" cx="50" cy="-30" r="62" fill="#2a2c31" stroke="#15161a" stroke-width="2"/>
+      <circle class="lid-bot" cx="50" cy="130" r="62" fill="#2a2c31" stroke="#15161a" stroke-width="2"/>
+    </g>
+    <!-- glare -->
+    <ellipse cx="38" cy="32" rx="8" ry="5" fill="#fff" fill-opacity=".55" transform="rotate(-30 38 32)"/>
+    <circle cx="61" cy="66" r="2" fill="#fff" fill-opacity=".35"/>
+  </svg>
+</template>
+
+<h2>Вариант A — янтарный (цвет Claude)</h2>
+<div class="row" data-variant="a">
+  <div class="cell"><span class="eye" data-size="12"></span>12 px</div>
+  <div class="cell"><span class="eye" data-size="16"></span>16 px</div>
+  <div class="cell"><span class="eye" data-size="24"></span>24 px</div>
+  <div class="cell"><span class="eye" data-size="48"></span>48 px</div>
+  <div class="cell"><span class="eye" data-size="140"></span>140 px (экран загрузки)</div>
+</div>
+
+<h2>Вариант B — изумрудный</h2>
+<div class="row" data-variant="b">
+  <div class="cell"><span class="eye" data-size="12"></span>12 px</div>
+  <div class="cell"><span class="eye" data-size="16"></span>16 px</div>
+  <div class="cell"><span class="eye" data-size="24"></span>24 px</div>
+  <div class="cell"><span class="eye" data-size="48"></span>48 px</div>
+  <div class="cell"><span class="eye" data-size="140"></span>140 px (экран загрузки)</div>
+</div>
+
+<h2>Как это будет выглядеть в редакторе — сейчас и с «оком»</h2>
+<div class="row">
+  <div class="cell"><div class="mock"><span class="spinner"></span> Claude работает…</div>сейчас</div>
+  <div class="cell"><div class="mock" data-variant="a"><span class="eye" data-size="16"></span> Claude работает…</div>янтарный</div>
+  <div class="cell"><div class="mock" data-variant="b"><span class="eye" data-size="16"></span> Claude работает…</div>изумрудный</div>
+</div>
+<div class="row" style="margin-top:14px">
+  <div class="cell"><div class="tab"><span class="spinner"></span> Выполнение задач</div>вкладка сейчас</div>
+  <div class="cell"><div class="tab" data-variant="a"><span class="eye" data-size="14"></span> Выполнение задач</div>янтарный</div>
+  <div class="cell"><div class="tab" data-variant="b"><span class="eye" data-size="14"></span> Выполнение задач</div>изумрудный</div>
+</div>
+
+<script>
+  // each eye: its own copy of the SVG (unique gradient ids), colours of its variant, a random start so they don't blink in sync
+  const COLORS = { a: ['#ffd29a', '#e08a3c', '#7a3510'], b: ['#d8ff8a', '#5fbf3a', '#1d5a17'] };
+  const tpl = document.getElementById('eye-tpl').innerHTML;
+  let n = 0;
+  document.querySelectorAll('.eye').forEach((el) => {
+    const v = el.closest('[data-variant]')?.dataset.variant ?? 'a';
+    const [c1, c2, c3] = COLORS[v];
+    const id = 'e' + n++;
+    el.innerHTML = tpl.replaceAll('-ID', '-' + id).replaceAll('C1', c1).replaceAll('C2', c2).replaceAll('C3', c3);
+    const s = el.dataset.size + 'px';
+    el.style.width = s;
+    el.style.height = s;
+    const delay = -(Math.random() * 7).toFixed(2) + 's';
+    el.querySelectorAll('.look, .pupil, .lid-top, .lid-bot').forEach((x) => (x.style.animationDelay = delay));
+  });
+</script>
+</body>
+</html>
