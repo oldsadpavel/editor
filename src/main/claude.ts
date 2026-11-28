@@ -1352,10 +1352,23 @@ export async function interrupt(sessionId: string) {
   if (!s?.q) return;
   for (const [id] of s.pending) answerPermission(sessionId, id, { behavior: 'deny', message: 'Остановлено пользователем' });
   s.interrupting = true;
-  await s.q.interrupt().catch(() => {});
+  // A process stuck in a request (a long call, a picture the model chokes on) never confirms the stop: after 3 s it is
+  // closed instead — the answer ends at once, the next question starts a fresh process on the same session.
+  const q = s.q;
+  const stopped = await Promise.race([q.interrupt().then(() => true, () => true), new Promise<boolean>((r) => setTimeout(() => r(false), 3000))]);
+  if (!stopped && s.q === q) {
+    console.warn('[interrupt] no answer in 3 s, closing the process:', s.title);
+    stopProcess(s);
+    try {
+      q.close();
+    } catch {
+      /* already gone */
+    }
+  }
   finishLiveTurns(s);
   s.builder.markInterrupted();
   s.partial = '';
+  s.partialThinking = '';
   // Questions still queued (grey): Claude Code runs them right after the stop — show them as the new running turn.
   const next = s.builder.splitPending(Date.now());
   if (next) {
